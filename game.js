@@ -126,7 +126,16 @@ class SaveManager {
   }
   
   static exists() {
-    return !!localStorage.getItem(SaveManager.SAVE_KEY);
+    try {
+      const raw = localStorage.getItem(SaveManager.SAVE_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object';
+    } catch (e) {
+      // Corrupt data - clean it up
+      localStorage.removeItem(SaveManager.SAVE_KEY);
+      return false;
+    }
   }
   
   static delete() {
@@ -471,6 +480,11 @@ class TitleScene extends Phaser.Scene {
     // "이어하기" button
     if (hasSave) {
       this._createButton(W / 2, btnY, btnW, btnH, '▶ 이어하기', 0x2255aa, () => {
+        // Double-check save exists at click time (may have been cleared)
+        if (!SaveManager.exists()) {
+          this.scene.start('Boot', { loadSave: false });
+          return;
+        }
         this.scene.start('Boot', { loadSave: true });
       });
       
@@ -1119,8 +1133,14 @@ class GameScene extends Phaser.Scene {
     if (loadSave) {
       const save = SaveManager.load();
       if (save) {
-        this._applySaveData(save);
+        try {
+          this._applySaveData(save);
+        } catch (e) {
+          console.error('Save data corrupt, starting fresh:', e);
+          SaveManager.delete();
+        }
       }
+      // If save requested but not found → safe fallback (no crash)
     }
     
     // ── Auto-Save Timer (60초) ──
