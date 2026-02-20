@@ -921,6 +921,23 @@ class GameScene extends Phaser.Scene {
     // Attack cooldown
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
+    // Mobile auto-attack: automatically attack nearest animal within 48px
+    if (this.isMobile && this.attackCooldown <= 0) {
+      let nearest = null, nearestDist = Infinity;
+      this.animals.getChildren().forEach(a => {
+        if (!a.active) return;
+        const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
+        if (d < 48 && d < nearestDist) { nearest = a; nearestDist = d; }
+      });
+      if (nearest) {
+        this.attackCooldown = 0.4;
+        this.player.setTexture('player_attack');
+        this.time.delayedCall(100, () => { if (this.player.active) this.player.setTexture('player'); });
+        this.damageAnimal(nearest, this.playerDamage);
+        this.showAttackFX(nearest.x, nearest.y, true);
+      }
+    }
+
     // Player movement
     if (!this.isMobile || !this.joystickActive) {
       let mx=0, my=0;
