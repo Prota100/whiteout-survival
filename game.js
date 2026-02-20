@@ -1401,11 +1401,38 @@ class GameScene extends Phaser.Scene {
   _restoreBuilding(b) {
     const def = BUILDINGS[b.type];
     if (!def) return;
-    const spr = this.add.sprite(b.x, b.y, 'building_' + b.type).setDepth(3);
-    spr.type = b.type;
-    spr.buildDef = def;
-    this.placedBuildings.push(spr);
-    this.buildingSprites.push(spr);
+    // Re-draw building graphics (same as placeBuilding)
+    const wx = b.x, wy = b.y;
+    const g = this.add.graphics().setDepth(2);
+    if (b.type === 'campfire') {
+      g.fillStyle(0x884422, 1); g.fillRect(wx-12, wy+6, 24, 6);
+      g.fillStyle(0x664411, 1); g.fillRect(wx-10, wy+3, 20, 5);
+      g.fillStyle(0x777777, 1);
+      for (let i = 0; i < 8; i++) { const a2 = (i / 8) * Math.PI * 2; g.fillCircle(wx + Math.cos(a2)*14, wy + Math.sin(a2)*14, 3); }
+      g.fillStyle(0xFF4400, 0.9); g.fillCircle(wx, wy, 10);
+      g.fillStyle(0xFF8800, 0.8); g.fillCircle(wx, wy-2, 7);
+      g.fillStyle(0xFFCC00, 0.6); g.fillCircle(wx, wy-4, 4);
+    } else if (b.type === 'tent') {
+      g.fillStyle(0x8B6914, 0.9); g.fillTriangle(wx, wy-26, wx-24, wy+12, wx+24, wy+12);
+      g.fillStyle(0xA07B28, 0.7); g.fillTriangle(wx, wy-22, wx-20, wy+10, wx+20, wy+10);
+      g.fillStyle(0x5D4037, 1); g.fillRect(wx-5, wy+2, 10, 10);
+    } else if (b.type === 'storage') {
+      g.fillStyle(0x795548, 1); g.fillRect(wx-18, wy-16, 36, 32);
+      g.fillStyle(0x8D6E63, 1); g.fillTriangle(wx, wy-24, wx-20, wy-14, wx+20, wy-14);
+      g.fillStyle(0x5D4037, 1); g.fillRect(wx-5, wy+4, 10, 12);
+    } else if (b.type === 'workshop') {
+      g.fillStyle(0x795548, 1); g.fillRect(wx-16, wy-14, 32, 28);
+      g.fillStyle(0x8D6E63, 1); g.fillTriangle(wx, wy-22, wx-18, wy-12, wx+18, wy-12);
+      g.fillStyle(0x5D4037, 1); g.fillRect(wx-5, wy+4, 10, 10);
+    } else if (b.type === 'wall') {
+      g.fillStyle(0x9E9E9E, 1); g.fillRect(wx-20, wy-10, 40, 20);
+      g.fillStyle(0xBBBBBB, 0.5);
+      g.fillRect(wx-18, wy-8, 10, 8); g.fillRect(wx-5, wy-8, 10, 8); g.fillRect(wx+8, wy-8, 10, 8);
+    }
+    const label = this.add.text(wx, wy-32, def.icon, {fontSize:'22px'}).setDepth(3).setOrigin(0.5);
+    const bld = { type: b.type, x: wx, y: wy, graphic: g, label, def };
+    this.placedBuildings.push(bld);
+    this.buildingSprites.push(bld);
     if (def.storageBonus) this.storageCapacity += def.storageBonus;
     if (!this.stats.built[b.type]) this.stats.built[b.type] = 0;
   }
@@ -1839,8 +1866,8 @@ class GameScene extends Phaser.Scene {
   collectDrop(drop) {
     if (!drop.active) return;
     const r = drop.resource;
-    const total = Object.values(this.res).reduce((a,b)=>a+b, 0);
-    if (total >= this.storageCapacity) {
+    const total = Object.entries(this.res).filter(([k])=>k!=='gold').reduce((a,[_,v])=>a+(v||0), 0);
+    if (r !== 'gold' && total >= this.storageCapacity) {
       if (!this._fullMsg || this._fullMsg < this.time.now) {
         this.showFloatingText(this.player.x, this.player.y - 20, '⚠️ 보관함 가득!', '#FF6666');
         this._fullMsg = this.time.now + 1000;
@@ -2268,7 +2295,7 @@ class GameScene extends Phaser.Scene {
       case 'woodBonus': this.woodBonus += recipe.value; break;
       case 'stoneBonus': this.stoneBonus += recipe.value; break;
       case 'damage': this.playerDamage += recipe.value; break;
-      case 'warmthResist': this.warmthResist = Math.max(0.1, this.warmthResist - recipe.value); break;
+      case 'warmthResist': this.warmthResist = Math.min(1.0, this.warmthResist + recipe.value); break;
       case 'speed': this.playerSpeed += recipe.value; this.playerBaseSpeed += recipe.value; break;
     }
     this.stats.crafted++; playCraft(); SaveManager.save(this);
@@ -2673,7 +2700,9 @@ class GameScene extends Phaser.Scene {
     
     const tempR = Math.max(0, Math.min(1, this.temperature/this.maxTemp));
     d.tempFill.style.width = (tempR*100)+'%';
-    d.tempText.textContent = Math.ceil(this.temperature)+'%';
+    d.tempFill.style.background = tempR > 0.4 ? '#2196F3' : tempR > 0.15 ? '#FF9800' : '#F44336';
+    const tempLabel = this.blizzardActive ? `${Math.ceil(this.temperature)}% ❄️위험!` : `${Math.ceil(this.temperature)}%`;
+    d.tempText.textContent = tempLabel;
     
     const hungerR = Math.max(0, Math.min(1, this.hunger/this.maxHunger));
     d.hungerFill.style.width = (hungerR*100)+'%';
@@ -3205,7 +3234,7 @@ class GameScene extends Phaser.Scene {
     // Slow player
     this.playerSpeed = this.playerBaseSpeed * 0.8;
 
-    this.showCenterAlert(`❄️ 한파 ${this.blizzardIndex}/5 시작!`, '#4488FF');
+    this.showCenterAlert(`❄️ 한파 ${this.blizzardIndex}/${BLIZZARD_SCHEDULE.length} 시작!`, '#4488FF');
     this.cameras.main.shake(300, 0.008);
 
     // End timer
@@ -3550,7 +3579,7 @@ class GameScene extends Phaser.Scene {
       this.boss1Spawned = true;
       this.spawnBoss('first');
     }
-    if (!this.boss2Spawned && this.gameElapsed >= 50 * 60) { // 50분
+    if (!this.boss2Spawned && this.gameElapsed >= 55 * 60) { // 55분
       this.boss2Spawned = true;
       this.spawnBoss('final');
     }
