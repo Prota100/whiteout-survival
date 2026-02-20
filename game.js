@@ -2368,6 +2368,10 @@ class GameScene extends Phaser.Scene {
     this._smoothMove = { x: 0, y: 0 }; // for lerp smoothing
     const self = this;
 
+    // Clean up existing joystick if any (prevent duplicates on restart)
+    const existingBase = document.getElementById('vjoystick-base');
+    if (existingBase) existingBase.remove();
+
     // Create joystick container (hidden by default)
     const base = document.createElement('div');
     base.id = 'vjoystick-base';
@@ -2531,6 +2535,18 @@ class GameScene extends Phaser.Scene {
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+
+    // Cleanup on scene shutdown
+    this.events.once('shutdown', () => {
+      document.removeEventListener('touchstart', onStart);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      const baseEl = document.getElementById('vjoystick-base');
+      if (baseEl) baseEl.remove();
+    });
   }
 
   createUI() {
