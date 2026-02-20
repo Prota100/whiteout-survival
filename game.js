@@ -573,8 +573,9 @@ class GameScene extends Phaser.Scene {
       this.performAttack(p);
     });
 
-    if (this.isMobile) this.createJoystick();
+    if (this.isMobile) this.createDOMJoystick();
     this.createUI();
+    window._gameScene = this;
     this.physics.add.overlap(this.player, this.drops, (_, d) => this.collectDrop(d));
     this.campfireParticleTimer = 0;
   }
@@ -1167,39 +1168,50 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 
-  createJoystick() {
-    this.joystickBase = this.add.graphics().setScrollFactor(0).setDepth(100).setAlpha(0);
-    this.joystickThumb = this.add.graphics().setScrollFactor(0).setDepth(101).setAlpha(0);
-    this.joystickActive = false; this.joystickPID = null;
+  createDOMJoystick() {
+    const zone = document.getElementById('joystick-zone');
+    const joy = document.getElementById('joystick');
+    const knob = document.getElementById('joystick-knob');
+    if (!zone) return;
+    zone.style.display = 'block';
+    this.joystickActive = false;
+    let origin = {x:0, y:0};
+    const self = this;
 
-    this.input.on('pointerdown', p => {
-      if (this.gameOver || this.isUIArea(p)) return;
-      if (this.isJoystickArea(p)) {
-        this.joystickActive = true; this.joystickPID = p.id;
-        this.joyOrigin = {x:p.x, y:p.y};
-        this.joystickBase.clear().setAlpha(1);
-        this.joystickBase.lineStyle(3, 0xFFFFFF, 0.25); this.joystickBase.strokeCircle(p.x, p.y, 55);
-        this.joystickBase.fillStyle(0xFFFFFF, 0.06); this.joystickBase.fillCircle(p.x, p.y, 55);
-        this.joystickThumb.clear().setAlpha(1);
-        this.joystickThumb.fillStyle(0xFFFFFF, 0.35); this.joystickThumb.fillCircle(p.x, p.y, 22);
-      }
-    });
-    this.input.on('pointermove', p => {
-      if (!this.joystickActive || p.id !== this.joystickPID) return;
-      const dx=p.x-this.joyOrigin.x, dy=p.y-this.joyOrigin.y;
-      const dist=Math.sqrt(dx*dx+dy*dy), max=55, clamp=Math.min(dist,max), ang=Math.atan2(dy,dx);
-      const tx=this.joyOrigin.x+Math.cos(ang)*clamp, ty=this.joyOrigin.y+Math.sin(ang)*clamp;
-      this.joystickThumb.clear();
-      this.joystickThumb.fillStyle(0xFFFFFF, 0.45); this.joystickThumb.fillCircle(tx, ty, 22);
-      if(dist>8){this.moveDir.x=Math.cos(ang);this.moveDir.y=Math.sin(ang);}else{this.moveDir.x=0;this.moveDir.y=0;}
-    });
-    this.input.on('pointerup', p => {
-      if(p.id===this.joystickPID){
-        this.joystickActive=false; this.joystickPID=null;
-        this.joystickBase.setAlpha(0); this.joystickThumb.setAlpha(0);
-        this.moveDir.x=0; this.moveDir.y=0;
-      }
-    });
+    const onStart = (e) => {
+      e.preventDefault();
+      if (self.gameOver) return;
+      const t = e.touches ? e.touches[0] : e;
+      origin = {x: t.clientX, y: t.clientY};
+      self.joystickActive = true;
+      joy.style.display = 'block';
+      joy.style.left = (t.clientX - 55) + 'px';
+      joy.style.top = (t.clientY - zone.getBoundingClientRect().top - 55) + 'px';
+      knob.style.transform = 'translate(-50%, -50%)';
+    };
+    const onMove = (e) => {
+      if (!self.joystickActive) return;
+      e.preventDefault();
+      const t = e.touches ? e.touches[0] : e;
+      const dx = t.clientX - origin.x, dy = t.clientY - origin.y;
+      const dist = Math.sqrt(dx*dx+dy*dy), max=55, clamp=Math.min(dist,max), ang=Math.atan2(dy,dx);
+      const kx = Math.cos(ang)*clamp, ky = Math.sin(ang)*clamp;
+      knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
+      if(dist>8){self.moveDir.x=Math.cos(ang);self.moveDir.y=Math.sin(ang);}
+      else{self.moveDir.x=0;self.moveDir.y=0;}
+    };
+    const onEnd = () => {
+      self.joystickActive = false;
+      joy.style.display = 'none';
+      knob.style.transform = 'translate(-50%, -50%)';
+      self.moveDir.x=0; self.moveDir.y=0;
+    };
+    zone.addEventListener('touchstart', onStart, {passive:false});
+    document.addEventListener('touchmove', onMove, {passive:false});
+    document.addEventListener('touchend', onEnd);
+    zone.addEventListener('mousedown', onStart);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
   }
 
   isJoystickArea(p) {
@@ -1209,17 +1221,18 @@ class GameScene extends Phaser.Scene {
   }
 
   createUI() {
-    const s = {fontSize:'13px', fontFamily:'monospace', color:'#fff', stroke:'#000', strokeThickness:3};
-    this.uiResBg = this.add.graphics().setScrollFactor(0).setDepth(99);
-    this.uiRes = this.add.text(10, 8, '', s).setScrollFactor(0).setDepth(100);
-    this.uiHP = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.uiHPText = this.add.text(10, 28, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
-    this.uiTemp = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.uiTempText = this.add.text(10, 44, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
-    this.uiHunger = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.uiHungerText = this.add.text(10, 60, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
-    this.uiQuest = this.add.text(10, 82, '', {...s, fontSize:'11px', color:'#FFD700', wordWrap:{width:220}}).setScrollFactor(0).setDepth(100);
-    this.uiBuffText = this.add.text(10, 100, '', {...s, fontSize:'10px', color:'#FF8844'}).setScrollFactor(0).setDepth(100);
+    // HUD is now fully DOM-based (see index.html #dom-hud)
+    this._dom = {
+      res: document.getElementById('res-text'),
+      hpFill: document.getElementById('hp-fill'),
+      hpText: document.getElementById('hp-text'),
+      tempFill: document.getElementById('temp-fill'),
+      tempText: document.getElementById('temp-text'),
+      hungerFill: document.getElementById('hunger-fill'),
+      hungerText: document.getElementById('hunger-text'),
+      quest: document.getElementById('quest-text'),
+      buff: document.getElementById('buff-text'),
+    };
 
     // ═══ DOM Buttons (100% reliable touch) ═══
     const scene = this;
@@ -1317,40 +1330,34 @@ class GameScene extends Phaser.Scene {
     this.panelZones.forEach(z=>z.destroy()); this.panelZones = [];
   }
 
-  drawBar(g, x, y, w, h, ratio, color1, color2) {
-    g.fillStyle(0x111122, 0.85); g.fillRoundedRect(x, y, w, h, 3);
-    g.lineStyle(1, 0x334466, 0.5); g.strokeRoundedRect(x, y, w, h, 3);
-    const r = Math.max(0, Math.min(1, ratio));
-    if (r > 0) {
-      g.fillStyle(color1, 1); g.fillRoundedRect(x+1, y+1, (w-2)*r, h-2, 2);
-      if (color2) { g.fillStyle(color2, 0.3); g.fillRect(x+2, y+2, (w-4)*r, (h-4)/2); }
-    }
-  }
+  // drawBar removed - now using DOM bars
 
   updateUI() {
+    const d = this._dom;
+    if (!d) return;
     const icons = {meat:'🥩',wood:'🪵',stone:'🪨',leather:'🧶',gold:'💰'};
-    this.uiResBg.clear();
-    this.uiResBg.fillStyle(0x0a0a1e, 0.75);
-    this.uiResBg.fillRoundedRect(4, 4, 250, this._nearCampfire ? 118 : 100, 8);
-    this.uiRes.setText(Object.entries(this.res).filter(([_,v])=>v>0).map(([k,v])=>icons[k]+Math.floor(v)).join(' '));
-    this.uiHP.clear();
-    const hpR = this.playerHP/this.playerMaxHP;
-    this.drawBar(this.uiHP, 10, 28, 160, 13, hpR, hpR>0.6?0x4CAF50:hpR>0.3?0xFFCC00:0xF44336, hpR>0.6?0x66DD66:hpR>0.3?0xFFEE44:0xFF6666);
-    this.uiHPText.setText('❤️ '+Math.ceil(Math.max(0,this.playerHP))+'/'+this.playerMaxHP);
-    this.uiTemp.clear();
-    this.drawBar(this.uiTemp, 10, 44, 160, 13, this.temperature/this.maxTemp, 0x42A5F5, 0x66CCFF);
-    this.uiTempText.setText('🌡️ '+Math.ceil(this.temperature)+'%');
-    this.uiHunger.clear();
-    this.drawBar(this.uiHunger, 10, 60, 160, 13, this.hunger/this.maxHunger, 0xFF9800, 0xFFBB44);
-    this.uiHungerText.setText('🍖 '+Math.ceil(this.hunger)+'%');
+    d.res.textContent = Object.entries(this.res).filter(([_,v])=>v>0).map(([k,v])=>icons[k]+Math.floor(v)).join(' ');
+    
+    const hpR = Math.max(0, Math.min(1, this.playerHP/this.playerMaxHP));
+    d.hpFill.style.width = (hpR*100)+'%';
+    d.hpFill.style.background = hpR>0.6?'#4CAF50':hpR>0.3?'#FFCC00':'#F44336';
+    d.hpText.textContent = Math.ceil(Math.max(0,this.playerHP))+'/'+this.playerMaxHP;
+    
+    const tempR = Math.max(0, Math.min(1, this.temperature/this.maxTemp));
+    d.tempFill.style.width = (tempR*100)+'%';
+    d.tempText.textContent = Math.ceil(this.temperature)+'%';
+    
+    const hungerR = Math.max(0, Math.min(1, this.hunger/this.maxHunger));
+    d.hungerFill.style.width = (hungerR*100)+'%';
+    d.hungerText.textContent = Math.ceil(this.hunger)+'%';
+    
     if (this.questIndex < QUESTS.length) {
       const q = QUESTS[this.questIndex];
-      this.uiQuest.setText('📋 '+q.name+': '+q.desc);
-    } else this.uiQuest.setText('📋 모든 퀘스트 완료! 🎉');
-    if (this._nearCampfire) {
-      this.uiBuffText.setText('🔥 화덕 버프: HP회복 | 💰자동 | ⚡공속↑ | 🏃이속↑');
-      this.uiBuffText.setVisible(true);
-    } else this.uiBuffText.setVisible(false);
+      d.quest.textContent = '📋 '+q.name+': '+q.desc;
+    } else d.quest.textContent = '📋 모든 퀘스트 완료! 🎉';
+    
+    d.buff.style.display = this._nearCampfire ? 'block' : 'none';
+    
     this.npcLabels.forEach(l=>l.destroy()); this.npcLabels = [];
     this.npcsOwned.forEach(npc => {
       if (!npc.active) return;

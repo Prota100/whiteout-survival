@@ -63,25 +63,36 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
   #bottom-buttons button { font-size: 11px; padding: 6px 6px; }
 }
 
-/* Joystick zone indicator (mobile only) */
-#joystick-hint {
-  display: none;
-  position: absolute;
-  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
-  left: 30px;
-  width: 80px; height: 80px;
-  border: 2px dashed rgba(255,255,255,0.15);
-  border-radius: 50%;
-  pointer-events: none;
-}
-@media (hover: none) and (pointer: coarse) {
-  #joystick-hint { display: block; }
-}
+.sbar { display:flex; align-items:center; gap:4px; margin:1px 0; }
+.bar-c { width:140px; height:12px; background:rgba(17,17,34,0.85); border-radius:3px; border:1px solid rgba(51,68,102,0.5); overflow:hidden; }
+.bar-f { height:100%; border-radius:2px; transition:width 0.3s ease; }
+.bar-t { font-family:monospace; font-size:10px; color:#fff; text-shadow:0 0 2px #000; white-space:nowrap; }
 </style>
 </head>
 <body>
 <div id="game-container">
   <div id="ui-overlay">
+    <!-- 상단 DOM HUD -->
+    <div id="dom-hud" style="position:absolute;top:calc(6px + env(safe-area-inset-top,0px));left:8px;pointer-events:none;z-index:20;">
+      <div id="resource-bar" style="background:rgba(10,10,30,0.75);border-radius:8px;padding:5px 10px;color:#fff;font-family:monospace;font-size:13px;max-width:260px;margin-bottom:2px;">
+        <span id="res-text">🥩0 🪵0 🪨0 💰0</span>
+      </div>
+      <div style="max-width:260px;">
+        <div class="sbar"><span style="font-size:11px">❤️</span><div class="bar-c"><div class="bar-f" id="hp-fill" style="width:100%;background:#4CAF50"></div></div><span class="bar-t" id="hp-text">100/100</span></div>
+        <div class="sbar"><span style="font-size:11px">🌡️</span><div class="bar-c"><div class="bar-f" id="temp-fill" style="width:100%;background:#42A5F5"></div></div><span class="bar-t" id="temp-text">100%</span></div>
+        <div class="sbar"><span style="font-size:11px">🍖</span><div class="bar-c"><div class="bar-f" id="hunger-fill" style="width:100%;background:#FF9800"></div></div><span class="bar-t" id="hunger-text">100%</span></div>
+      </div>
+      <div id="quest-text" style="font-family:monospace;font-size:11px;color:#FFD700;text-shadow:0 0 3px #000,0 0 3px #000;margin-top:2px;max-width:220px;"></div>
+      <div id="buff-text" style="font-family:monospace;font-size:10px;color:#FF8844;text-shadow:0 0 3px #000;display:none;">🔥 화덕 버프</div>
+    </div>
+
+    <!-- 조이스틱 영역 (모바일) -->
+    <div id="joystick-zone" style="display:none;position:absolute;left:0;top:25%;width:45%;bottom:calc(60px + env(safe-area-inset-bottom,0px));pointer-events:auto;touch-action:none;">
+      <div id="joystick" style="display:none;position:absolute;width:110px;height:110px;border-radius:50%;border:3px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);">
+        <div id="joystick-knob" style="position:absolute;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.35);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;"></div>
+      </div>
+    </div>
+
     <div id="bottom-buttons">
       <button id="btn-attack" ontouchstart="">⚔️공격</button>
       <button id="btn-build" ontouchstart="">🔥건설</button>
@@ -90,15 +101,14 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
       <button id="btn-eat" ontouchstart="">🥩먹기</button>
       <button id="btn-sound" ontouchstart="">🔊</button>
     </div>
-    <div id="joystick-hint"></div>
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 <script>
-var GV="ultimate-007";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
+var GV="ultimate-008-dom";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
 if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(g){g.unregister();});});
 if('caches' in window)caches.keys().then(function(n){n.forEach(function(k){caches.delete(k);});});
 </script>
-<script src="game.js?v=20250220-ultimate-007"></script>
+<script src="game.js?v=20250220-ultimate-008"></script>
 </body>
 </html>
