@@ -905,8 +905,8 @@ class GameScene extends Phaser.Scene {
 
   // ── Survival ──
   updateSurvival(dt) {
-    // Temperature decreases over time
-    const tempLoss = 1.5 * this.warmthResist * dt;
+    // Temperature decreases over time (slow - casual pace)
+    const tempLoss = 0.5 * this.warmthResist * dt;
     this.temperature = Math.max(0, this.temperature - tempLoss);
 
     // Near campfire/tent? Warm up
@@ -918,8 +918,8 @@ class GameScene extends Phaser.Scene {
       }
     });
 
-    // Hunger decreases
-    this.hunger = Math.max(0, this.hunger - 0.8 * dt);
+    // Hunger decreases (slow - casual pace)
+    this.hunger = Math.max(0, this.hunger - 0.3 * dt);
 
     // If temperature or hunger hits 0, lose HP
     if (this.temperature <= 0) {
@@ -994,8 +994,16 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  getSafeBottomMargin() {
+    // Extra margin for iOS Safari bottom bar
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isSafari = /Safari/i.test(navigator.userAgent) && !/CriOS|Chrome/i.test(navigator.userAgent);
+    if (isIOS && isSafari) return Math.max(34, this.cameras.main.height * 0.06);
+    return Math.max(20, this.cameras.main.height * 0.03);
+  }
+
   isJoystickArea(p) {
-    return p.x < this.cameras.main.width * 0.4 && p.y > this.cameras.main.height * 0.4;
+    return p.x < this.cameras.main.width * 0.45 && p.y > this.cameras.main.height * 0.35;
   }
 
   // ── UI ──
@@ -1050,19 +1058,21 @@ class GameScene extends Phaser.Scene {
 
   positionUI() {
     const w = this.cameras.main.width, h = this.cameras.main.height;
-    // Bottom buttons
+    const safeBottom = this.getSafeBottomMargin();
+    // Bottom buttons - positioned above safe area
     const totalBtns = this.uiBtns.length;
     const btnW = 70, gap = 6;
     const startX = w - (totalBtns * (btnW + gap));
     this.uiBtns.forEach((btn, i) => {
-      btn.setPosition(startX + i * (btnW + gap), h - 44);
+      btn.setPosition(startX + i * (btnW + gap), h - 44 - safeBottom);
     });
   }
 
   isUIArea(p) {
-    // Bottom 50px right side
     const h = this.cameras.main.height, w = this.cameras.main.width;
-    if (p.y > h - 55 && p.x > w * 0.4) return true;
+    const safeBottom = this.getSafeBottomMargin();
+    // Bottom buttons area (right side)
+    if (p.y > h - 60 - safeBottom && p.x > w * 0.4) return true;
     // Panel area
     if (this.activePanel && p.x > w - 220 && p.y > 80 && p.y < h - 60) return true;
     return false;
@@ -1204,7 +1214,7 @@ class GameScene extends Phaser.Scene {
       this.animals.getChildren().forEach(a => {
         if (!a.active) return;
         const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
-        if (d < 48 && d < nearestDist) { nearest = a; nearestDist = d; }
+        if (d < 60 && d < nearestDist) { nearest = a; nearestDist = d; }
       });
       if (nearest) {
         this.attackCooldown = 0.4;
@@ -1278,11 +1288,23 @@ class GameScene extends Phaser.Scene {
   }
 }
 
+// Get safe game height accounting for iOS safe areas
+function getGameHeight() {
+  // Use visualViewport if available (more accurate on iOS)
+  if (window.visualViewport) return window.visualViewport.height;
+  return window.innerHeight;
+}
+
+function getGameWidth() {
+  if (window.visualViewport) return window.visualViewport.width;
+  return window.innerWidth;
+}
+
 const config = {
   type: Phaser.AUTO,
   parent: 'game-container',
-  width: window.innerWidth,
-  height: window.innerHeight,
+  width: getGameWidth(),
+  height: getGameHeight(),
   backgroundColor: '#1a1a2e',
   physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
   scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
@@ -1290,4 +1312,16 @@ const config = {
   input: { activePointers: 3 },
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+// Handle iOS Safari resize/orientation changes
+function handleResize() {
+  if (game && game.scale) {
+    game.scale.resize(getGameWidth(), getGameHeight());
+  }
+}
+window.addEventListener('resize', handleResize);
+window.addEventListener('orientationchange', () => setTimeout(handleResize, 200));
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', handleResize);
+}
