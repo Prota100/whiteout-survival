@@ -74,6 +74,12 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
 </head>
 <body>
 <div id="game-container">
+  <div id="blizzard-warning" style="display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,100,200,0.85);color:#fff;padding:6px 16px;border-radius:8px;font-size:14px;font-weight:bold;text-align:center;z-index:100;border:1px solid #4488FF;">
+    ❄️ 한파까지 <span id="blizzard-countdown">60</span>초
+  </div>
+  <div id="blizzard-active" style="display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,50,150,0.9);color:#88CCFF;padding:6px 16px;border-radius:8px;font-size:14px;font-weight:bold;text-align:center;z-index:100;border:1px solid #88CCFF;">
+    ❄️ 한파 진행 중! 화덕 근처로!
+  </div>
   <div id="ui-overlay">
     <!-- 상단 DOM HUD -->
     <div id="dom-hud" style="position:absolute;top:calc(6px + env(safe-area-inset-top,0px));left:8px;pointer-events:none;z-index:20;">
@@ -92,6 +98,8 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
         <div id="xp-text" style="font-size:10px;color:#6688AA;">Lv1 · 0/20 XP</div>
       </div>
       <div id="quest-text" style="font-family:monospace;font-size:11px;color:#FFD700;text-shadow:0 0 3px #000,0 0 3px #000;margin-top:2px;max-width:220px;"></div>
+      <div id="act-text" style="font-family:monospace;font-size:12px;color:#FFDD88;text-shadow:0 0 3px #000;margin-top:2px;font-weight:bold;">Act 1 · 00:00</div>
+      <div id="zone-indicator" style="font-family:monospace;font-size:11px;color:#88CCFF;text-shadow:0 0 3px #000;margin-top:1px;">🏠 안전</div>
       <div id="buff-text" style="font-family:monospace;font-size:10px;color:#FF8844;text-shadow:0 0 3px #000;display:none;">🔥 화덕 버프</div>
     </div>
 
@@ -107,10 +115,10 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
 </div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 <script>
-var GV="ultimate-015-xp-escalation";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
+var GV="phase1-xp-blizzard-zone-001";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
 if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(g){g.unregister();});});
 if('caches' in window)caches.keys().then(function(n){n.forEach(function(k){caches.delete(k);});});
 </script>
-<script src="game.js?v=20250220-xp-escalation-018"></script>
+<script src="game.js?v=20250220-phase1-xp-blizzard-zone-001"></script>
 </body>
 </html>

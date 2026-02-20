@@ -108,6 +108,12 @@ class SaveManager {
         upgrades: scene.upgradeManager.toJSON(),
         playerXP: scene.playerXP,
         playerLevel: scene.playerLevel,
+        gameElapsed: scene.gameElapsed,
+        coldWaveCount: scene.coldWaveCount,
+        nextColdWaveTime: scene.nextColdWaveTime,
+        boss1Spawned: scene.boss1Spawned,
+        boss2Spawned: scene.boss2Spawned,
+        waveNumber: scene.waveNumber,
       };
       localStorage.setItem(SaveManager.SAVE_KEY, JSON.stringify(saveData));
       return true;
@@ -179,14 +185,40 @@ const UPGRADES = {
   EXPLOSION:    { name: '폭발', desc: '처치 시 폭발 데미지', icon: '💣', category: 'special', maxLevel: 2, rarity: 'epic' },
   CAMPFIRE_BOOST:{ name: '화덕 마스터', desc: '화덕 효과 +50%', icon: '🔥', category: 'special', maxLevel: 2, rarity: 'rare' },
   TIME_BONUS:   { name: '시간 조작', desc: '쿨다운 -20%', icon: '⏱️', category: 'special', maxLevel: 2, rarity: 'rare' },
+  // === 추가 10종 ===
+  FROST_RESISTANCE: { name: '동상 저항', desc: '한파 온도 감소 -30%', icon: '🧊', category: 'survival', maxLevel: 3, rarity: 'rare' },
+  BERSERKER:        { name: '광전사', desc: 'HP 50% 이하 시 공격력 +50%', icon: '😤', category: 'combat', maxLevel: 2, rarity: 'epic' },
+  CHAIN_ATTACK:     { name: '연쇄 공격', desc: '처치 시 인접 적에게 50% 데미지', icon: '⛓️', category: 'combat', maxLevel: 2, rarity: 'epic' },
+  TREASURE_HUNTER:  { name: '보물 사냥꾼', desc: '상자 드롭 확률 +40%', icon: '🗺️', category: 'economy', maxLevel: 3, rarity: 'rare' },
+  SWIFT_STRIKE:     { name: '연속 일격', desc: '첫 번째 공격 쿨다운 즉시', icon: '🌪️', category: 'combat', maxLevel: 2, rarity: 'rare' },
+  FROST_WALKER:     { name: '서리 발걸음', desc: '이동 시 주변 적 슬로우 10%', icon: '❄️', category: 'special', maxLevel: 2, rarity: 'rare' },
+  VAMPIRE:          { name: '흡혈귀', desc: '처치 시 체력 +5 회복', icon: '🧛', category: 'combat', maxLevel: 3, rarity: 'rare' },
+  ARMOR:            { name: '방어구', desc: '받는 데미지 -20%', icon: '🛡️', category: 'survival', maxLevel: 3, rarity: 'common' },
+  WINTER_HEART:     { name: '겨울 심장', desc: '한파 중 공격력 +20%', icon: '💙', category: 'special', maxLevel: 2, rarity: 'epic' },
+  SCAVENGER:        { name: '약탈자', desc: '자원 채취 속도 +30%', icon: '🦅', category: 'economy', maxLevel: 3, rarity: 'common' },
 };
 
 // ═══ 경험치(XP) 시스템 ═══
-const XP_PER_LEVEL = [0, 20, 45, 75, 110, 150, 200, 260, 330, 400];
+const XP_TABLE = [0, 10, 25, 45, 70, 102, 142, 190, 248, 316, 396, 491, 601, 731, 881, 1056, 1256, 1486, 1756, 2076, 2456];
 const XP_SOURCES = {
-  rabbit: 2, deer: 3, penguin: 2, seal: 3,
-  wolf: 6, bear: 12, tree: 1, rock: 1,
+  rabbit: 3, deer: 5, penguin: 4, seal: 8,
+  wolf: 12, bear: 25, boss: 50, tree: 1, rock: 1, gold: 3,
+  default: 3,
 };
+
+// ═══ 한파 스케줄 ═══
+const BLIZZARD_SCHEDULE = [
+  { startMs: 3*60*1000,    duration: 30*1000, tempMult: 2,   reward: { boxes: 1, gold: 20 } },
+  { startMs: 6.5*60*1000,  duration: 40*1000, tempMult: 3,   reward: { boxes: 2, gold: 40 } },
+  { startMs: 10*60*1000,   duration: 45*1000, tempMult: 3.5, reward: { boxes: 2, gold: 60 } },
+  { startMs: 13*60*1000,   duration: 50*1000, tempMult: 4,   reward: { boxes: 2, gold: 80 } },
+  { startMs: 16*60*1000,   duration: 55*1000, tempMult: 4.5, reward: { boxes: 3, gold: 100 } },
+];
+
+// ═══ 맵 구역 시스템 ═══
+const MAP_CENTER = { x: 1200, y: 1200 };
+const ZONE_RADII = { safe: 300, normal: 700, danger: 1000 };
+const ZONE_TEMP_DECAY = { safe: 0, normal: -1, danger: -2, extreme: -4 };
 
 const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5 };
 const RARITY_LABELS = { common: { name: '일반', color: '#CCCCCC' }, rare: { name: '희귀', color: '#4488FF' }, epic: { name: '에픽', color: '#AA44FF' } };
@@ -208,6 +240,17 @@ class UpgradeManager {
     this.explosionLevel = 0;
     this.campfireBoost = 1;
     this.cooldownReduction = 1;
+    this.frostResistance = 0;
+    this.berserkerBonus = 0;
+    this.chainAttackChance = 0;
+    this.treasureHunterBonus = 0;
+    this.armorReduction = 0;
+    this.vampireHeal = 0;
+    this.winterHeartBonus = 0;
+    this.scavengerSpeed = 0;
+    this.swiftStrikeActive = false;
+    this.swiftStrikeUsed = false; // tracks if first attack bonus was used
+    this.frostWalkerActive = false;
   }
 
   getLevel(key) { return this.levels[key] || 0; }
@@ -306,16 +349,22 @@ class UpgradeManager {
       case 'TIME_BONUS':
         this.cooldownReduction = Math.pow(0.8, lv);
         break;
+      case 'FROST_RESISTANCE': this.frostResistance = Math.min(0.9, this.frostResistance + 0.3); break;
+      case 'BERSERKER': this.berserkerBonus = Math.min(1.0, this.berserkerBonus + 0.5); break;
+      case 'CHAIN_ATTACK': this.chainAttackChance = Math.min(1.0, this.chainAttackChance + 0.5); break;
+      case 'TREASURE_HUNTER': this.treasureHunterBonus += 0.4; break;
+      case 'ARMOR': this.armorReduction = Math.min(0.6, this.armorReduction + 0.2); break;
+      case 'VAMPIRE': this.vampireHeal += 5; break;
+      case 'WINTER_HEART': this.winterHeartBonus += 0.2; break;
+      case 'SCAVENGER': this.scavengerSpeed += 0.3; break;
+      case 'SWIFT_STRIKE': this.swiftStrikeActive = true; break;
+      case 'FROST_WALKER': this.frostWalkerActive = true; break;
     }
   }
 
   onKill(scene) {
     this.totalKills++;
-    const cratesNeeded = Math.floor(this.totalKills / 5);
-    if (cratesNeeded > this.cratesSpawned) {
-      this.cratesSpawned = cratesNeeded;
-      scene.spawnSupplyCrate();
-    }
+    // Crate spawning removed - now handled by XP level-up system
   }
 
   toJSON() {
@@ -338,6 +387,10 @@ class UpgradeManager {
       this.lifestealAmount = 0; this.knockbackBonus = 0; this.lootBonus = 0;
       this.sellBonus = 0; this.magnetRange = 70; this.multiHitCount = 1;
       this.explosionLevel = 0; this.campfireBoost = 1; this.cooldownReduction = 1;
+      this.frostResistance = 0; this.berserkerBonus = 0; this.chainAttackChance = 0;
+      this.treasureHunterBonus = 0; this.armorReduction = 0; this.vampireHeal = 0;
+      this.winterHeartBonus = 0; this.scavengerSpeed = 0;
+      this.swiftStrikeActive = false; this.swiftStrikeUsed = false; this.frostWalkerActive = false;
       Object.entries(savedLevels).forEach(([key, lv]) => {
         for (let i = 0; i < lv; i++) this.applyUpgrade(key, scene);
       });
@@ -351,12 +404,12 @@ const WORLD_H = 2400;
 
 // ── Animal Definitions (REBALANCED) ──
 const ANIMALS = {
-  rabbit:  { hp: 2,  speed: 25,  damage: 0, drops: { meat: 1 }, size: 16, behavior: 'flee', name: '🐰 토끼', aggroRange: 80, fleeRange: 60, fleeDistance: 80, color: 0xFFEEDD },
-  deer:    { hp: 4,  speed: 30,  damage: 0, drops: { meat: 2, leather: 1 }, size: 18, behavior: 'flee', name: '🦌 사슴', aggroRange: 120, fleeRange: 90, fleeDistance: 100, color: 0xC4A46C },
-  penguin: { hp: 3,  speed: 18,  damage: 0, drops: { meat: 1 }, size: 16, behavior: 'wander', name: '🐧 펭귄', aggroRange: 0, fleeRange: 0, fleeDistance: 0, color: 0x222222 },
-  seal:    { hp: 5,  speed: 12,  damage: 0, drops: { meat: 2, leather: 2 }, size: 20, behavior: 'wander', name: '🦭 물개', aggroRange: 0, fleeRange: 0, fleeDistance: 0, color: 0x7B8D9E },
-  wolf:    { hp: 6,  speed: 65,  damage: 1, drops: { meat: 3, leather: 1 }, size: 18, behavior: 'chase', name: '🐺 늑대', aggroRange: 160, fleeRange: 0, fleeDistance: 0, color: 0x666677 },
-  bear:    { hp: 15, speed: 45,  damage: 3, drops: { meat: 6, leather: 3 }, size: 26, behavior: 'chase', name: '🐻 곰', aggroRange: 140, fleeRange: 0, fleeDistance: 0, color: 0xF0EEE8 },
+  rabbit:  { hp: 10,  speed: 100,  damage: 0, drops: { meat: 1 }, size: 16, behavior: 'flee', name: '🐰 토끼', aggroRange: 80, fleeRange: 60, fleeDistance: 80, color: 0xFFEEDD },
+  deer:    { hp: 15,  speed: 80,  damage: 0, drops: { meat: 2, leather: 1 }, size: 18, behavior: 'flee', name: '🦌 사슴', aggroRange: 120, fleeRange: 90, fleeDistance: 100, color: 0xC4A46C },
+  penguin: { hp: 8,  speed: 40,  damage: 0, drops: { meat: 1 }, size: 16, behavior: 'wander', name: '🐧 펭귄', aggroRange: 0, fleeRange: 0, fleeDistance: 0, color: 0x222222 },
+  seal:    { hp: 12,  speed: 30,  damage: 0, drops: { meat: 2, leather: 2 }, size: 20, behavior: 'wander', name: '🦭 물개', aggroRange: 0, fleeRange: 0, fleeDistance: 0, color: 0x7B8D9E },
+  wolf:    { hp: 30,  speed: 110,  damage: 5, drops: { meat: 3, leather: 1 }, size: 18, behavior: 'chase', name: '🐺 늑대', aggroRange: 160, fleeRange: 0, fleeDistance: 0, color: 0x666677 },
+  bear:    { hp: 80, speed: 70,  damage: 15, drops: { meat: 6, leather: 3 }, size: 26, behavior: 'chase', name: '🐻 곰', aggroRange: 140, fleeRange: 0, fleeDistance: 0, color: 0xF0EEE8 },
 };
 
 // ── Building Definitions (ENHANCED) ──
@@ -1040,10 +1093,10 @@ class GameScene extends Phaser.Scene {
 
   create() {
     this.res = { meat: 0, wood: 0, stone: 0, leather: 0, gold: 0 };
-    this.playerHP = 15; this.playerMaxHP = 15;
-    this.playerDamage = 1;
-    this.playerSpeed = 160;
-    this.playerBaseSpeed = 160;
+    this.playerHP = 100; this.playerMaxHP = 100;
+    this.playerDamage = 10;
+    this.playerSpeed = 120;
+    this.playerBaseSpeed = 120;
     this.warmthResist = 1;
     this.woodBonus = 0; this.stoneBonus = 0;
     this.temperature = 100; this.maxTemp = 100;
@@ -1061,10 +1114,40 @@ class GameScene extends Phaser.Scene {
     this.upgradeUIActive = false;
     this.playerXP = 0;
     this.playerLevel = 1;
-    this.xpToNext = XP_PER_LEVEL[1]; // 20
-    this.levelUpQueue = 0; // queued level-ups while upgrade UI is active
+    this.pendingLevelUps = 0;
+    this.levelUpQueue = 0; // compat alias
     this.isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || ('ontouchstart' in window);
     this.facingRight = true;
+
+    // ═══ Phase 2: Game Timer & Act System ═══
+    this.gameElapsed = 0; // seconds since game start
+    this.currentAct = 1;
+    this.waveTimer = 0; // 30s wave spawn timer
+    this.waveNumber = 0;
+
+    // ═══ Blizzard (한파) System ═══
+    this.blizzardActive = false;
+    this.blizzardMultiplier = 1;
+    this.blizzardIndex = 0;
+    this.blizzardWarned = false;
+    this.blizzardWarningEndTime = 0;
+    this.blizzardCountdownTimer = null;
+    this.coldWaveOverlay = null;
+    // Compat aliases for save/load
+    this.coldWaveActive = false;
+    this.coldWaveTimer = 0;
+    this.coldWaveDuration = 0;
+    this.coldWaveIntensity = 0;
+    this.coldWaveCount = 0;
+    this.nextColdWaveTime = 999999;
+
+    // ═══ Phase 2: Rhythm System (15-20s events) ═══
+    this.rhythmTimer = 0;
+    this.nextRhythmInterval = 15;
+
+    // ═══ Phase 2: Boss System ═══
+    this.boss1Spawned = false;
+    this.boss2Spawned = false;
 
     // Safe area bottom - compute from DOM
     this.safeBottom = 0;
@@ -1115,9 +1198,18 @@ class GameScene extends Phaser.Scene {
 
     this.campfireGlow = this.add.graphics().setDepth(1);
 
+    // Cold wave blue overlay (screen-space)
+    this.coldWaveOverlay = this.add.graphics().setScrollFactor(0).setDepth(60).setAlpha(0);
+
+    // Blizzard scheduler
+    this.gameStartTime = this.time.now;
+    this.time.addEvent({
+      delay: 1000, loop: true,
+      callback: this.checkBlizzardSchedule, callbackScope: this
+    });
+
     this.spawnResourceNodes();
     this.spawnWave();
-    this.animalSpawnTimer = 0;
 
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys('W,A,S,D');
@@ -1196,12 +1288,7 @@ class GameScene extends Phaser.Scene {
     if (save.questIndex != null) this.questIndex = save.questIndex;
     // XP system
     if (save.playerXP != null) this.playerXP = save.playerXP;
-    if (save.playerLevel != null) {
-      this.playerLevel = save.playerLevel;
-      this.xpToNext = this.playerLevel < XP_PER_LEVEL.length
-        ? XP_PER_LEVEL[this.playerLevel]
-        : 400 + (this.playerLevel - 9) * 80;
-    }
+    if (save.playerLevel != null) this.playerLevel = save.playerLevel;
     // Buildings
     if (save.buildings) {
       save.buildings.forEach(b => {
@@ -1214,6 +1301,14 @@ class GameScene extends Phaser.Scene {
     if (save.upgrades) {
       this.upgradeManager.fromJSON(save.upgrades, this);
     }
+    // Phase 2 state
+    if (save.gameElapsed != null) this.gameElapsed = save.gameElapsed;
+    if (save.coldWaveCount != null) this.coldWaveCount = save.coldWaveCount;
+    if (save.nextColdWaveTime != null) this.nextColdWaveTime = save.nextColdWaveTime;
+    if (save.boss1Spawned != null) this.boss1Spawned = save.boss1Spawned;
+    if (save.boss2Spawned != null) this.boss2Spawned = save.boss2Spawned;
+    if (save.waveNumber != null) this.waveNumber = save.waveNumber;
+    this.currentAct = this.getCurrentAct();
     // NPCs
     if (save.npcs) {
       save.npcs.forEach(n => {
@@ -1323,7 +1418,7 @@ class GameScene extends Phaser.Scene {
 
   spawnWave() {
     [{ type: 'rabbit', count: 8 }, { type: 'deer', count: 4 }, { type: 'penguin', count: 4 },
-     { type: 'seal', count: 2 }, { type: 'wolf', count: 2 }]
+     { type: 'seal', count: 2 }]
     .forEach(e => { for (let i = 0; i < e.count; i++) this.spawnAnimal(e.type); });
   }
 
@@ -1407,6 +1502,11 @@ class GameScene extends Phaser.Scene {
     let cd = this.baseAttackSpeed;
     if (this._nearCampfire) cd /= (this._campfireAttackBonus || 1);
     cd *= this.upgradeManager.cooldownReduction;
+    // SWIFT_STRIKE: first attack after selecting upgrade has 50% reduced cooldown
+    if (this.upgradeManager.swiftStrikeActive && !this.upgradeManager.swiftStrikeUsed) {
+      cd *= 0.5;
+      this.upgradeManager.swiftStrikeUsed = true;
+    }
     return cd;
   }
 
@@ -1436,6 +1536,30 @@ class GameScene extends Phaser.Scene {
   }
 
   killAnimal(a) { playKill();
+    // Boss death special effects
+    if (a.isBoss) {
+      this.cameras.main.shake(800, 0.03);
+      this.cameras.main.flash(500, 255, 50, 50, true);
+      const bossText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 80,
+        '🏆 보스 처치!', {
+        fontSize: '52px', fontFamily: 'monospace', color: '#FF4444',
+        stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
+      }).setOrigin(0.5).setDepth(100).setScrollFactor(0);
+      this.tweens.add({ targets: bossText, y: bossText.y - 50, alpha: 0, scale: { from: 1.3, to: 0.5 },
+        duration: 2500, ease: 'Quad.Out', onComplete: () => bossText.destroy() });
+      // Burst particles for boss loot
+      for (let i = 0; i < 24; i++) {
+        const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const dist = Phaser.Math.Between(20, 60);
+        const colors = [0xFFD700, 0xFF4444, 0xFF8800, 0xFFFFFF];
+        const p = this.add.circle(a.x, a.y, Phaser.Math.Between(3, 6), Phaser.Utils.Array.GetRandom(colors))
+          .setDepth(15).setAlpha(1);
+        this.tweens.add({ targets: p,
+          x: a.x + Math.cos(ang) * dist * 2, y: a.y + Math.sin(ang) * dist * 2,
+          alpha: 0, scale: { from: 1.5, to: 0 }, duration: Phaser.Math.Between(600, 1200),
+          ease: 'Quad.Out', onComplete: () => p.destroy() });
+      }
+    }
     const def = a.def;
     const lootMul = 1 + this.upgradeManager.lootBonus;
     Object.entries(def.drops).forEach(([res, amt]) => {
@@ -1502,41 +1626,63 @@ class GameScene extends Phaser.Scene {
   }
 
   // ═══ XP SYSTEM ═══
-  gainXP(amount) {
+  _getXPRequired(lv) {
+    return lv < XP_TABLE.length ? XP_TABLE[lv] : XP_TABLE[XP_TABLE.length - 1] + (lv - XP_TABLE.length + 1) * 400;
+  }
+
+  gainXP(source) {
+    const amount = (typeof source === 'number') ? source : (XP_SOURCES[source] ?? XP_SOURCES.default);
     this.playerXP += amount;
-    while (this.playerXP >= this.xpToNext) {
-      this.playerXP -= this.xpToNext;
+    while (this.playerXP >= this._getXPRequired(this.playerLevel)) {
+      this.playerXP -= this._getXPRequired(this.playerLevel);
       this.playerLevel++;
-      this.xpToNext = this.playerLevel < XP_PER_LEVEL.length
-        ? XP_PER_LEVEL[this.playerLevel]
-        : 400 + (this.playerLevel - 9) * 80;
-      this.onLevelUp();
+      this.pendingLevelUps++;
+    }
+    if (this.pendingLevelUps > 0 && !this.upgradeUIActive) {
+      this.pendingLevelUps--;
+      this.triggerLevelUp();
     }
   }
 
-  onLevelUp() {
-    // If upgrade UI is already active, queue it
-    if (this.upgradeUIActive) {
-      this.levelUpQueue = (this.levelUpQueue || 0) + 1;
-      return;
+  triggerLevelUp() {
+    // Level up effect
+    this.cameras.main.flash(200, 255, 255, 255, true);
+    this.cameras.main.shake(200, 0.005);
+    this.showFloatingText(this.player.x, this.player.y - 50, `⬆️ Level ${this.playerLevel}!`, '#FFD700', 1500);
+
+    // Large center text
+    const lvText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 60,
+      `LEVEL UP! Lv.${this.playerLevel}`, {
+      fontSize: '48px', fontFamily: 'monospace', color: '#FFD700',
+      stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(100).setScrollFactor(0);
+    this.tweens.add({ targets: lvText, y: lvText.y - 40, alpha: 0, scale: { from: 1.2, to: 0.6 },
+      duration: 2000, ease: 'Quad.Out', onComplete: () => lvText.destroy() });
+
+    // Circular particle burst
+    for (let i = 0; i < 16; i++) {
+      const ang = (Math.PI * 2 / 16) * i;
+      const colors = [0xFFFFFF, 0xFFD700, 0xFFF8DC];
+      const p = this.add.circle(this.player.x, this.player.y, 4, Phaser.Utils.Array.GetRandom(colors))
+        .setDepth(15).setAlpha(0.9);
+      this.tweens.add({ targets: p,
+        x: this.player.x + Math.cos(ang) * 60,
+        y: this.player.y + Math.sin(ang) * 60,
+        alpha: 0, scale: { from: 1.5, to: 0 }, duration: 800, ease: 'Quad.Out',
+        onComplete: () => p.destroy() });
     }
+
+    // Show upgrade card selection
     const cards = this.upgradeManager.pickThreeCards();
     if (cards.length > 0) {
       this.showUpgradeUI(cards);
     }
-    // Level up effect
-    this.showFloatingText(this.player.x, this.player.y - 40, `⬆️ Level ${this.playerLevel}!`, '#FFD700');
-    this.cameras.main.shake(200, 0.005);
   }
 
   processLevelUpQueue() {
-    if (this.levelUpQueue > 0 && !this.upgradeUIActive) {
-      this.levelUpQueue--;
-      const cards = this.upgradeManager.pickThreeCards();
-      if (cards.length > 0) {
-        this.showUpgradeUI(cards);
-        this.showFloatingText(this.player.x, this.player.y - 40, `⬆️ Level ${this.playerLevel}!`, '#FFD700');
-      }
+    if (this.pendingLevelUps > 0 && !this.upgradeUIActive) {
+      this.pendingLevelUps--;
+      this.triggerLevelUp();
     }
   }
 
@@ -1602,7 +1748,8 @@ class GameScene extends Phaser.Scene {
                 this.showFloatingText(px, py - 25, '🌀 회피!', '#88DDFF');
                 return;
               }
-              this.playerHP -= a.def.damage; a.atkCD = 1.2; playHurt();
+              const actualDmg = a.def.damage * (1 - this.upgradeManager.armorReduction);
+              this.playerHP -= actualDmg; a.atkCD = 1.2; playHurt();
               this.cameras.main.shake(120, 0.012);
               this.player.setTint(0xFF4444);
               this.time.delayedCall(150, ()=>{if(this.player.active)this.player.clearTint();});
@@ -1614,6 +1761,14 @@ class GameScene extends Phaser.Scene {
             }
           } else this.wander(a, dt, 0.25);
         } else this.wander(a, dt, 0.3);
+      }
+
+      // FROST_WALKER: slow nearby enemies when player is moving
+      if (this.upgradeManager.frostWalkerActive && this.player.body &&
+          (Math.abs(this.player.body.velocity.x) > 5 || Math.abs(this.player.body.velocity.y) > 5)) {
+        if (dist < 150) {
+          a.body.velocity.scale(0.9);
+        }
       }
 
       if (a.body.velocity.x > 5) a.setFlipX(false);
@@ -1828,7 +1983,9 @@ class GameScene extends Phaser.Scene {
       }
     });
 
-    if (!this._nearCampfire) this.playerSpeed = this.playerBaseSpeed;
+    if (!this._nearCampfire) {
+      this.playerSpeed = this.blizzardActive ? this.playerBaseSpeed * 0.8 : this.playerBaseSpeed;
+    }
 
     // 🔊 Fire ambient
     if(this._nearCampfire&&!fireAmbSrc)startFire();else if(!this._nearCampfire&&fireAmbSrc)stopFire();
@@ -1872,7 +2029,12 @@ class GameScene extends Phaser.Scene {
   }
 
   updateSurvival(dt) {
-    this.temperature = Math.max(0, this.temperature - 1.5 * this.warmthResist * dt);
+    // Base temp decay + zone penalty, multiplied by blizzard
+    const zone = this.getPlayerZone();
+    const zoneDecay = ZONE_TEMP_DECAY[zone] || 0;
+    const baseDecay = 0.5 * this.warmthResist;
+    const frostRes = this.upgradeManager ? this.upgradeManager.frostResistance : 0;
+    this.temperature = Math.max(0, this.temperature - (baseDecay + Math.abs(zoneDecay)) * this.blizzardMultiplier * (1 - frostRes) * dt);
     this.placedBuildings.forEach(b => {
       if (b.type === 'campfire') return;
       if (!b.def.warmth) return;
@@ -1887,8 +2049,8 @@ class GameScene extends Phaser.Scene {
       }
     });
     this.hunger = Math.max(0, this.hunger - hungerRate * dt);
-    if (this.temperature <= 0) { this.playerHP -= 2 * dt; if (this.playerHP <= 0) this.endGame(); }
-    if (this.hunger <= 0) { this.playerHP -= 1.5 * dt; if (this.playerHP <= 0) this.endGame(); }
+    if (this.temperature <= 0) { this.playerHP -= 8 * dt; if (this.playerHP <= 0) this.endGame(); }
+    if (this.hunger <= 0) { this.playerHP -= 5 * dt; if (this.playerHP <= 0) this.endGame(); }
     if (this.hunger < 30 && this.res.meat > 0) {
       this.res.meat--; this.hunger = Math.min(this.maxHunger, this.hunger + 25);
       playEat(); this.showFloatingText(this.player.x, this.player.y - 20, '🥩 자동 섭취', '#FF9800');
@@ -2065,6 +2227,7 @@ class GameScene extends Phaser.Scene {
       buff: document.getElementById('buff-text'),
       xpFill: document.getElementById('xp-fill'),
       xpText: document.getElementById('xp-text'),
+      actText: document.getElementById('act-text'),
     };
 
     // ═══ DOM Buttons (100% reliable touch) ═══
@@ -2225,9 +2388,32 @@ class GameScene extends Phaser.Scene {
     d.buff.style.display = this._nearCampfire ? 'block' : 'none';
     
     if (d.xpFill) {
-      const xpR = this.playerXP / this.xpToNext;
+      const req = this._getXPRequired(this.playerLevel);
+      const xpR = Math.min(1, this.playerXP / req);
       d.xpFill.style.width = (xpR * 100) + '%';
-      d.xpText.textContent = `Lv${this.playerLevel} · ${Math.floor(this.playerXP)}/${this.xpToNext} XP`;
+      d.xpText.textContent = `Lv${this.playerLevel} · ${Math.floor(this.playerXP)}/${req} XP`;
+    }
+
+    // Act & Timer display
+    if (d.actText) {
+      const totalSec = Math.floor(this.gameElapsed);
+      const mm = Math.floor(totalSec / 60).toString().padStart(2, '0');
+      const ss = (totalSec % 60).toString().padStart(2, '0');
+      d.actText.textContent = `Act ${this.currentAct} · ${mm}:${ss}`;
+      if (this.blizzardActive) {
+        d.actText.textContent += ` ❄️한파!`;
+        d.actText.style.color = '#6699FF';
+      } else {
+        d.actText.style.color = '#FFDD88';
+      }
+    }
+
+    // Zone indicator
+    const zoneEl = document.getElementById('zone-indicator');
+    if (zoneEl) {
+      const zone = this.getPlayerZone();
+      const zoneNames = { safe: '🏠 안전', normal: '🌲 일반', danger: '⚠️ 위험', extreme: '☠️ 극한' };
+      zoneEl.textContent = zoneNames[zone];
     }
     
     this.npcLabels.forEach(l=>l.destroy()); this.npcLabels = [];
@@ -2562,8 +2748,8 @@ class GameScene extends Phaser.Scene {
         this.physics.resume();
         // Auto-save after upgrade
         SaveManager.save(this);
-        // Process queued level-ups
-        this.time.delayedCall(200, () => this.processLevelUpQueue());
+        // Process queued level-ups (pendingLevelUps)
+        this.time.delayedCall(500, () => this.processLevelUpQueue());
       });
     });
   }
@@ -2600,23 +2786,282 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ═══ ENEMY ESCALATION ═══
-  getSpawnWeights() {
-    const elapsed = this.time.now / 60000;
-    if (elapsed < 2) {
-      return { rabbit: 5, deer: 3, penguin: 2, seal: 1, wolf: 0, bear: 0 };
-    } else if (elapsed < 5) {
-      return { rabbit: 3, deer: 2, penguin: 2, seal: 1, wolf: 2, bear: 0 };
-    } else if (elapsed < 8) {
-      return { rabbit: 2, deer: 2, penguin: 1, seal: 1, wolf: 3, bear: 1 };
+  // ═══ 5-ACT ENEMY SYSTEM ═══
+  getCurrentAct() {
+    const min = this.gameElapsed / 60;
+    if (min < 10) return 1;
+    if (min < 20) return 2;
+    if (min < 35) return 3;
+    if (min < 50) return 4;
+    return 5;
+  }
+
+  getWaveSize() {
+    const min = this.gameElapsed / 60;
+    if (min < 4) return 10;
+    if (min < 8) return 20;
+    if (min < 12) return 40;
+    if (min < 20) return 60;
+    if (min < 30) return 80;
+    return 100;
+  }
+
+  getSpawnConfig() {
+    const min = this.gameElapsed / 60;
+    let weights, maxCount, spawnInterval;
+    if (min < 3) {
+      weights = { rabbit: 5, deer: 3, penguin: 2 }; maxCount = 12; spawnInterval = 10000;
+    } else if (min < 6) {
+      weights = { rabbit: 4, deer: 3, penguin: 2, wolf: 1 }; maxCount = 18; spawnInterval = 8000;
+    } else if (min < 10) {
+      weights = { rabbit: 3, deer: 2, penguin: 2, wolf: 2, bear: 1 }; maxCount = 24; spawnInterval = 7000;
+    } else if (min < 15) {
+      weights = { rabbit: 2, deer: 2, penguin: 1, wolf: 3, bear: 2 }; maxCount = 30; spawnInterval = 6000;
+    } else if (min < 20) {
+      weights = { rabbit: 1, deer: 1, wolf: 3, bear: 3, seal: 2 }; maxCount = 36; spawnInterval = 5000;
     } else {
-      return { rabbit: 1, deer: 1, penguin: 1, seal: 1, wolf: 3, bear: 3 };
+      weights = { wolf: 3, bear: 4, seal: 3 }; maxCount = 40; spawnInterval = 4000;
     }
+    return { weights, maxCount, spawnInterval };
+  }
+
+  pickAnimalType(weights) {
+    const total = Object.values(weights).reduce((a, b) => a + b, 0);
+    let r = Math.random() * total;
+    for (const [type, w] of Object.entries(weights)) {
+      r -= w;
+      if (r <= 0) return type;
+    }
+    return Object.keys(weights)[0];
+  }
+
+  getSpawnWeights() {
+    return this.getSpawnConfig().weights;
   }
 
   getMaxAnimals() {
-    const elapsed = this.time.now / 60000;
-    return Math.min(40, 15 + Math.floor(elapsed * 2));
+    return this.getSpawnConfig().maxCount;
+  }
+
+  // ═══ BLIZZARD (한파) SYSTEM ═══
+  checkBlizzardSchedule() {
+    if (this.blizzardIndex >= BLIZZARD_SCHEDULE.length) return;
+    if (!this.gameStartTime) return;
+    const elapsed = this.time.now - this.gameStartTime;
+    const next = BLIZZARD_SCHEDULE[this.blizzardIndex];
+
+    // 60초 전 경고
+    const warnTime = next.startMs - 60 * 1000;
+    if (!this.blizzardWarned && elapsed >= warnTime && elapsed < next.startMs) {
+      this.blizzardWarned = true;
+      this.startBlizzardWarning(next.startMs - elapsed);
+    }
+
+    // 한파 시작
+    if (!this.blizzardActive && elapsed >= next.startMs) {
+      this.startBlizzard(next);
+    }
+  }
+
+  startBlizzardWarning(msUntil) {
+    this.blizzardWarningEndTime = this.time.now + msUntil;
+    const warnEl = document.getElementById('blizzard-warning');
+    if (warnEl) warnEl.style.display = 'block';
+    this.updateBlizzardWarning(Math.ceil(msUntil / 1000));
+    if (this.blizzardCountdownTimer) this.blizzardCountdownTimer.remove();
+    this.blizzardCountdownTimer = this.time.addEvent({
+      delay: 1000, repeat: Math.ceil(msUntil / 1000) - 1,
+      callback: () => {
+        const remaining = this.blizzardWarningEndTime - this.time.now;
+        if (remaining > 0) this.updateBlizzardWarning(Math.ceil(remaining / 1000));
+      }
+    });
+  }
+
+  updateBlizzardWarning(sec) {
+    const el = document.getElementById('blizzard-countdown');
+    if (el) el.textContent = Math.max(0, sec);
+  }
+
+  startBlizzard(config) {
+    this.blizzardActive = true;
+    this.blizzardMultiplier = config.tempMult;
+    this.blizzardIndex++;
+    this.blizzardWarned = false;
+    if (this.blizzardCountdownTimer) { this.blizzardCountdownTimer.remove(); this.blizzardCountdownTimer = null; }
+
+    // Hide warning, show active
+    const warnEl = document.getElementById('blizzard-warning');
+    const activeEl = document.getElementById('blizzard-active');
+    if (warnEl) warnEl.style.display = 'none';
+    if (activeEl) activeEl.style.display = 'block';
+
+    // Slow player
+    this.playerSpeed = this.playerBaseSpeed * 0.8;
+
+    this.showCenterAlert(`❄️ 한파 ${this.blizzardIndex}/5 시작!`, '#4488FF');
+    this.cameras.main.shake(300, 0.008);
+
+    // End timer
+    this.time.delayedCall(config.duration, () => {
+      this.endBlizzard(config.reward);
+    });
+  }
+
+  endBlizzard(reward) {
+    this.blizzardActive = false;
+    this.blizzardMultiplier = 1;
+    this.playerSpeed = this.playerBaseSpeed;
+
+    const activeEl = document.getElementById('blizzard-active');
+    if (activeEl) activeEl.style.display = 'none';
+
+    this.coldWaveOverlay.clear();
+    this.coldWaveOverlay.setAlpha(0);
+
+    this.showFloatingText(this.player.x, this.player.y - 60, '❄️ 한파 생존!', '#88CCFF', 2000);
+    this.showCenterAlert('☀️ 한파 종료! 보상 지급!', '#FFDD44');
+
+    // Reward
+    this.res.gold = (this.res.gold || 0) + reward.gold;
+    for (let i = 0; i < reward.boxes; i++) {
+      this.time.delayedCall(i * 500, () => this.spawnSupplyCrate());
+    }
+  }
+
+  updateBlizzardVisuals(dt) {
+    if (this.blizzardActive) {
+      const cam = this.cameras.main;
+      const pulse = 0.15 + Math.sin(this.time.now / 500) * 0.05;
+      this.coldWaveOverlay.clear();
+      this.coldWaveOverlay.fillStyle(0x2244CC, pulse);
+      this.coldWaveOverlay.fillRect(0, 0, cam.width, cam.height);
+      this.coldWaveOverlay.setAlpha(1);
+    }
+  }
+
+  // ═══ ZONE SYSTEM ═══
+  getPlayerZone() {
+    if (!this.player) return 'safe';
+    const dist = Math.hypot(this.player.x - MAP_CENTER.x, this.player.y - MAP_CENTER.y);
+    if (dist <= ZONE_RADII.safe) return 'safe';
+    if (dist <= ZONE_RADII.normal) return 'normal';
+    if (dist <= ZONE_RADII.danger) return 'danger';
+    return 'extreme';
+  }
+
+  // ═══ BOSS SYSTEM ═══
+  spawnBoss(type) {
+    const isFinal = type === 'final';
+    const bossHP = isFinal ? 2000 : 500;
+    const bossScale = isFinal ? 2.5 : 1.8; // visual scale (sprite)
+    const bossDmg = isFinal ? 25 : 12;
+    const bossSpeed = isFinal ? 55 : 50;
+    const bossName = isFinal ? '❄️ 폭풍왕' : '🐻‍❄️ 서리곰';
+
+    // Spawn away from player
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 400;
+    const bx = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 80, WORLD_W - 80);
+    const by = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 80, WORLD_H - 80);
+
+    const boss = this.physics.add.sprite(bx, by, 'bear').setCollideWorldBounds(true).setDepth(5);
+    boss.setScale(bossScale);
+    boss.setTint(isFinal ? 0x6666FF : 0xAABBFF);
+    boss.animalType = 'boss';
+    boss.def = { hp: bossHP, speed: bossSpeed, damage: bossDmg, drops: { meat: isFinal ? 30 : 15, leather: isFinal ? 15 : 8 }, size: 26 * bossScale, behavior: 'chase', name: bossName, aggroRange: 500, fleeRange: 0, fleeDistance: 0, color: 0x6666FF };
+    boss.hp = bossHP;
+    boss.maxHP = bossHP;
+    boss.wanderTimer = 0;
+    boss.wanderDir = { x: 0, y: 0 };
+    boss.hitFlash = 0;
+    boss.atkCD = 0;
+    boss.fleeTimer = 0;
+    boss.isBoss = true;
+    boss.hpBar = this.add.graphics().setDepth(6);
+    boss.nameLabel = this.add.text(bx, by - boss.def.size - 10, bossName, {
+      fontSize: '16px', fontFamily: 'monospace', color: '#FF4444', stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+    }).setDepth(6).setOrigin(0.5);
+    this.animals.add(boss);
+
+    // Epic entrance
+    this.showCenterAlert(`⚠️ 보스 출현: ${bossName}`, '#FF4444');
+    this.cameras.main.shake(500, 0.015);
+    this.cameras.main.flash(300, 100, 100, 255);
+  }
+
+  // ═══ RHYTHM SYSTEM (15-20초 이벤트) ═══
+  updateRhythm(dt) {
+    this.rhythmTimer += dt;
+    if (this.rhythmTimer >= this.nextRhythmInterval) {
+      this.rhythmTimer = 0;
+      this.nextRhythmInterval = 15 + Math.random() * 5; // 15~20s
+      this.triggerRhythmEvent();
+    }
+  }
+
+  triggerRhythmEvent() {
+    // Pick an event type based on what's most needed
+    const events = [];
+
+    // Resource drop cluster
+    events.push('resource_drop');
+    events.push('resource_drop');
+
+    // Blizzard warning (if one is coming soon)
+    if (!this.blizzardActive && this.blizzardIndex < BLIZZARD_SCHEDULE.length) {
+      const next = BLIZZARD_SCHEDULE[this.blizzardIndex];
+      const elapsed = this.time.now - (this.gameStartTime || this.time.now);
+      if (next.startMs - elapsed < 30000 && next.startMs - elapsed > 0) {
+        events.push('cold_warning');
+      }
+    }
+
+    // Wave alert
+    if (this.waveTimer > 20) {
+      events.push('wave_alert');
+    }
+
+    const event = events[Math.floor(Math.random() * events.length)];
+    switch (event) {
+      case 'resource_drop':
+        this.spawnResourceCluster();
+        break;
+      case 'cold_warning':
+        this.showCenterAlert('⚠️ 한파 접근 중...', '#4488FF');
+        break;
+      case 'wave_alert':
+        this.showCenterAlert(`🐺 새 웨이브 접근 중!`, '#FF8844');
+        break;
+    }
+  }
+
+  spawnResourceCluster() {
+    const types = ['meat', 'wood', 'stone', 'leather'];
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 80 + Math.random() * 120;
+    const cx = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 50, WORLD_W - 50);
+    const cy = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 50, WORLD_H - 50);
+    const count = 4 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < count; i++) {
+      const type = types[Math.floor(Math.random() * types.length)];
+      this.spawnDrop(type, cx + Phaser.Math.Between(-30, 30), cy + Phaser.Math.Between(-30, 30));
+    }
+    this.showFloatingText(cx, cy - 20, '🎁 자원 드롭!', '#FFD700');
+  }
+
+  showCenterAlert(text, color) {
+    const cam = this.cameras.main;
+    const t = this.add.text(cam.width / 2, cam.height * 0.15, text, {
+      fontSize: '24px', fontFamily: 'monospace', color: color,
+      stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(200).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({
+      targets: t, alpha: 1, scale: { from: 0.5, to: 1.1 }, duration: 400, ease: 'Back.Out',
+      onComplete: () => {
+        this.tweens.add({ targets: t, alpha: 0, y: t.y - 30, duration: 1500, delay: 1000, onComplete: () => t.destroy() });
+      }
+    });
   }
 
   endGame() {
@@ -2728,21 +3173,46 @@ class GameScene extends Phaser.Scene {
       if (n.regenTimer <= 0) { n.depleted = false; n.nodeHP = n.nodeMaxHP; n.setAlpha(1); }
     });
 
-    this.animalSpawnTimer += dt;
-    if (this.animalSpawnTimer > 10) {
-      this.animalSpawnTimer = 0;
-      const maxAnimals = this.getMaxAnimals();
-      if (this.animals.getChildren().length < maxAnimals) {
-        const weights = this.getSpawnWeights();
-        const weighted = [];
-        Object.entries(weights).forEach(([type, w]) => {
-          for (let i = 0; i < w; i++) weighted.push(type);
-        });
-        if (weighted.length > 0) {
-          for (let i = 0; i < 3; i++) this.spawnAnimal(Phaser.Utils.Array.GetRandom(weighted));
+    // ═══ Phase 2: Game Timer & Act ═══
+    this.gameElapsed += dt;
+    const newAct = this.getCurrentAct();
+    if (newAct !== this.currentAct) {
+      this.currentAct = newAct;
+      this.showCenterAlert(`🎬 Act ${this.currentAct} 시작!`, '#FFD700');
+      this.cameras.main.flash(500, 255, 255, 200);
+    }
+
+    // ═══ Wave Spawn (dynamic interval) ═══
+    this.waveTimer += dt;
+    const spawnConfig = this.getSpawnConfig();
+    const spawnIntervalSec = spawnConfig.spawnInterval / 1000;
+    if (this.waveTimer >= spawnIntervalSec) {
+      this.waveTimer = 0;
+      this.waveNumber++;
+      const currentCount = this.animals.getChildren().length;
+      const toSpawn = Math.max(0, Math.min(spawnConfig.maxCount - currentCount, 15));
+      if (toSpawn > 0) {
+        for (let i = 0; i < toSpawn; i++) {
+          this.spawnAnimal(this.pickAnimalType(spawnConfig.weights));
         }
       }
     }
+
+    // ═══ Blizzard Visuals ═══
+    this.updateBlizzardVisuals(dt);
+
+    // ═══ Phase 2: Boss Spawns ═══
+    if (!this.boss1Spawned && this.gameElapsed >= 8 * 60) { // 8분으로 단축
+      this.boss1Spawned = true;
+      this.spawnBoss('first');
+    }
+    if (!this.boss2Spawned && this.gameElapsed >= 18 * 60) { // 18분으로 단축
+      this.boss2Spawned = true;
+      this.spawnBoss('final');
+    }
+
+    // ═══ Phase 2: Rhythm System ═══
+    this.updateRhythm(dt);
 
     this.drops.getChildren().forEach(d => {
       if(!d.active) return;
