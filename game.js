@@ -1,26 +1,26 @@
-// Whiteout Survival - Idle Survival Style
-// Phaser 3 - Full Rewrite
+// Whiteout Survival - Final Polished Version
+// Enhanced visuals, balanced gameplay, mobile UX
 
 const WORLD_W = 2400;
 const WORLD_H = 2400;
 
-// ── Animal Definitions ──
+// ── Animal Definitions (BALANCED) ──
 const ANIMALS = {
-  rabbit:  { hp: 1,  speed: 30,  damage: 0, drops: { meat: 1 }, color: 0xCCCCCC, size: 12, behavior: 'flee', name: '토끼', aggroRange: 60, fleeRange: 40 },
-  deer:    { hp: 3,  speed: 40,  damage: 0, drops: { meat: 2, leather: 1 }, color: 0xC4A46C, size: 14, behavior: 'flee', name: '사슴', aggroRange: 120, fleeRange: 100 },
-  penguin: { hp: 2,  speed: 25,  damage: 0, drops: { meat: 1 }, color: 0x222222, size: 12, behavior: 'wander', name: '펭귄', aggroRange: 0, fleeRange: 0 },
-  seal:    { hp: 4,  speed: 20,  damage: 0, drops: { meat: 2, leather: 2 }, color: 0x7B8D9E, size: 14, behavior: 'wander', name: '물개', aggroRange: 0, fleeRange: 0 },
-  wolf:    { hp: 5,  speed: 70,  damage: 1, drops: { meat: 3, leather: 1 }, color: 0x555555, size: 14, behavior: 'chase', name: '늑대', aggroRange: 180, fleeRange: 0 },
-  bear:    { hp: 12, speed: 50,  damage: 3, drops: { meat: 6, leather: 3 }, color: 0x6B4226, size: 18, behavior: 'chase', name: '곰', aggroRange: 200, fleeRange: 0 },
+  rabbit:  { hp: 2,  speed: 30,  damage: 0, drops: { meat: 1 }, size: 12, behavior: 'flee', name: '토끼', aggroRange: 80, fleeRange: 60, fleeDistance: 80 },
+  deer:    { hp: 4,  speed: 35,  damage: 0, drops: { meat: 2, leather: 1 }, size: 14, behavior: 'flee', name: '사슴', aggroRange: 120, fleeRange: 90, fleeDistance: 100 },
+  penguin: { hp: 3,  speed: 20,  damage: 0, drops: { meat: 1 }, size: 12, behavior: 'wander', name: '펭귄', aggroRange: 0, fleeRange: 0, fleeDistance: 0 },
+  seal:    { hp: 5,  speed: 15,  damage: 0, drops: { meat: 2, leather: 2 }, size: 16, behavior: 'wander', name: '물개', aggroRange: 0, fleeRange: 0, fleeDistance: 0 },
+  wolf:    { hp: 6,  speed: 70,  damage: 1, drops: { meat: 3, leather: 1 }, size: 14, behavior: 'chase', name: '늑대', aggroRange: 160, fleeRange: 0, fleeDistance: 0 },
+  bear:    { hp: 15, speed: 50,  damage: 3, drops: { meat: 6, leather: 3 }, size: 20, behavior: 'chase', name: '곰', aggroRange: 140, fleeRange: 0, fleeDistance: 0 },
 };
 
 // ── Building Definitions ──
 const BUILDINGS = {
-  campfire: { name: '화덕', cost: { wood: 5 }, warmth: 2, desc: '체온 회복 +2/s', color: 0xFF6600, icon: '🔥' },
-  tent:     { name: '텐트', cost: { wood: 10, leather: 3 }, warmth: 5, desc: '체온 회복 +5/s', color: 0x8B6914, icon: '⛺' },
-  storage:  { name: '창고', cost: { wood: 15, stone: 10 }, storageBonus: 50, desc: '자원 보관량 +50', color: 0x9E9E9E, icon: '📦' },
-  workshop: { name: '작업대', cost: { wood: 20, stone: 15 }, desc: '도구 제작 가능', color: 0x795548, icon: '🔨' },
-  wall:     { name: '방벽', cost: { stone: 8 }, desc: '동물 진입 차단', color: 0xAAAAAA, icon: '🧱' },
+  campfire: { name: '화덕', cost: { wood: 5 }, warmth: 2, desc: '체온 회복 +2/s', icon: '🔥' },
+  tent:     { name: '텐트', cost: { wood: 10, leather: 3 }, warmth: 5, desc: '체온 회복 +5/s', icon: '⛺' },
+  storage:  { name: '창고', cost: { wood: 15, stone: 10 }, storageBonus: 50, desc: '보관량 +50', icon: '📦' },
+  workshop: { name: '작업대', cost: { wood: 20, stone: 15 }, desc: '도구 제작 가능', icon: '🔨' },
+  wall:     { name: '방벽', cost: { stone: 8 }, desc: '동물 진입 차단', icon: '🧱' },
 };
 
 // ── Crafting Recipes ──
@@ -34,16 +34,16 @@ const RECIPES = {
 
 // ── NPC Definitions ──
 const NPC_DEFS = [
-  { type: 'hunter',    name: '사냥꾼', cost: { meat: 8 },  color: 0x4CAF50, desc: '자동 사냥' },
-  { type: 'gatherer',  name: '채집꾼', cost: { meat: 5 },  color: 0x8BC34A, desc: '자동 채집' },
-  { type: 'merchant',  name: '상인',   cost: { meat: 20 }, color: 0xFFEB3B, desc: '고기→금화' },
-  { type: 'warrior',   name: '전사',   cost: { meat: 35 }, color: 0xF44336, desc: '강력 전투' },
+  { type: 'hunter',    name: '사냥꾼', cost: { meat: 8 },  desc: '자동 사냥' },
+  { type: 'gatherer',  name: '채집꾼', cost: { meat: 5 },  desc: '자동 채집' },
+  { type: 'merchant',  name: '상인',   cost: { meat: 20 }, desc: '고기→금화' },
+  { type: 'warrior',   name: '전사',   cost: { meat: 35 }, desc: '강력 전투' },
 ];
 
 // ── Resource node types ──
 const RESOURCE_NODES = {
-  tree:  { name: '나무', resource: 'wood',  hp: 3, yield: 2, color: 0x2E7D32, size: 16, regen: 30 },
-  rock:  { name: '바위', resource: 'stone', hp: 4, yield: 2, color: 0x757575, size: 14, regen: 45 },
+  tree:  { name: '나무', resource: 'wood',  hp: 3, yield: 2, size: 16, regen: 30 },
+  rock:  { name: '바위', resource: 'stone', hp: 4, yield: 2, size: 14, regen: 45 },
 };
 
 // ── Quests ──
@@ -58,322 +58,564 @@ const QUESTS = [
   { id: 'q8', name: 'NPC 고용', desc: 'NPC 1명 고용', check: s => s.npcsHired >= 1, reward: { wood: 10, stone: 10 } },
 ];
 
+// ── Pixel Art Drawing Helpers ──
+function drawPixelRect(g, x, y, w, h, color, alpha) {
+  g.fillStyle(color, alpha || 1);
+  g.fillRect(x, y, w, h);
+}
+
+function drawPixelCharacter(g, w, h, bodyColor, headColor, details) {
+  // Clear area
+  const cx = w/2, cy = h/2;
+  // Body
+  g.fillStyle(bodyColor, 1);
+  g.fillRect(cx-5, cy-2, 10, 10);
+  // Head
+  g.fillStyle(headColor, 1);
+  g.fillRect(cx-4, cy-8, 8, 7);
+  // Eyes
+  g.fillStyle(0x000000, 1);
+  g.fillRect(cx-3, cy-6, 2, 2);
+  g.fillRect(cx+1, cy-6, 2, 2);
+  if (details) details(g, cx, cy);
+}
+
 class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
+  
   create() {
-    const g = this.add.graphics();
-    const px = (g, x, y, w, h, col) => { g.fillStyle(col, 1); g.fillRect(x, y, w, h); };
-
-    // ── Player (32x32) - 파카 입은 탐험가 ──
-    g.clear();
-    // 그림자
-    g.fillStyle(0x000000, 0.2); g.fillEllipse(16, 30, 20, 6);
-    // 부츠
-    px(g, 10, 26, 5, 4, 0x4E342E); px(g, 17, 26, 5, 4, 0x4E342E);
-    // 다리
-    px(g, 11, 22, 4, 5, 0x37474F); px(g, 17, 22, 4, 5, 0x37474F);
-    // 몸통 (파란 파카)
-    g.fillStyle(0x1565C0, 1); g.fillRoundedRect(9, 12, 14, 11, 2);
-    // 파카 디테일
-    px(g, 14, 13, 4, 10, 0x1976D2); // 지퍼 라인
-    g.fillStyle(0x0D47A1, 1); g.fillRect(9, 12, 14, 2); // 어깨
-    // 팔
-    px(g, 6, 14, 4, 8, 0x1565C0); px(g, 22, 14, 4, 8, 0x1565C0);
-    px(g, 6, 21, 4, 2, 0x8D6E63); px(g, 22, 21, 4, 2, 0x8D6E63); // 장갑
-    // 머리
-    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(11, 5, 10, 8, 2);
-    // 눈
-    px(g, 13, 8, 2, 2, 0x212121); px(g, 18, 8, 2, 2, 0x212121);
-    // 모자 (털모자)
-    g.fillStyle(0xD32F2F, 1); g.fillRoundedRect(10, 2, 12, 5, 2);
-    px(g, 14, 0, 4, 3, 0xD32F2F); // 꼭대기
-    g.fillStyle(0xFFFFFF, 1); g.fillRect(10, 6, 12, 2); // 모자 테두리 (털)
-    // 외곽선
-    g.lineStyle(1, 0x263238, 0.6); g.strokeRoundedRect(9, 12, 14, 11, 2);
-    g.generateTexture('player', 32, 32); g.clear();
-
-    // ── Player Attack (32x32) ──
-    g.fillStyle(0x000000, 0.2); g.fillEllipse(16, 30, 20, 6);
-    px(g, 10, 26, 5, 4, 0x4E342E); px(g, 17, 26, 5, 4, 0x4E342E);
-    px(g, 11, 22, 4, 5, 0x37474F); px(g, 17, 22, 4, 5, 0x37474F);
-    g.fillStyle(0x1565C0, 1); g.fillRoundedRect(9, 12, 14, 11, 2);
-    px(g, 14, 13, 4, 10, 0x1976D2);
-    px(g, 6, 13, 4, 6, 0x1565C0); // 왼팔
-    // 오른팔 (공격 자세 - 위로)
-    px(g, 22, 8, 4, 8, 0x1565C0);
-    px(g, 22, 6, 4, 3, 0x8D6E63); // 장갑
-    // 무기 (칼)
-    px(g, 24, 0, 2, 7, 0xBDBDBD); px(g, 23, 7, 4, 2, 0x795548);
-    px(g, 6, 18, 4, 2, 0x8D6E63);
-    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(11, 5, 10, 8, 2);
-    px(g, 13, 8, 2, 2, 0x212121); px(g, 18, 8, 2, 2, 0x212121);
-    g.fillStyle(0xD32F2F, 1); g.fillRoundedRect(10, 2, 12, 5, 2);
-    px(g, 14, 0, 4, 3, 0xD32F2F);
-    g.fillStyle(0xFFFFFF, 1); g.fillRect(10, 6, 12, 2);
-    g.generateTexture('player_attack', 32, 32); g.clear();
-
-    // ── 토끼 (24x24) - 흰 토끼, 큰 귀 ──
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 22, 14, 4);
-    // 몸통
-    g.fillStyle(0xF5F5F5, 1); g.fillEllipse(12, 15, 12, 10);
-    // 머리
-    g.fillStyle(0xFAFAFA, 1); g.fillCircle(12, 9, 5);
-    // 귀 (길고 뾰족)
-    g.fillStyle(0xF5F5F5, 1); g.fillEllipse(8, 2, 3, 7); g.fillEllipse(16, 2, 3, 7);
-    g.fillStyle(0xFFB0B0, 1); g.fillEllipse(8, 2, 1.5, 5); g.fillEllipse(16, 2, 1.5, 5); // 귀 안쪽 핑크
-    // 눈 (빨간 눈)
-    px(g, 9, 8, 2, 2, 0xE53935); px(g, 13, 8, 2, 2, 0xE53935);
-    // 코
-    px(g, 11, 11, 2, 1, 0xFFB0B0);
-    // 꼬리
-    g.fillStyle(0xFFFFFF, 1); g.fillCircle(12, 20, 3);
-    // 외곽선
-    g.lineStyle(1, 0xBDBDBD, 0.5); g.strokeCircle(12, 9, 5);
-    g.generateTexture('rabbit', 24, 24); g.clear();
-
-    // ── 사슴 (28x28) - 갈색, 뿔 ──
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(14, 26, 16, 4);
-    // 다리
-    px(g, 6, 20, 2, 6, 0x8D6E63); px(g, 11, 20, 2, 6, 0x8D6E63);
-    px(g, 15, 20, 2, 6, 0x8D6E63); px(g, 20, 20, 2, 6, 0x8D6E63);
-    // 몸통
-    g.fillStyle(0xA1887F, 1); g.fillEllipse(14, 16, 16, 8);
-    g.fillStyle(0xBCAAA4, 1); g.fillEllipse(14, 18, 10, 4); // 배
-    // 머리
-    g.fillStyle(0x8D6E63, 1); g.fillCircle(14, 8, 5);
-    // 뿔
-    px(g, 7, 1, 2, 5, 0x795548); px(g, 5, 0, 2, 3, 0x795548);
-    px(g, 19, 1, 2, 5, 0x795548); px(g, 21, 0, 2, 3, 0x795548);
-    // 눈
-    px(g, 11, 7, 2, 2, 0x3E2723); px(g, 15, 7, 2, 2, 0x3E2723);
-    // 코
-    px(g, 13, 10, 2, 2, 0x5D4037);
-    // 하얀 반점
-    g.fillStyle(0xD7CCC8, 0.6); g.fillCircle(10, 14, 2); g.fillCircle(18, 15, 1.5);
-    g.generateTexture('deer', 28, 28); g.clear();
-
-    // ── 펭귄 (24x24) - 흑백 턱시도 ──
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 22, 12, 4);
-    // 몸통 (검정)
-    g.fillStyle(0x212121, 1); g.fillEllipse(12, 14, 12, 12);
-    // 배 (흰색)
-    g.fillStyle(0xFAFAFA, 1); g.fillEllipse(12, 15, 7, 9);
-    // 머리
-    g.fillStyle(0x212121, 1); g.fillCircle(12, 6, 5);
-    // 눈 (하얀 패치)
-    g.fillStyle(0xFFFFFF, 1); g.fillCircle(9, 5, 2.5); g.fillCircle(15, 5, 2.5);
-    px(g, 9, 5, 2, 2, 0x212121); px(g, 14, 5, 2, 2, 0x212121);
-    // 부리
-    g.fillStyle(0xFF9800, 1); g.fillTriangle(12, 7, 10, 10, 14, 10);
-    // 날개
-    px(g, 4, 12, 3, 8, 0x37474F); px(g, 17, 12, 3, 8, 0x37474F);
-    // 발
-    px(g, 8, 21, 4, 2, 0xFF9800); px(g, 14, 21, 4, 2, 0xFF9800);
-    g.generateTexture('penguin', 24, 24); g.clear();
-
-    // ── 물개 (28x28) - 둥글둥글 ──
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(14, 25, 18, 4);
-    // 몸통
-    g.fillStyle(0x78909C, 1); g.fillEllipse(14, 16, 18, 12);
-    g.fillStyle(0x90A4AE, 1); g.fillEllipse(14, 18, 12, 6); // 배
-    // 머리
-    g.fillStyle(0x607D8B, 1); g.fillCircle(14, 7, 6);
-    // 눈
-    px(g, 10, 6, 3, 3, 0x263238); px(g, 16, 6, 3, 3, 0x263238);
-    g.fillStyle(0xFFFFFF, 1); g.fillCircle(11, 6, 1); g.fillCircle(17, 6, 1);
-    // 코
-    g.fillStyle(0x37474F, 1); g.fillCircle(14, 10, 2);
-    // 수염
-    g.lineStyle(1, 0xB0BEC5, 0.6);
-    g.lineBetween(8, 9, 3, 8); g.lineBetween(8, 10, 3, 11);
-    g.lineBetween(20, 9, 25, 8); g.lineBetween(20, 10, 25, 11);
-    // 지느러미
-    g.fillStyle(0x607D8B, 1);
-    g.fillTriangle(3, 14, 6, 10, 6, 18);
-    g.fillTriangle(25, 14, 22, 10, 22, 18);
-    g.generateTexture('seal', 28, 28); g.clear();
-
-    // ── 늑대 (28x28) - 회색, 날카로운 ──
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(14, 26, 16, 4);
-    // 다리
-    px(g, 6, 20, 3, 6, 0x424242); px(g, 11, 20, 3, 6, 0x424242);
-    px(g, 14, 20, 3, 6, 0x424242); px(g, 19, 20, 3, 6, 0x424242);
-    // 몸통
-    g.fillStyle(0x616161, 1); g.fillEllipse(14, 16, 16, 8);
-    g.fillStyle(0x9E9E9E, 1); g.fillEllipse(14, 17, 10, 4); // 배
-    // 꼬리
-    g.fillStyle(0x757575, 1); g.fillTriangle(24, 12, 28, 8, 22, 14);
-    // 머리
-    g.fillStyle(0x616161, 1); g.fillCircle(14, 8, 6);
-    // 주둥이
-    g.fillStyle(0x757575, 1); g.fillEllipse(14, 12, 5, 3);
-    // 귀 (뾰족)
-    g.fillStyle(0x424242, 1);
-    g.fillTriangle(7, 1, 9, 7, 5, 7);
-    g.fillTriangle(21, 1, 19, 7, 23, 7);
-    // 눈 (노란 눈 - 사나운)
-    px(g, 10, 7, 3, 2, 0xFFEB3B); px(g, 16, 7, 3, 2, 0xFFEB3B);
-    px(g, 11, 7, 1, 2, 0x212121); px(g, 17, 7, 1, 2, 0x212121);
-    // 코
-    px(g, 13, 11, 2, 2, 0x212121);
-    // 이빨
-    px(g, 11, 13, 2, 1, 0xFFFFFF); px(g, 15, 13, 2, 1, 0xFFFFFF);
-    g.generateTexture('wolf', 28, 28); g.clear();
-
-    // ── 곰 (36x36) - 크고 갈색 ──
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(18, 34, 24, 5);
-    // 다리
-    px(g, 7, 26, 5, 8, 0x5D4037); px(g, 14, 26, 5, 8, 0x5D4037);
-    px(g, 17, 26, 5, 8, 0x5D4037); px(g, 24, 26, 5, 8, 0x5D4037);
-    // 몸통 (큰 덩치)
-    g.fillStyle(0x6D4C41, 1); g.fillEllipse(18, 20, 22, 14);
-    g.fillStyle(0x795548, 1); g.fillEllipse(18, 22, 14, 6); // 배
-    // 머리
-    g.fillStyle(0x6D4C41, 1); g.fillCircle(18, 9, 8);
-    // 귀 (둥근)
-    g.fillStyle(0x5D4037, 1); g.fillCircle(10, 3, 3); g.fillCircle(26, 3, 3);
-    g.fillStyle(0x8D6E63, 1); g.fillCircle(10, 3, 1.5); g.fillCircle(26, 3, 1.5);
-    // 주둥이
-    g.fillStyle(0x8D6E63, 1); g.fillEllipse(18, 12, 6, 4);
-    // 눈 (작고 사나움)
-    px(g, 13, 8, 3, 3, 0x212121); px(g, 21, 8, 3, 3, 0x212121);
-    g.fillStyle(0xFFFFFF, 0.7); g.fillCircle(14, 8, 0.8); g.fillCircle(22, 8, 0.8);
-    // 코
-    g.fillStyle(0x3E2723, 1); g.fillCircle(18, 11, 2);
-    // 발톱
-    px(g, 7, 33, 2, 2, 0xBCAAA4); px(g, 10, 33, 2, 2, 0xBCAAA4);
-    px(g, 24, 33, 2, 2, 0xBCAAA4); px(g, 27, 33, 2, 2, 0xBCAAA4);
-    g.generateTexture('bear', 36, 36); g.clear();
-
-    // ── NPC: 사냥꾼 (24x28) ──
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 26, 14, 4);
-    px(g, 8, 22, 3, 5, 0x5D4037); px(g, 13, 22, 3, 5, 0x5D4037);
-    g.fillStyle(0x6D4C41, 1); g.fillRoundedRect(7, 12, 10, 10, 2); // 갈색 옷
-    px(g, 4, 14, 3, 7, 0x6D4C41); // 왼팔
-    px(g, 17, 12, 3, 10, 0x6D4C41); // 오른팔
-    // 활
-    g.lineStyle(2, 0x795548, 1); g.beginPath(); g.arc(20, 14, 6, -1.2, 1.2); g.strokePath();
-    g.lineStyle(1, 0xBCAAA4, 1); g.lineBetween(20, 8, 20, 20);
-    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(9, 5, 6, 7, 2); // 머리
-    px(g, 10, 7, 2, 2, 0x3E2723); px(g, 13, 7, 2, 2, 0x3E2723);
-    g.fillStyle(0x4CAF50, 1); g.fillRect(8, 3, 8, 3); // 녹색 모자
-    g.generateTexture('npc_hunter', 24, 28); g.clear();
-
-    // ── NPC: 채집꾼 (24x28) ──
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 26, 14, 4);
-    px(g, 8, 22, 3, 5, 0x5D4037); px(g, 13, 22, 3, 5, 0x5D4037);
-    g.fillStyle(0x8BC34A, 1); g.fillRoundedRect(7, 12, 10, 10, 2); // 녹색 옷
-    px(g, 4, 14, 3, 7, 0x8BC34A);
-    px(g, 17, 14, 3, 7, 0x8BC34A);
-    // 바구니
-    g.fillStyle(0xA1887F, 1); g.fillRoundedRect(17, 16, 6, 6, 1);
-    g.lineStyle(1, 0x795548); g.strokeRoundedRect(17, 16, 6, 6, 1);
-    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(9, 5, 6, 7, 2);
-    px(g, 10, 7, 2, 2, 0x3E2723); px(g, 13, 7, 2, 2, 0x3E2723);
-    g.fillStyle(0xFDD835, 1); g.fillRect(8, 2, 8, 4); // 밀짚모자
-    g.fillRect(6, 5, 12, 2);
-    g.generateTexture('npc_gatherer', 24, 28); g.clear();
-
-    // ── NPC: 상인 (24x28) ──
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 26, 14, 4);
-    px(g, 8, 22, 3, 5, 0x5D4037); px(g, 13, 22, 3, 5, 0x5D4037);
-    g.fillStyle(0xFFEB3B, 1); g.fillRoundedRect(7, 12, 10, 10, 2); // 노란 옷
-    px(g, 7, 18, 10, 5, 0xF5F5F5); // 앞치마
-    px(g, 4, 14, 3, 7, 0xFFEB3B);
-    px(g, 17, 14, 3, 7, 0xFFEB3B);
-    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(9, 5, 6, 7, 2);
-    px(g, 10, 7, 2, 2, 0x3E2723); px(g, 13, 7, 2, 2, 0x3E2723);
-    // 수염
-    g.fillStyle(0x8D6E63, 0.5); g.fillRect(10, 10, 4, 2);
-    g.fillStyle(0x7B1FA2, 1); g.fillRect(8, 2, 8, 4); // 보라색 모자
-    g.generateTexture('npc_merchant', 24, 28); g.clear();
-
-    // ── NPC: 전사 (24x28) ──
-    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 26, 14, 4);
-    px(g, 8, 22, 3, 5, 0x455A64); px(g, 13, 22, 3, 5, 0x455A64);
-    g.fillStyle(0x1565C0, 1); g.fillRoundedRect(7, 12, 10, 10, 2); // 파란 갑옷
-    g.fillStyle(0x90A4AE, 1); g.fillRect(8, 13, 8, 3); // 갑옷 디테일
-    px(g, 4, 13, 3, 8, 0x1565C0); // 왼팔 + 방패
-    g.fillStyle(0x90A4AE, 1); g.fillCircle(4, 17, 4); // 방패
-    g.fillStyle(0xF44336, 1); g.fillCircle(4, 17, 2); // 방패 문양
-    px(g, 17, 13, 3, 8, 0x1565C0); // 오른팔
-    // 검
-    px(g, 19, 6, 2, 10, 0xBDBDBD); px(g, 18, 15, 4, 2, 0x795548);
-    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(9, 5, 6, 7, 2);
-    // 투구
-    g.fillStyle(0x78909C, 1); g.fillRoundedRect(8, 2, 8, 5, 2);
-    px(g, 11, 1, 2, 3, 0xF44336); // 투구 깃털
-    px(g, 10, 7, 2, 2, 0x212121); px(g, 13, 7, 2, 2, 0x212121);
-    g.generateTexture('npc_warrior', 24, 28); g.clear();
-
-    // ── 드롭 아이템들 (12x12) ──
-    // 고기
-    g.fillStyle(0xD32F2F, 1); g.fillEllipse(6, 7, 8, 6);
-    g.fillStyle(0xEF5350, 1); g.fillEllipse(6, 6, 5, 3);
-    px(g, 3, 2, 2, 5, 0xBCAAA4); // 뼈
-    g.generateTexture('meat_drop', 12, 12); g.clear();
-    // 나무
-    g.fillStyle(0x5D4037, 1); g.fillRoundedRect(1, 2, 10, 4, 1);
-    g.fillStyle(0x795548, 1); g.fillRoundedRect(2, 6, 8, 4, 1);
-    g.lineStyle(1, 0x4E342E); g.lineBetween(3, 4, 9, 4);
-    g.generateTexture('wood_drop', 12, 12); g.clear();
-    // 돌
-    g.fillStyle(0x757575, 1); g.fillRoundedRect(1, 3, 10, 7, 3);
-    g.fillStyle(0x9E9E9E, 1); g.fillRoundedRect(2, 4, 5, 4, 2);
-    g.generateTexture('stone_drop', 12, 12); g.clear();
-    // 가죽
-    g.fillStyle(0xA1887F, 1); g.fillRoundedRect(1, 2, 10, 8, 2);
-    g.fillStyle(0xBCAAA4, 1); g.fillRoundedRect(3, 3, 6, 6, 1);
-    g.lineStyle(1, 0x8D6E63); g.lineBetween(4, 5, 8, 5); g.lineBetween(4, 7, 8, 7);
-    g.generateTexture('leather_drop', 12, 12); g.clear();
-
-    // ── 나무 리소스 (32x48) - 큰 침엽수 ──
-    g.fillStyle(0x000000, 0.12); g.fillEllipse(16, 46, 20, 5);
-    // 줄기
-    g.fillStyle(0x5D4037, 1); g.fillRect(13, 32, 6, 14);
-    g.fillStyle(0x4E342E, 1); g.fillRect(15, 32, 2, 14);
-    // 나뭇잎 (3단 삼각형)
-    g.fillStyle(0x2E7D32, 1);
-    g.fillTriangle(16, 2, 4, 18, 28, 18);
-    g.fillTriangle(16, 10, 2, 28, 30, 28);
-    g.fillTriangle(16, 18, 0, 36, 32, 36);
-    // 하이라이트
-    g.fillStyle(0x4CAF50, 0.4);
-    g.fillTriangle(16, 4, 10, 14, 22, 14);
-    g.fillTriangle(16, 12, 8, 24, 24, 24);
-    // 눈 쌓임
-    g.fillStyle(0xFFFFFF, 0.7);
-    g.fillTriangle(16, 2, 12, 8, 20, 8);
-    g.fillEllipse(8, 18, 6, 3); g.fillEllipse(24, 18, 6, 3);
-    g.generateTexture('tree_node', 32, 48); g.clear();
-
-    // ── 바위 리소스 (28x24) ──
-    g.fillStyle(0x000000, 0.12); g.fillEllipse(14, 22, 20, 4);
-    // 큰 바위
-    g.fillStyle(0x616161, 1); g.fillRoundedRect(2, 6, 24, 16, 6);
-    // 디테일
-    g.fillStyle(0x757575, 1); g.fillRoundedRect(4, 4, 12, 10, 4);
-    g.fillStyle(0x9E9E9E, 1); g.fillRoundedRect(6, 6, 6, 5, 2);
-    // 균열
-    g.lineStyle(1, 0x424242, 0.5); g.lineBetween(14, 8, 20, 14); g.lineBetween(10, 12, 16, 18);
-    // 눈
-    g.fillStyle(0xFFFFFF, 0.5); g.fillEllipse(10, 5, 8, 3); g.fillEllipse(20, 7, 6, 2);
-    g.generateTexture('rock_node', 28, 24); g.clear();
-
-    // ── 기타 ──
-    // 눈송이
-    g.fillStyle(0xFFFFFF, 1); g.fillCircle(2, 2, 2);
-    g.generateTexture('snowflake', 4, 4); g.clear();
-    // 피격 파티클
-    g.fillStyle(0xFF0000, 1); g.fillCircle(3, 3, 3);
-    g.generateTexture('hit_particle', 6, 6); g.clear();
-    // 골드 파티클
-    g.fillStyle(0xFFD700, 1); g.fillCircle(4, 4, 4);
-    g.fillStyle(0xFFF176, 1); g.fillCircle(3, 3, 2);
-    g.generateTexture('gold_particle', 8, 8); g.clear();
-
-    g.destroy();
+    // ── Player: Parka character with red hat ──
+    this.createPlayerTexture();
+    this.createPlayerAttackTexture();
+    
+    // ── Animals ──
+    this.createRabbitTexture();
+    this.createDeerTexture();
+    this.createPenguinTexture();
+    this.createSealTexture();
+    this.createWolfTexture();
+    this.createBearTexture();
+    
+    // ── NPCs ──
+    this.createNPCTextures();
+    
+    // ── Resources & Environment ──
+    this.createTreeTexture();
+    this.createRockTexture();
+    
+    // ── Drops ──
+    this.createDropTextures();
+    
+    // ── Particles ──
+    this.createParticleTextures();
+    
     this.scene.start('Game');
+  }
+
+  createPlayerTexture() {
+    const g = this.add.graphics();
+    const s = 32;
+    // Red hat/hood
+    g.fillStyle(0xCC2222, 1);
+    g.fillRect(10, 2, 12, 6);
+    g.fillRect(9, 4, 14, 3);
+    // Face (skin)
+    g.fillStyle(0xFFDDBB, 1);
+    g.fillRect(11, 8, 10, 7);
+    // Eyes
+    g.fillStyle(0x222222, 1);
+    g.fillRect(13, 10, 2, 2);
+    g.fillRect(17, 10, 2, 2);
+    // Mouth
+    g.fillStyle(0xDD8866, 1);
+    g.fillRect(14, 13, 4, 1);
+    // Parka body (blue/teal)
+    g.fillStyle(0x3388AA, 1);
+    g.fillRect(9, 15, 14, 10);
+    // Parka fur trim
+    g.fillStyle(0xEEDDCC, 1);
+    g.fillRect(9, 15, 14, 2);
+    g.fillRect(9, 15, 2, 10);
+    g.fillRect(21, 15, 2, 10);
+    // Arms
+    g.fillStyle(0x3388AA, 1);
+    g.fillRect(6, 16, 3, 7);
+    g.fillRect(23, 16, 3, 7);
+    // Gloves
+    g.fillStyle(0x884422, 1);
+    g.fillRect(6, 23, 3, 2);
+    g.fillRect(23, 23, 3, 2);
+    // Pants
+    g.fillStyle(0x555566, 1);
+    g.fillRect(11, 25, 4, 5);
+    g.fillRect(17, 25, 4, 5);
+    // Boots
+    g.fillStyle(0x664422, 1);
+    g.fillRect(10, 29, 5, 3);
+    g.fillRect(17, 29, 5, 3);
+    
+    g.generateTexture('player', s, s);
+    g.destroy();
+  }
+
+  createPlayerAttackTexture() {
+    const g = this.add.graphics();
+    const s = 36;
+    // Same as player but slightly bigger and with weapon swing
+    g.fillStyle(0xCC2222, 1);
+    g.fillRect(12, 2, 12, 6);
+    g.fillRect(11, 4, 14, 3);
+    g.fillStyle(0xFFDDBB, 1);
+    g.fillRect(13, 8, 10, 7);
+    g.fillStyle(0x222222, 1);
+    g.fillRect(15, 10, 2, 2);
+    g.fillRect(19, 10, 2, 2);
+    g.fillStyle(0xDD8866, 1);
+    g.fillRect(16, 13, 4, 1);
+    g.fillStyle(0x3388AA, 1);
+    g.fillRect(11, 15, 14, 10);
+    g.fillStyle(0xEEDDCC, 1);
+    g.fillRect(11, 15, 14, 2);
+    // Attacking arm extended
+    g.fillStyle(0x3388AA, 1);
+    g.fillRect(25, 14, 8, 3);
+    g.fillRect(8, 16, 3, 7);
+    // Weapon
+    g.fillStyle(0xAAAAAA, 1);
+    g.fillRect(30, 10, 2, 8);
+    g.fillStyle(0x884422, 1);
+    g.fillRect(29, 17, 4, 2);
+    // Pants & boots
+    g.fillStyle(0x555566, 1);
+    g.fillRect(13, 25, 4, 5);
+    g.fillRect(19, 25, 4, 5);
+    g.fillStyle(0x664422, 1);
+    g.fillRect(12, 29, 5, 3);
+    g.fillRect(19, 29, 5, 3);
+    
+    g.generateTexture('player_attack', s, s);
+    g.destroy();
+  }
+
+  createRabbitTexture() {
+    const g = this.add.graphics();
+    // 24x24 rabbit
+    // Body (white-ish)
+    g.fillStyle(0xEEDDCC, 1);
+    g.fillRoundedRect(6, 10, 12, 10, 4);
+    // Head
+    g.fillStyle(0xEEDDCC, 1);
+    g.fillRoundedRect(8, 5, 8, 7, 3);
+    // Long ears
+    g.fillStyle(0xDDCCBB, 1);
+    g.fillRect(9, 0, 2, 7);
+    g.fillRect(13, 0, 2, 7);
+    // Inner ear (pink)
+    g.fillStyle(0xFFAAAA, 1);
+    g.fillRect(10, 1, 1, 4);
+    g.fillRect(13, 1, 1, 4);
+    // Eyes
+    g.fillStyle(0x000000, 1);
+    g.fillRect(10, 7, 1, 1);
+    g.fillRect(13, 7, 1, 1);
+    // Nose
+    g.fillStyle(0xFFAAAA, 1);
+    g.fillRect(11, 9, 2, 1);
+    // Tail
+    g.fillStyle(0xFFFFFF, 1);
+    g.fillCircle(6, 16, 2);
+    // Feet
+    g.fillStyle(0xDDCCBB, 1);
+    g.fillRect(7, 19, 3, 2);
+    g.fillRect(14, 19, 3, 2);
+    
+    g.generateTexture('rabbit', 24, 24);
+    g.destroy();
+  }
+
+  createDeerTexture() {
+    const g = this.add.graphics();
+    // Brown deer 28x28
+    g.fillStyle(0xC4A46C, 1);
+    g.fillRoundedRect(7, 12, 14, 10, 3);
+    g.fillStyle(0xC4A46C, 1);
+    g.fillRoundedRect(9, 5, 10, 8, 3);
+    // Antlers
+    g.fillStyle(0x8B6914, 1);
+    g.fillRect(10, 1, 2, 5);
+    g.fillRect(16, 1, 2, 5);
+    g.fillRect(8, 2, 2, 2);
+    g.fillRect(18, 2, 2, 2);
+    // Eyes
+    g.fillStyle(0x000000, 1);
+    g.fillRect(11, 7, 2, 2);
+    g.fillRect(15, 7, 2, 2);
+    // Nose
+    g.fillStyle(0x333333, 1);
+    g.fillRect(13, 10, 2, 1);
+    // White belly
+    g.fillStyle(0xE8D8B8, 1);
+    g.fillRect(10, 18, 8, 3);
+    // Legs
+    g.fillStyle(0xA08050, 1);
+    g.fillRect(9, 21, 2, 5);
+    g.fillRect(17, 21, 2, 5);
+    // Hooves
+    g.fillStyle(0x444444, 1);
+    g.fillRect(9, 25, 2, 2);
+    g.fillRect(17, 25, 2, 2);
+    
+    g.generateTexture('deer', 28, 28);
+    g.destroy();
+  }
+
+  createPenguinTexture() {
+    const g = this.add.graphics();
+    // Black and white penguin 24x24
+    g.fillStyle(0x222222, 1);
+    g.fillRoundedRect(7, 4, 10, 14, 4);
+    // White belly
+    g.fillStyle(0xFFFFFF, 1);
+    g.fillRoundedRect(9, 7, 6, 9, 3);
+    // Eyes
+    g.fillStyle(0xFFFFFF, 1);
+    g.fillRect(9, 5, 2, 2);
+    g.fillRect(13, 5, 2, 2);
+    g.fillStyle(0x000000, 1);
+    g.fillRect(10, 5, 1, 1);
+    g.fillRect(13, 5, 1, 1);
+    // Beak
+    g.fillStyle(0xFF8800, 1);
+    g.fillRect(11, 7, 2, 2);
+    // Feet
+    g.fillStyle(0xFF8800, 1);
+    g.fillRect(8, 18, 3, 2);
+    g.fillRect(13, 18, 3, 2);
+    // Wings
+    g.fillStyle(0x333333, 1);
+    g.fillRect(5, 8, 2, 6);
+    g.fillRect(17, 8, 2, 6);
+    
+    g.generateTexture('penguin', 24, 24);
+    g.destroy();
+  }
+
+  createSealTexture() {
+    const g = this.add.graphics();
+    // Gray seal 28x24
+    g.fillStyle(0x7B8D9E, 1);
+    g.fillEllipse(14, 12, 24, 14);
+    // Head
+    g.fillStyle(0x8B9DAE, 1);
+    g.fillCircle(6, 10, 5);
+    // Eyes
+    g.fillStyle(0x000000, 1);
+    g.fillCircle(4, 9, 1);
+    // Nose
+    g.fillStyle(0x333333, 1);
+    g.fillCircle(2, 11, 1);
+    // Whiskers
+    g.lineStyle(1, 0x555555, 0.5);
+    g.lineBetween(3, 11, 0, 10);
+    g.lineBetween(3, 12, 0, 13);
+    // Flippers
+    g.fillStyle(0x6B7D8E, 1);
+    g.fillEllipse(22, 14, 6, 4);
+    // Belly highlight
+    g.fillStyle(0x9BAABB, 0.5);
+    g.fillEllipse(14, 14, 16, 6);
+    
+    g.generateTexture('seal', 28, 24);
+    g.destroy();
+  }
+
+  createWolfTexture() {
+    const g = this.add.graphics();
+    // Gray wolf 28x28
+    // Body
+    g.fillStyle(0x666677, 1);
+    g.fillRoundedRect(6, 10, 16, 10, 3);
+    // Head
+    g.fillStyle(0x777788, 1);
+    g.fillRoundedRect(3, 4, 10, 8, 3);
+    // Snout
+    g.fillStyle(0x888899, 1);
+    g.fillRect(1, 7, 4, 4);
+    // Ears (pointed)
+    g.fillStyle(0x555566, 1);
+    g.fillTriangle(4, 0, 3, 5, 7, 5);
+    g.fillTriangle(11, 0, 9, 5, 13, 5);
+    // Eyes (fierce red)
+    g.fillStyle(0xFF4444, 1);
+    g.fillRect(5, 6, 2, 2);
+    g.fillRect(9, 6, 2, 2);
+    // Teeth
+    g.fillStyle(0xFFFFFF, 1);
+    g.fillRect(2, 10, 1, 2);
+    g.fillRect(4, 10, 1, 2);
+    // Nose
+    g.fillStyle(0x222222, 1);
+    g.fillRect(1, 8, 2, 1);
+    // Tail
+    g.fillStyle(0x555566, 1);
+    g.fillRect(22, 8, 4, 3);
+    g.fillRect(25, 6, 2, 3);
+    // Legs
+    g.fillStyle(0x555566, 1);
+    g.fillRect(8, 19, 2, 5);
+    g.fillRect(12, 19, 2, 5);
+    g.fillRect(18, 19, 2, 5);
+    // Paws
+    g.fillStyle(0x444455, 1);
+    g.fillRect(7, 23, 3, 2);
+    g.fillRect(11, 23, 3, 2);
+    g.fillRect(17, 23, 3, 2);
+    // Dark back stripe
+    g.fillStyle(0x555566, 0.7);
+    g.fillRect(8, 10, 12, 2);
+    
+    g.generateTexture('wolf', 28, 28);
+    g.destroy();
+  }
+
+  createBearTexture() {
+    const g = this.add.graphics();
+    // Polar bear 36x36 (big, white, round)
+    // Body (big round)
+    g.fillStyle(0xF0EEE8, 1);
+    g.fillRoundedRect(6, 12, 24, 16, 8);
+    // Head (round)
+    g.fillStyle(0xF5F3EE, 1);
+    g.fillCircle(18, 10, 9);
+    // Ears (round)
+    g.fillStyle(0xE0DDD5, 1);
+    g.fillCircle(11, 3, 3);
+    g.fillCircle(25, 3, 3);
+    g.fillStyle(0xDDBBAA, 1);
+    g.fillCircle(11, 3, 1.5);
+    g.fillCircle(25, 3, 1.5);
+    // Eyes (small, dark)
+    g.fillStyle(0x222222, 1);
+    g.fillCircle(14, 9, 1.5);
+    g.fillCircle(22, 9, 1.5);
+    // Nose
+    g.fillStyle(0x333333, 1);
+    g.fillCircle(18, 13, 2);
+    // Mouth
+    g.lineStyle(1, 0x666666, 0.5);
+    g.lineBetween(18, 14, 16, 16);
+    g.lineBetween(18, 14, 20, 16);
+    // Legs (thick)
+    g.fillStyle(0xE8E5DD, 1);
+    g.fillRoundedRect(8, 26, 6, 8, 3);
+    g.fillRoundedRect(22, 26, 6, 8, 3);
+    // Paws
+    g.fillStyle(0xDDDAD2, 1);
+    g.fillRoundedRect(7, 31, 8, 4, 2);
+    g.fillRoundedRect(21, 31, 8, 4, 2);
+    // Claws
+    g.fillStyle(0x888888, 1);
+    for (let i = 0; i < 3; i++) {
+      g.fillRect(8 + i*2, 34, 1, 2);
+      g.fillRect(22 + i*2, 34, 1, 2);
+    }
+    
+    g.generateTexture('bear', 36, 36);
+    g.destroy();
+  }
+
+  createNPCTextures() {
+    // Hunter: brown clothes, bow
+    let g = this.add.graphics();
+    g.fillStyle(0x8B6914, 1); g.fillRect(10, 15, 12, 10); // brown body
+    g.fillStyle(0xFFDDBB, 1); g.fillRect(12, 6, 8, 8); // face
+    g.fillStyle(0x6B4914, 1); g.fillRect(11, 3, 10, 5); // brown hat
+    g.fillStyle(0x222222, 1); g.fillRect(14, 9, 1, 1); g.fillRect(17, 9, 1, 1); // eyes
+    // Bow
+    g.lineStyle(2, 0x884422, 1);
+    g.beginPath(); g.arc(25, 15, 8, -1.2, 1.2); g.strokePath();
+    g.lineStyle(1, 0xCCCCCC, 1);
+    g.lineBetween(25, 7, 25, 23);
+    g.fillStyle(0x555555, 1); g.fillRect(12, 25, 3, 5); g.fillRect(17, 25, 3, 5);
+    g.generateTexture('npc_hunter', 32, 32); g.destroy();
+
+    // Merchant: green hat, apron
+    g = this.add.graphics();
+    g.fillStyle(0xEEDDCC, 1); g.fillRect(10, 15, 12, 10); // apron body
+    g.fillStyle(0xFFDDBB, 1); g.fillRect(12, 6, 8, 8); // face
+    g.fillStyle(0x44AA44, 1); g.fillRect(11, 2, 10, 5); // green hat
+    g.fillStyle(0xFFFFFF, 1); g.fillRect(10, 15, 12, 2); // apron top
+    g.fillStyle(0x222222, 1); g.fillRect(14, 9, 1, 1); g.fillRect(17, 9, 1, 1); // eyes
+    g.fillStyle(0xDD8866, 1); g.fillRect(14, 11, 4, 1); // smile
+    // Gold coin in hand
+    g.fillStyle(0xFFDD00, 1); g.fillCircle(25, 20, 4);
+    g.fillStyle(0xFFAA00, 1); g.fillCircle(25, 20, 2);
+    g.fillStyle(0x555555, 1); g.fillRect(12, 25, 3, 5); g.fillRect(17, 25, 3, 5);
+    g.generateTexture('npc_merchant', 32, 32); g.destroy();
+
+    // Gatherer: green outfit
+    g = this.add.graphics();
+    g.fillStyle(0x66AA44, 1); g.fillRect(10, 15, 12, 10);
+    g.fillStyle(0xFFDDBB, 1); g.fillRect(12, 6, 8, 8);
+    g.fillStyle(0x558833, 1); g.fillRect(11, 3, 10, 5);
+    g.fillStyle(0x222222, 1); g.fillRect(14, 9, 1, 1); g.fillRect(17, 9, 1, 1);
+    g.fillStyle(0x884422, 1); g.fillRect(5, 12, 2, 14); // stick
+    g.fillStyle(0x555555, 1); g.fillRect(12, 25, 3, 5); g.fillRect(17, 25, 3, 5);
+    g.generateTexture('npc_gatherer', 32, 32); g.destroy();
+
+    // Warrior: blue armor, sword+shield
+    g = this.add.graphics();
+    g.fillStyle(0x3366AA, 1); g.fillRect(10, 15, 12, 10); // blue armor
+    g.fillStyle(0x4477BB, 1); g.fillRect(10, 15, 12, 3); // shoulder guard
+    g.fillStyle(0xFFDDBB, 1); g.fillRect(12, 6, 8, 8);
+    g.fillStyle(0x5588CC, 1); g.fillRect(11, 3, 10, 4); // helmet
+    g.fillStyle(0x222222, 1); g.fillRect(14, 9, 1, 1); g.fillRect(17, 9, 1, 1);
+    // Sword
+    g.fillStyle(0xCCCCCC, 1); g.fillRect(24, 8, 2, 14);
+    g.fillStyle(0x884422, 1); g.fillRect(23, 21, 4, 3);
+    // Shield
+    g.fillStyle(0x3355AA, 1); g.fillRoundedRect(2, 14, 8, 10, 2);
+    g.fillStyle(0xFFDD00, 1); g.fillCircle(6, 19, 2);
+    g.fillStyle(0x555566, 1); g.fillRect(12, 25, 3, 5); g.fillRect(17, 25, 3, 5);
+    g.generateTexture('npc_warrior', 32, 32); g.destroy();
+  }
+
+  createTreeTexture() {
+    const g = this.add.graphics();
+    // Fir tree 48x64
+    // Trunk
+    g.fillStyle(0x5D4037, 1);
+    g.fillRect(20, 44, 8, 20);
+    // Snow on trunk
+    g.fillStyle(0xEEEEFF, 0.4);
+    g.fillRect(20, 44, 4, 6);
+    // Tree layers (dark green fir)
+    g.fillStyle(0x1B5E20, 1);
+    g.fillTriangle(24, 4, 4, 34, 44, 34);
+    g.fillStyle(0x2E7D32, 1);
+    g.fillTriangle(24, 14, 8, 40, 40, 40);
+    g.fillStyle(0x388E3C, 1);
+    g.fillTriangle(24, 24, 10, 48, 38, 48);
+    // Snow on branches
+    g.fillStyle(0xFFFFFF, 0.6);
+    g.fillTriangle(24, 4, 14, 18, 34, 18);
+    g.fillStyle(0xFFFFFF, 0.3);
+    g.fillRect(10, 38, 28, 3);
+    
+    g.generateTexture('tree_node', 48, 64);
+    g.destroy();
+  }
+
+  createRockTexture() {
+    const g = this.add.graphics();
+    // Rock 28x24
+    g.fillStyle(0x666666, 1);
+    g.fillRoundedRect(2, 6, 24, 16, 6);
+    g.fillStyle(0x888888, 1);
+    g.fillRoundedRect(4, 4, 14, 10, 5);
+    g.fillStyle(0x999999, 0.6);
+    g.fillRoundedRect(6, 6, 8, 6, 3);
+    // Snow cap
+    g.fillStyle(0xFFFFFF, 0.5);
+    g.fillRoundedRect(4, 3, 16, 4, 3);
+    // Cracks
+    g.lineStyle(1, 0x444444, 0.4);
+    g.lineBetween(10, 8, 14, 16);
+    g.lineBetween(18, 6, 20, 14);
+    
+    g.generateTexture('rock_node', 28, 24);
+    g.destroy();
+  }
+
+  createDropTextures() {
+    // Meat 🥩 steak shape
+    let g = this.add.graphics();
+    g.fillStyle(0xCC4422, 1);
+    g.fillRoundedRect(3, 3, 18, 14, 5);
+    g.fillStyle(0xEE6644, 1);
+    g.fillRoundedRect(5, 5, 14, 8, 4);
+    g.fillStyle(0xFFAA88, 0.6);
+    g.fillRoundedRect(7, 6, 4, 4, 2);
+    // Bone
+    g.fillStyle(0xEEDDCC, 1);
+    g.fillRect(1, 8, 4, 3);
+    g.fillCircle(2, 8, 2);
+    g.fillCircle(2, 11, 2);
+    g.generateTexture('meat_drop', 24, 20);
+    g.destroy();
+
+    // Wood
+    g = this.add.graphics();
+    g.fillStyle(0x8B6914, 1);
+    g.fillRect(4, 2, 6, 18);
+    g.fillStyle(0xA07B28, 1);
+    g.fillRect(5, 3, 4, 16);
+    g.fillStyle(0x6B4914, 0.5);
+    g.lineBetween(7, 4, 7, 18);
+    // Bark rings
+    g.fillStyle(0x7B5914, 1);
+    g.fillRect(4, 2, 6, 2);
+    g.fillRect(4, 18, 6, 2);
+    g.generateTexture('wood_drop', 14, 22);
+    g.destroy();
+
+    // Stone
+    g = this.add.graphics();
+    g.fillStyle(0x888888, 1);
+    g.fillRoundedRect(2, 4, 14, 10, 4);
+    g.fillStyle(0xAAAAAA, 0.6);
+    g.fillRoundedRect(4, 5, 6, 5, 3);
+    g.generateTexture('stone_drop', 18, 18);
+    g.destroy();
+
+    // Leather
+    g = this.add.graphics();
+    g.fillStyle(0xC4A46C, 1);
+    g.fillRoundedRect(2, 2, 14, 14, 3);
+    g.fillStyle(0xB09458, 0.6);
+    g.fillRect(4, 4, 10, 10);
+    g.lineStyle(1, 0x8B6914, 0.4);
+    g.lineBetween(4, 8, 14, 8);
+    g.generateTexture('leather_drop', 18, 18);
+    g.destroy();
+  }
+
+  createParticleTextures() {
+    // Snowflake (bigger, prettier)
+    let g = this.add.graphics();
+    g.fillStyle(0xFFFFFF, 0.9);
+    g.fillCircle(4, 4, 3);
+    g.fillStyle(0xFFFFFF, 0.5);
+    g.fillCircle(4, 4, 4);
+    g.generateTexture('snowflake', 8, 8);
+    g.destroy();
+
+    // Hit particle
+    g = this.add.graphics();
+    g.fillStyle(0xFF4444, 1);
+    g.fillCircle(4, 4, 4);
+    g.fillStyle(0xFF8844, 0.7);
+    g.fillCircle(4, 4, 2);
+    g.generateTexture('hit_particle', 8, 8);
+    g.destroy();
+
+    // Gold particle
+    g = this.add.graphics();
+    g.fillStyle(0xFFDD00, 1);
+    g.fillCircle(4, 4, 3);
+    g.fillStyle(0xFFFF88, 0.7);
+    g.fillCircle(3, 3, 1.5);
+    g.generateTexture('gold_particle', 8, 8);
+    g.destroy();
+
+    // Slash effect
+    g = this.add.graphics();
+    g.lineStyle(3, 0xFFFFFF, 0.9);
+    g.beginPath();
+    g.arc(16, 16, 12, -0.8, 0.8);
+    g.strokePath();
+    g.generateTexture('slash_fx', 32, 32);
+    g.destroy();
   }
 }
 
@@ -385,21 +627,20 @@ class GameScene extends Phaser.Scene {
     this.res = { meat: 0, wood: 0, stone: 0, leather: 0, gold: 0 };
     this.playerHP = 15; this.playerMaxHP = 15;
     this.playerDamage = 1; this.playerSpeed = 150;
-    this.warmthResist = 1; // multiplier (lower = less cold)
+    this.warmthResist = 1;
     this.woodBonus = 0; this.stoneBonus = 0;
     this.temperature = 100; this.maxTemp = 100;
     this.hunger = 100; this.maxHunger = 100;
     this.attackCooldown = 0;
     this.moveDir = { x: 0, y: 0 };
     this.npcsOwned = [];
-    this.nextNPCIndex = 0;
     this.placedBuildings = [];
     this.gameOver = false;
     this.buildMode = null;
     this.storageCapacity = 50;
     this.isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || ('ontouchstart' in window);
+    this.facingRight = true;
 
-    // Stats for quests
     this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0 };
     this.questIndex = 0;
     this.questCompleted = [];
@@ -407,24 +648,13 @@ class GameScene extends Phaser.Scene {
     // ── World ──
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
 
-    // Background
-    const bg = this.add.graphics();
-    bg.fillStyle(0xE0E4EC, 1);
-    bg.fillRect(0, 0, WORLD_W, WORLD_H);
-    for (let i = 0; i < 80; i++) {
-      bg.fillStyle(Phaser.Math.Between(0, 1) ? 0xD0D4DD : 0xCDD1DA, 0.4);
-      bg.fillCircle(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(0, WORLD_H), Phaser.Math.Between(30, 100));
-    }
-    // Decorative snow mounds
-    for (let i = 0; i < 40; i++) {
-      bg.fillStyle(0xF0F0F5, 0.5);
-      const sx = Phaser.Math.Between(0, WORLD_W), sy = Phaser.Math.Between(0, WORLD_H);
-      bg.fillEllipse(sx, sy, Phaser.Math.Between(40, 120), Phaser.Math.Between(20, 40));
-    }
+    // ── Background: Snow terrain ──
+    this.drawBackground();
 
     // ── Player ──
     this.player = this.physics.add.sprite(WORLD_W/2, WORLD_H/2, 'player');
     this.player.setCollideWorldBounds(true).setDepth(10).setDamping(true).setDrag(0.9);
+    this.player.body.setSize(16, 20).setOffset(8, 10);
 
     // ── Groups ──
     this.animals = this.physics.add.group();
@@ -437,13 +667,21 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
 
-    // ── Snow ──
+    // ── Snow Particles (bigger, slower, atmospheric) ──
     this.add.particles(0, 0, 'snowflake', {
       x: { min: 0, max: WORLD_W }, y: -10,
-      lifespan: 8000, speedY: { min: 15, max: 45 }, speedX: { min: -15, max: 15 },
-      scale: { min: 0.5, max: 2 }, alpha: { start: 0.7, end: 0 },
-      frequency: 40, quantity: 1,
+      lifespan: 12000, speedY: { min: 10, max: 30 }, speedX: { min: -20, max: 10 },
+      scale: { min: 0.3, max: 1.5 }, alpha: { start: 0.8, end: 0 },
+      frequency: 60, quantity: 1, rotate: { min: 0, max: 360 },
     }).setDepth(50);
+
+    // Foreground snow (closer, bigger)
+    this.add.particles(0, 0, 'snowflake', {
+      x: { min: 0, max: WORLD_W }, y: -10,
+      lifespan: 10000, speedY: { min: 20, max: 50 }, speedX: { min: -10, max: 20 },
+      scale: { min: 1, max: 2.5 }, alpha: { start: 0.3, end: 0 },
+      frequency: 200, quantity: 1,
+    }).setDepth(55);
 
     // ── Spawn resource nodes ──
     this.spawnResourceNodes();
@@ -458,6 +696,7 @@ class GameScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-E', () => this.interactNearest());
     this.input.keyboard.on('keydown-B', () => this.toggleBuildMenu());
     this.input.keyboard.on('keydown-C', () => this.toggleCraftMenu());
+    this.input.keyboard.on('keydown-SPACE', () => this.performAttackNearest());
 
     this.input.on('pointerdown', (p) => {
       if (this.gameOver) return;
@@ -476,20 +715,66 @@ class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.drops, (_, d) => this.collectDrop(d));
   }
 
+  drawBackground() {
+    const bg = this.add.graphics();
+    // Base snow color
+    bg.fillStyle(0xE8ECF2, 1);
+    bg.fillRect(0, 0, WORLD_W, WORLD_H);
+    
+    // Snow texture pattern - subtle drifts
+    for (let i = 0; i < 120; i++) {
+      const shade = Phaser.Math.Between(0, 2);
+      const colors = [0xDDE2EA, 0xD5DAE2, 0xE0E4EC];
+      bg.fillStyle(colors[shade], 0.3);
+      bg.fillEllipse(
+        Phaser.Math.Between(0, WORLD_W),
+        Phaser.Math.Between(0, WORLD_H),
+        Phaser.Math.Between(40, 200),
+        Phaser.Math.Between(20, 60)
+      );
+    }
+    // Snow mounds (white highlights)
+    for (let i = 0; i < 60; i++) {
+      bg.fillStyle(0xF5F7FA, 0.4);
+      bg.fillEllipse(
+        Phaser.Math.Between(0, WORLD_W),
+        Phaser.Math.Between(0, WORLD_H),
+        Phaser.Math.Between(30, 80),
+        Phaser.Math.Between(10, 30)
+      );
+    }
+    // Subtle ice patches
+    for (let i = 0; i < 20; i++) {
+      bg.fillStyle(0xCCDDEE, 0.2);
+      bg.fillEllipse(
+        Phaser.Math.Between(0, WORLD_W),
+        Phaser.Math.Between(0, WORLD_H),
+        Phaser.Math.Between(60, 150),
+        Phaser.Math.Between(40, 100)
+      );
+    }
+  }
+
   // ── Resource Nodes ──
   spawnResourceNodes() {
-    const types = ['tree', 'tree', 'tree', 'rock', 'rock'];
-    for (let i = 0; i < 60; i++) {
-      const type = Phaser.Utils.Array.GetRandom(types);
-      const x = Phaser.Math.Between(80, WORLD_W - 80);
-      const y = Phaser.Math.Between(80, WORLD_H - 80);
-      this.createResourceNode(type, x, y);
+    for (let i = 0; i < 40; i++) {
+      this.createResourceNode('tree',
+        Phaser.Math.Between(80, WORLD_W - 80),
+        Phaser.Math.Between(80, WORLD_H - 80)
+      );
+    }
+    for (let i = 0; i < 25; i++) {
+      this.createResourceNode('rock',
+        Phaser.Math.Between(80, WORLD_W - 80),
+        Phaser.Math.Between(80, WORLD_H - 80)
+      );
     }
   }
 
   createResourceNode(type, x, y) {
     const def = RESOURCE_NODES[type];
     const spr = this.add.sprite(x, y, `${type}_node`).setDepth(3);
+    if (type === 'tree') spr.setOrigin(0.5, 0.85); // anchor at base
     spr.nodeType = type;
     spr.nodeDef = def;
     spr.nodeHP = def.hp;
@@ -503,18 +788,31 @@ class GameScene extends Phaser.Scene {
   harvestNode(node) {
     if (node.depleted) return;
     node.nodeHP--;
-    // Shake effect
-    this.tweens.add({ targets: node, x: node.x + 3, duration: 50, yoyo: true, repeat: 2 });
+    // Shake effect with particles
+    this.tweens.add({ targets: node, x: node.x + 4, duration: 40, yoyo: true, repeat: 3 });
+    
+    // Wood/stone chips
+    for (let i = 0; i < 3; i++) {
+      const p = this.add.image(node.x, node.y, node.nodeType === 'tree' ? 'wood_drop' : 'stone_drop')
+        .setDepth(15).setScale(0.5).setAlpha(0.8);
+      this.tweens.add({
+        targets: p,
+        x: node.x + Phaser.Math.Between(-30, 30),
+        y: node.y + Phaser.Math.Between(-30, 10),
+        alpha: 0, scale: 0.1, duration: 400,
+        onComplete: () => p.destroy()
+      });
+    }
 
     if (node.nodeHP <= 0) {
       const def = node.nodeDef;
       const amount = def.yield + (def.resource === 'wood' ? this.woodBonus : def.resource === 'stone' ? this.stoneBonus : 0);
       for (let i = 0; i < amount; i++) {
-        this.spawnDrop(def.resource, node.x + Phaser.Math.Between(-20, 20), node.y + Phaser.Math.Between(-20, 20));
+        this.spawnDrop(def.resource, node.x + Phaser.Math.Between(-20, 20), node.y + Phaser.Math.Between(-10, 10));
       }
       if (def.resource === 'wood') this.stats.woodGathered += amount;
       node.depleted = true;
-      node.setAlpha(0.2);
+      node.setAlpha(0.15);
       node.regenTimer = def.regen;
     }
   }
@@ -533,24 +831,28 @@ class GameScene extends Phaser.Scene {
 
   spawnAnimal(type) {
     const def = ANIMALS[type];
-    const side = Phaser.Math.Between(0, 3);
     const m = 60;
-    let x, y;
-    switch(side) {
-      case 0: x = Phaser.Math.Between(m, WORLD_W-m); y = m; break;
-      case 1: x = Phaser.Math.Between(m, WORLD_W-m); y = WORLD_H-m; break;
-      case 2: x = m; y = Phaser.Math.Between(m, WORLD_H-m); break;
-      default: x = WORLD_W-m; y = Phaser.Math.Between(m, WORLD_H-m);
-    }
+    let x = Phaser.Math.Between(m, WORLD_W-m);
+    let y = Phaser.Math.Between(m, WORLD_H-m);
+    // Don't spawn too close to player
+    const pd = Phaser.Math.Distance.Between(x, y, this.player?.x || WORLD_W/2, this.player?.y || WORLD_H/2);
+    if (pd < 200) { x = Phaser.Math.Between(m, WORLD_W-m); y = Phaser.Math.Between(m, WORLD_H-m); }
+    
     const a = this.physics.add.sprite(x, y, type).setCollideWorldBounds(true).setDepth(5);
     a.animalType = type; a.def = def;
     a.hp = def.hp; a.maxHP = def.hp;
     a.wanderTimer = 0; a.wanderDir = {x:0,y:0};
     a.hitFlash = 0; a.atkCD = 0;
-    if (def.hp > 1) a.hpBar = this.add.graphics().setDepth(6);
+    a.fleeTimer = 0;
+    if (def.hp > 2) a.hpBar = this.add.graphics().setDepth(6);
+    
+    // Name label
+    a.nameLabel = this.add.text(x, y - def.size - 10, def.name, {
+      fontSize: '10px', fontFamily: 'monospace', color: def.behavior === 'chase' ? '#FF6666' : '#AADDFF',
+      stroke: '#000', strokeThickness: 2
+    }).setDepth(6).setOrigin(0.5);
+    
     this.animals.add(a);
-    // overlap for drop collection by npc
-    this.physics.add.overlap(this.player, a, () => {});
   }
 
   // ── Combat ──
@@ -558,18 +860,18 @@ class GameScene extends Phaser.Scene {
     if (this.attackCooldown > 0) return;
     this.attackCooldown = 0.35;
     const wx = pointer.worldX, wy = pointer.worldY;
-    const range = 65;
+    const range = 50;
+    
     this.player.setTexture('player_attack');
-    this.time.delayedCall(100, () => { if(this.player.active) this.player.setTexture('player'); });
+    this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
+    
     let hit = false;
-    // Attack animals
     this.animals.getChildren().forEach(a => {
       if (!a.active) return;
       if (Phaser.Math.Distance.Between(wx, wy, a.x, a.y) < range) {
         this.damageAnimal(a, this.playerDamage); hit = true;
       }
     });
-    // Attack resource nodes
     this.resourceNodes.forEach(n => {
       if (n.depleted) return;
       if (Phaser.Math.Distance.Between(wx, wy, n.x, n.y) < range) {
@@ -577,19 +879,18 @@ class GameScene extends Phaser.Scene {
       }
     });
     this.showAttackFX(wx, wy, hit);
+    if (hit) this.cameras.main.shake(60, 0.003);
   }
 
   performAttackNearest() {
     if (this.attackCooldown > 0) return;
-    const range = 80;
+    const range = 50;
     let best = null, bestD = Infinity;
-    // Check animals
     this.animals.getChildren().forEach(a => {
       if (!a.active) return;
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
       if (d < range && d < bestD) { best = a; bestD = d; }
     });
-    // Check nodes
     let bestNode = null, bestND = Infinity;
     this.resourceNodes.forEach(n => {
       if (n.depleted) return;
@@ -599,29 +900,60 @@ class GameScene extends Phaser.Scene {
 
     this.attackCooldown = 0.35;
     this.player.setTexture('player_attack');
-    this.time.delayedCall(100, () => { if(this.player.active) this.player.setTexture('player'); });
+    this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
 
     if (best && bestD <= bestND) {
       this.damageAnimal(best, this.playerDamage);
       this.showAttackFX(best.x, best.y, true);
+      this.cameras.main.shake(60, 0.004);
     } else if (bestNode) {
       this.harvestNode(bestNode);
       this.showAttackFX(bestNode.x, bestNode.y, true);
     } else {
-      this.showAttackFX(this.player.x + (this.moveDir.x||0)*40, this.player.y + (this.moveDir.y||0)*40, false);
+      const dx = this.moveDir.x || (this.facingRight ? 1 : -1);
+      const dy = this.moveDir.y || 0;
+      this.showAttackFX(this.player.x + dx*40, this.player.y + dy*40, false);
     }
   }
 
   damageAnimal(a, dmg) {
-    a.hp -= dmg; a.hitFlash = 0.15; a.setTint(0xFF0000);
-    const t = this.add.text(a.x, a.y-20, `-${dmg}`, {fontSize:'14px',fontFamily:'monospace',color:'#FF4444',stroke:'#000',strokeThickness:2}).setDepth(15).setOrigin(0.5);
-    this.tweens.add({targets:t, y:t.y-30, alpha:0, duration:500, onComplete:()=>t.destroy()});
+    a.hp -= dmg; a.hitFlash = 0.2;
+    a.setTint(0xFF4444);
+    
+    // Big bouncy damage number
+    const fontSize = dmg >= 3 ? '22px' : dmg >= 2 ? '18px' : '15px';
+    const color = dmg >= 3 ? '#FF2222' : '#FF6644';
+    const t = this.add.text(a.x + Phaser.Math.Between(-10, 10), a.y - 20, `-${dmg}`, {
+      fontSize, fontFamily: 'monospace', color, stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setDepth(15).setOrigin(0.5);
+    
+    this.tweens.add({
+      targets: t, y: t.y - 40, alpha: 0, scale: { from: 1.3, to: 0.8 },
+      duration: 600, ease: 'Back.Out',
+      onComplete: () => t.destroy()
+    });
+
+    // Knockback
+    const ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, a.x, a.y);
+    a.body.setVelocity(Math.cos(ang) * 120, Math.sin(ang) * 120);
+    
+    // Hit particles
+    for (let i = 0; i < 5; i++) {
+      const p = this.add.image(a.x, a.y, 'hit_particle').setDepth(15).setScale(Phaser.Math.FloatBetween(0.5, 1.2));
+      this.tweens.add({
+        targets: p,
+        x: a.x + Phaser.Math.Between(-30, 30),
+        y: a.y + Phaser.Math.Between(-30, 30),
+        alpha: 0, scale: 0, duration: 300,
+        onComplete: () => p.destroy()
+      });
+    }
+
     if (a.hp <= 0) this.killAnimal(a);
   }
 
   killAnimal(a) {
     const def = a.def;
-    // drops
     Object.entries(def.drops).forEach(([res, amt]) => {
       for (let i = 0; i < amt; i++) {
         const ang = Phaser.Math.FloatBetween(0, Math.PI*2);
@@ -629,16 +961,29 @@ class GameScene extends Phaser.Scene {
         this.spawnDrop(res, a.x + Math.cos(ang)*dist, a.y + Math.sin(ang)*dist, a.x, a.y);
       }
     });
-    // Track kills
     if (!this.stats.kills[a.animalType]) this.stats.kills[a.animalType] = 0;
     this.stats.kills[a.animalType]++;
-    // Death FX
-    const dg = this.add.graphics().setDepth(15);
-    dg.fillStyle(0xFFFFFF, 0.6); dg.fillCircle(a.x, a.y, 5);
-    this.tweens.add({targets:dg, alpha:0, duration:300,
-      onUpdate:()=>{dg.clear();dg.fillStyle(0xFFFFFF,dg.alpha);dg.fillCircle(a.x,a.y,5+(1-dg.alpha)*20);},
-      onComplete:()=>dg.destroy()});
+    
+    // Death burst effect
+    for (let i = 0; i < 8; i++) {
+      const p = this.add.image(a.x, a.y, 'snowflake').setDepth(15).setTint(0xFFDDDD).setScale(1.5);
+      this.tweens.add({
+        targets: p,
+        x: a.x + Phaser.Math.Between(-40, 40),
+        y: a.y + Phaser.Math.Between(-40, 40),
+        alpha: 0, scale: 0, duration: 400, ease: 'Quad.Out',
+        onComplete: () => p.destroy()
+      });
+    }
+    
+    // Kill text
+    const kt = this.add.text(a.x, a.y - 25, `💀 ${def.name}`, {
+      fontSize: '13px', fontFamily: 'monospace', color: '#FFDD44', stroke: '#000', strokeThickness: 2
+    }).setDepth(15).setOrigin(0.5);
+    this.tweens.add({ targets: kt, y: kt.y - 30, alpha: 0, duration: 800, onComplete: () => kt.destroy() });
+
     if (a.hpBar) a.hpBar.destroy();
+    if (a.nameLabel) a.nameLabel.destroy();
     a.destroy();
   }
 
@@ -649,9 +994,12 @@ class GameScene extends Phaser.Scene {
     d.resource = resource; d.value = 1;
     d.body.setAllowGravity(false);
     this.drops.add(d);
-    this.tweens.add({targets:d, x:tx, y:ty, duration:400, ease:'Bounce.Out'});
-    this.tweens.add({targets:d, scale:{from:0.5,to:1.2}, yoyo:true, repeat:2, duration:200});
-    this.physics.add.overlap(this.player, d, (_,drop) => this.collectDrop(drop));
+    // Pop out animation
+    this.tweens.add({ targets: d, x: tx, y: ty, duration: 400, ease: 'Bounce.Out' });
+    this.tweens.add({ targets: d, scale: { from: 0.3, to: 1 }, duration: 300, ease: 'Back.Out' });
+    // Glow pulse
+    this.tweens.add({ targets: d, alpha: { from: 1, to: 0.6 }, yoyo: true, repeat: -1, duration: 800 });
+    this.physics.add.overlap(this.player, d, (_, drop) => this.collectDrop(drop));
   }
 
   collectDrop(drop) {
@@ -659,32 +1007,47 @@ class GameScene extends Phaser.Scene {
     const r = drop.resource;
     const total = Object.values(this.res).reduce((a,b)=>a+b, 0);
     if (total >= this.storageCapacity) {
-      // Full - show message briefly
       if (!this._fullMsg || this._fullMsg < this.time.now) {
-        const ft = this.add.text(this.player.x, this.player.y - 30, '보관함 가득!', {fontSize:'12px',fontFamily:'monospace',color:'#FF6666',stroke:'#000',strokeThickness:2}).setDepth(15).setOrigin(0.5);
-        this.tweens.add({targets:ft, y:ft.y-20, alpha:0, duration:600, onComplete:()=>ft.destroy()});
+        this.showFloatingText(this.player.x, this.player.y - 20, '⚠️ 보관함 가득!', '#FF6666');
         this._fullMsg = this.time.now + 1000;
       }
       return;
     }
     this.res[r] = (this.res[r]||0) + drop.value;
-    const icons = {meat:'🥩',wood:'🪵',stone:'🪨',leather:'🧶'};
-    const t = this.add.text(drop.x, drop.y, `+1${icons[r]||''}`, {fontSize:'13px',fontFamily:'monospace',color:'#FFFFFF',stroke:'#000',strokeThickness:2}).setDepth(15).setOrigin(0.5);
-    this.tweens.add({targets:t, y:t.y-20, alpha:0, duration:400, onComplete:()=>t.destroy()});
+    const icons = { meat: '🥩', wood: '🪵', stone: '🪨', leather: '🧶' };
+    
+    // Collect effect: item flies to UI
+    const t = this.add.text(drop.x, drop.y, `+1${icons[r]||''}`, {
+      fontSize: '14px', fontFamily: 'monospace', color: '#FFFFFF', stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setDepth(15).setOrigin(0.5);
+    this.tweens.add({
+      targets: t, y: t.y - 25, alpha: 0, scale: { from: 1.2, to: 0.8 },
+      duration: 500, ease: 'Quad.Out', onComplete: () => t.destroy()
+    });
     drop.destroy();
   }
 
   showAttackFX(x, y, hit) {
+    // Slash arc effect
+    const slash = this.add.image(x, y, 'slash_fx').setDepth(15).setAlpha(0.8);
+    slash.setAngle(Phaser.Math.Between(-30, 30));
+    if (hit) slash.setTint(0xFF6644);
+    this.tweens.add({
+      targets: slash, alpha: 0, scale: { from: 0.8, to: 1.8 },
+      duration: 200, onComplete: () => slash.destroy()
+    });
+    
+    // Expanding ring
+    const g = this.add.graphics().setDepth(14);
     const c = hit ? 0xFF4444 : 0xFFFFFF;
-    const g = this.add.graphics().setDepth(15);
-    g.lineStyle(2, c, 0.8); g.strokeCircle(x, y, 5);
-    this.tweens.add({targets:g, alpha:0, duration:200,
-      onUpdate:()=>{g.clear();g.lineStyle(2,c,g.alpha);g.strokeCircle(x,y,5+(1-g.alpha)*30);},
-      onComplete:()=>g.destroy()});
-    if (hit) for(let i=0;i<4;i++){
-      const p=this.add.image(x,y,'hit_particle').setDepth(15);
-      this.tweens.add({targets:p,x:x+Phaser.Math.Between(-25,25),y:y+Phaser.Math.Between(-25,25),alpha:0,duration:250,onComplete:()=>p.destroy()});
-    }
+    let ring = { r: 5, a: 0.8 };
+    this.tweens.add({
+      targets: ring, r: 35, a: 0, duration: 250,
+      onUpdate: () => {
+        g.clear(); g.lineStyle(hit ? 3 : 2, c, ring.a); g.strokeCircle(x, y, ring.r);
+      },
+      onComplete: () => g.destroy()
+    });
   }
 
   // ── Animal AI ──
@@ -700,6 +1063,12 @@ class GameScene extends Phaser.Scene {
         if (dist < a.def.fleeRange) {
           const ang = Phaser.Math.Angle.Between(px, py, a.x, a.y);
           a.body.setVelocity(Math.cos(ang)*a.def.speed, Math.sin(ang)*a.def.speed);
+          a.fleeTimer = 2; // flee for 2 seconds then stop
+        } else if (a.fleeTimer > 0) {
+          a.fleeTimer -= dt;
+          // Continue fleeing in same direction but slow down
+          const curSpeed = a.def.speed * (a.fleeTimer / 2);
+          a.body.velocity.normalize().scale(curSpeed);
         } else {
           this.wander(a, dt, 0.3);
         }
@@ -710,28 +1079,40 @@ class GameScene extends Phaser.Scene {
           if (dist < 28 && a.atkCD <= 0) {
             this.playerHP -= a.def.damage;
             a.atkCD = 1.2;
-            this.cameras.main.shake(80, 0.008);
-            this.player.setTint(0xFF0000);
-            this.time.delayedCall(100, ()=>{if(this.player.active)this.player.clearTint();});
-            const dt2 = this.add.text(px,py-20,`-${a.def.damage}`,{fontSize:'16px',fontFamily:'monospace',color:'#FF0000',stroke:'#000',strokeThickness:2}).setDepth(15).setOrigin(0.5);
-            this.tweens.add({targets:dt2,y:dt2.y-30,alpha:0,duration:500,onComplete:()=>dt2.destroy()});
+            this.cameras.main.shake(120, 0.012);
+            this.player.setTint(0xFF4444);
+            this.time.delayedCall(150, ()=>{if(this.player.active)this.player.clearTint();});
+            const dt2 = this.add.text(px, py-20, `-${a.def.damage}`, {
+              fontSize: '18px', fontFamily: 'monospace', color: '#FF0000', stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+            }).setDepth(15).setOrigin(0.5);
+            this.tweens.add({targets:dt2, y:dt2.y-35, alpha:0, scale:{from:1.3,to:0.7}, duration:600, onComplete:()=>dt2.destroy()});
             if (this.playerHP <= 0) this.endGame();
           }
         } else {
           this.wander(a, dt, 0.25);
         }
-      } else { // wander
+      } else {
         this.wander(a, dt, 0.3);
       }
 
-      // HP bar
+      // Flip sprite based on movement
+      if (a.body.velocity.x > 5) a.setFlipX(false);
+      else if (a.body.velocity.x < -5) a.setFlipX(true);
+
+      // Update name label position
+      if (a.nameLabel) {
+        a.nameLabel.setPosition(a.x, a.y - a.def.size - 12);
+      }
+
+      // HP bar (gradient: green → yellow → red)
       if (a.hpBar) {
         a.hpBar.clear();
-        const bw=30, bx=a.x-bw/2, by=a.y-a.def.size-8;
-        a.hpBar.fillStyle(0x333333,0.8); a.hpBar.fillRect(bx,by,bw,4);
-        const r = a.hp/a.maxHP;
-        a.hpBar.fillStyle(r>0.5?0x4CAF50:r>0.25?0xFFEB3B:0xF44336,1);
-        a.hpBar.fillRect(bx,by,bw*r,4);
+        const bw = 30, bx = a.x - bw/2, by = a.y - a.def.size - 6;
+        a.hpBar.fillStyle(0x222222, 0.8); a.hpBar.fillRoundedRect(bx-1, by-1, bw+2, 6, 2);
+        const r = a.hp / a.maxHP;
+        const col = r > 0.6 ? 0x4CAF50 : r > 0.3 ? 0xFFEB3B : 0xF44336;
+        a.hpBar.fillStyle(col, 1);
+        a.hpBar.fillRoundedRect(bx, by, bw * r, 4, 1);
       }
     });
   }
@@ -740,8 +1121,12 @@ class GameScene extends Phaser.Scene {
     a.wanderTimer -= dt;
     if (a.wanderTimer <= 0) {
       a.wanderTimer = Phaser.Math.FloatBetween(1.5, 4);
-      const ang = Phaser.Math.FloatBetween(0, Math.PI*2);
-      a.wanderDir = { x: Math.cos(ang), y: Math.sin(ang) };
+      if (Phaser.Math.Between(0, 2) === 0) {
+        a.wanderDir = { x: 0, y: 0 }; // pause
+      } else {
+        const ang = Phaser.Math.FloatBetween(0, Math.PI*2);
+        a.wanderDir = { x: Math.cos(ang), y: Math.sin(ang) };
+      }
     }
     a.body.setVelocity(a.wanderDir.x*a.def.speed*speedMul, a.wanderDir.y*a.def.speed*speedMul);
   }
@@ -795,14 +1180,18 @@ class GameScene extends Phaser.Scene {
           if (npc.actionTimer <= 0 && this.res.meat >= 3) {
             this.res.meat -= 3; this.res.gold += 5;
             npc.actionTimer = 2.5;
-            const t = this.add.text(npc.x,npc.y-15,'💰+5',{fontSize:'13px',fontFamily:'monospace',color:'#FFD700',stroke:'#000',strokeThickness:2}).setDepth(15).setOrigin(0.5);
-            this.tweens.add({targets:t,y:t.y-20,alpha:0,duration:500,onComplete:()=>t.destroy()});
+            const t = this.add.text(npc.x, npc.y-15, '💰+5', {fontSize:'14px',fontFamily:'monospace',color:'#FFD700',stroke:'#000',strokeThickness:3}).setDepth(15).setOrigin(0.5);
+            this.tweens.add({targets:t, y:t.y-25, alpha:0, duration:600, onComplete:()=>t.destroy()});
           }
           break;
         }
       }
 
-      // NPC auto-collect drops
+      // Flip based on movement
+      if (npc.body.velocity.x > 5) npc.setFlipX(false);
+      else if (npc.body.velocity.x < -5) npc.setFlipX(true);
+
+      // Auto-collect drops
       this.drops.getChildren().forEach(d => {
         if (!d.active) return;
         if (Phaser.Math.Distance.Between(npc.x, npc.y, d.x, d.y) < 25) this.collectDrop(d);
@@ -821,7 +1210,6 @@ class GameScene extends Phaser.Scene {
   hireNPC(index) {
     if (this.gameOver || index >= NPC_DEFS.length) return;
     const def = NPC_DEFS[index];
-    // Check cost
     for (const [r, amt] of Object.entries(def.cost)) {
       if ((this.res[r]||0) < amt) return;
     }
@@ -837,57 +1225,89 @@ class GameScene extends Phaser.Scene {
     this.npcsOwned.push(npc);
     this.stats.npcsHired++;
 
-    const ht = this.add.text(npc.x,npc.y-20,`${def.name} 고용!`,{fontSize:'16px',fontFamily:'monospace',color:'#FFD700',stroke:'#000',strokeThickness:3}).setDepth(20).setOrigin(0.5);
-    this.tweens.add({targets:ht,y:ht.y-40,alpha:0,duration:1000,onComplete:()=>ht.destroy()});
-    for(let i=0;i<6;i++){const p=this.add.image(npc.x,npc.y,'gold_particle').setDepth(15);this.tweens.add({targets:p,x:npc.x+Phaser.Math.Between(-30,30),y:npc.y+Phaser.Math.Between(-30,30),alpha:0,duration:400,onComplete:()=>p.destroy()});}
+    const ht = this.add.text(npc.x, npc.y-20, `✨ ${def.name} 고용!`, {
+      fontSize:'16px', fontFamily:'monospace', color:'#FFD700', stroke:'#000', strokeThickness:3
+    }).setDepth(20).setOrigin(0.5);
+    this.tweens.add({targets:ht, y:ht.y-40, alpha:0, duration:1200, onComplete:()=>ht.destroy()});
+    
+    for(let i=0;i<8;i++){
+      const p = this.add.image(npc.x, npc.y, 'gold_particle').setDepth(15);
+      this.tweens.add({
+        targets:p,
+        x: npc.x + Phaser.Math.Between(-35,35),
+        y: npc.y + Phaser.Math.Between(-35,35),
+        alpha:0, scale:{from:1.5,to:0}, duration:500,
+        onComplete:()=>p.destroy()
+      });
+    }
   }
 
   // ── Building ──
   placeBuilding(pointer) {
     if (!this.buildMode) return;
     const def = BUILDINGS[this.buildMode];
-    // Check cost
     for (const [r, amt] of Object.entries(def.cost)) {
-      if ((this.res[r]||0) < amt) { this.showFloatingText(this.player.x, this.player.y-20, '자원 부족!', '#FF6666'); this.buildMode = null; return; }
+      if ((this.res[r]||0) < amt) { this.showFloatingText(this.player.x, this.player.y-20, '❌ 자원 부족!', '#FF6666'); this.buildMode = null; return; }
     }
     for (const [r, amt] of Object.entries(def.cost)) this.res[r] -= amt;
 
     const wx = pointer.worldX, wy = pointer.worldY;
     const g = this.add.graphics().setDepth(2);
-    // Draw building
+    
     if (this.buildMode === 'campfire') {
-      g.fillStyle(0xFF6600, 0.9); g.fillCircle(wx, wy, 12);
-      g.fillStyle(0xFFCC00, 0.7); g.fillCircle(wx, wy, 7);
+      // Campfire with warm glow
+      g.fillStyle(0x884422, 1); g.fillRect(wx-8, wy+4, 16, 4); // logs
+      g.fillStyle(0x664411, 1); g.fillRect(wx-6, wy+2, 12, 3);
+      g.fillStyle(0xFF6600, 0.9); g.fillCircle(wx, wy, 8);
+      g.fillStyle(0xFFAA00, 0.8); g.fillCircle(wx, wy-2, 5);
+      g.fillStyle(0xFFDD44, 0.6); g.fillCircle(wx, wy-3, 3);
+      // Warm area indicator
+      g.lineStyle(1, 0xFF8844, 0.15); g.strokeCircle(wx, wy, 80);
     } else if (this.buildMode === 'tent') {
-      g.fillStyle(0x8B6914, 0.9); g.fillTriangle(wx, wy-20, wx-18, wy+10, wx+18, wy+10);
-      g.fillStyle(0xA07B28, 0.7); g.fillTriangle(wx, wy-16, wx-14, wy+8, wx+14, wy+8);
+      // Tent with brown roof
+      g.fillStyle(0x8B6914, 0.9); g.fillTriangle(wx, wy-22, wx-20, wy+10, wx+20, wy+10);
+      g.fillStyle(0xA07B28, 0.7); g.fillTriangle(wx, wy-18, wx-16, wy+8, wx+16, wy+8);
+      g.fillStyle(0x5D4037, 1); g.fillRect(wx-4, wy+2, 8, 8); // entrance
+      // Chimney smoke effect done in update
     } else if (this.buildMode === 'storage') {
-      g.fillStyle(0x9E9E9E, 0.9); g.fillRect(wx-14, wy-12, 28, 24);
-      g.lineStyle(2, 0x757575); g.strokeRect(wx-14, wy-12, 28, 24);
+      g.fillStyle(0x795548, 1); g.fillRect(wx-16, wy-14, 32, 28);
+      g.fillStyle(0x8D6E63, 1); g.fillTriangle(wx, wy-22, wx-18, wy-12, wx+18, wy-12); // roof
+      g.fillStyle(0x5D4037, 1); g.fillRect(wx-4, wy+4, 8, 10); // door
+      g.lineStyle(1, 0x4E342E); g.strokeRect(wx-16, wy-14, 32, 28);
     } else if (this.buildMode === 'workshop') {
-      g.fillStyle(0x795548, 0.9); g.fillRect(wx-12, wy-10, 24, 20);
-      g.fillStyle(0x5D4037, 1); g.fillRect(wx-3, wy, 6, 10);
+      g.fillStyle(0x795548, 1); g.fillRect(wx-14, wy-12, 28, 24);
+      g.fillStyle(0x8D6E63, 1); g.fillTriangle(wx, wy-20, wx-16, wy-10, wx+16, wy-10);
+      g.fillStyle(0x5D4037, 1); g.fillRect(wx-4, wy+2, 8, 10);
+      // Anvil
+      g.fillStyle(0x555555, 1); g.fillRect(wx+8, wy+4, 6, 4);
     } else if (this.buildMode === 'wall') {
-      g.fillStyle(0xAAAAAA, 0.9); g.fillRect(wx-16, wy-6, 32, 12);
+      g.fillStyle(0x9E9E9E, 1); g.fillRect(wx-18, wy-8, 36, 16);
+      g.fillStyle(0xBBBBBB, 0.5); g.fillRect(wx-16, wy-6, 8, 6);
+      g.fillRect(wx-4, wy-6, 8, 6); g.fillRect(wx+8, wy-6, 8, 6);
+      g.lineStyle(1, 0x757575); g.strokeRect(wx-18, wy-8, 36, 16);
     }
 
-    const label = this.add.text(wx, wy-25, def.icon, {fontSize:'16px'}).setDepth(3).setOrigin(0.5);
-
-    // Warmth radius visualization for campfire/tent
-    let warmthGfx = null;
-    if (def.warmth) {
-      warmthGfx = this.add.graphics().setDepth(1);
-    }
-
-    const bld = { type: this.buildMode, x: wx, y: wy, graphic: g, label, def, warmthGfx };
+    const label = this.add.text(wx, wy-28, def.icon, {fontSize:'18px'}).setDepth(3).setOrigin(0.5);
+    const bld = { type: this.buildMode, x: wx, y: wy, graphic: g, label, def };
     this.placedBuildings.push(bld);
 
     if (!this.stats.built[this.buildMode]) this.stats.built[this.buildMode] = 0;
     this.stats.built[this.buildMode]++;
-
     if (def.storageBonus) this.storageCapacity += def.storageBonus;
 
-    this.showFloatingText(wx, wy - 30, `${def.name} 건설!`, '#4CAF50');
+    this.showFloatingText(wx, wy - 35, `✅ ${def.name} 건설!`, '#4CAF50');
+    
+    // Build particles
+    for (let i = 0; i < 6; i++) {
+      const p = this.add.image(wx, wy, 'snowflake').setDepth(15).setTint(0xFFDD88).setScale(1);
+      this.tweens.add({
+        targets: p,
+        x: wx + Phaser.Math.Between(-30, 30),
+        y: wy + Phaser.Math.Between(-30, 30),
+        alpha: 0, duration: 400, onComplete: () => p.destroy()
+      });
+    }
+    
     this.buildMode = null;
   }
 
@@ -895,7 +1315,7 @@ class GameScene extends Phaser.Scene {
   craftItem(key) {
     const recipe = RECIPES[key];
     for (const [r, amt] of Object.entries(recipe.cost)) {
-      if ((this.res[r]||0) < amt) { this.showFloatingText(this.player.x, this.player.y-20, '재료 부족!', '#FF6666'); return; }
+      if ((this.res[r]||0) < amt) { this.showFloatingText(this.player.x, this.player.y-20, '❌ 재료 부족!', '#FF6666'); return; }
     }
     for (const [r, amt] of Object.entries(recipe.cost)) this.res[r] -= amt;
 
@@ -907,16 +1327,14 @@ class GameScene extends Phaser.Scene {
       case 'speed': this.playerSpeed += recipe.value; break;
     }
     this.stats.crafted++;
-    this.showFloatingText(this.player.x, this.player.y - 30, `${recipe.icon} ${recipe.name} 제작!`, '#64B5F6');
+    this.showFloatingText(this.player.x, this.player.y - 30, `✨ ${recipe.icon} ${recipe.name} 제작!`, '#64B5F6');
   }
 
   // ── Survival ──
   updateSurvival(dt) {
-    // Temperature decreases over time (slow - casual pace)
-    const tempLoss = 0.5 * this.warmthResist * dt;
+    const tempLoss = 1.5 * this.warmthResist * dt;
     this.temperature = Math.max(0, this.temperature - tempLoss);
 
-    // Near campfire/tent? Warm up
     this.placedBuildings.forEach(b => {
       if (!b.def.warmth) return;
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y);
@@ -925,10 +1343,8 @@ class GameScene extends Phaser.Scene {
       }
     });
 
-    // Hunger decreases (slow - casual pace)
-    this.hunger = Math.max(0, this.hunger - 0.3 * dt);
+    this.hunger = Math.max(0, this.hunger - 0.8 * dt);
 
-    // If temperature or hunger hits 0, lose HP
     if (this.temperature <= 0) {
       this.playerHP -= 2 * dt;
       if (this.playerHP <= 0) this.endGame();
@@ -938,11 +1354,10 @@ class GameScene extends Phaser.Scene {
       if (this.playerHP <= 0) this.endGame();
     }
 
-    // Eat meat to restore hunger (auto if low)
     if (this.hunger < 30 && this.res.meat > 0) {
       this.res.meat--;
       this.hunger = Math.min(this.maxHunger, this.hunger + 25);
-      this.showFloatingText(this.player.x, this.player.y - 20, '🥩 섭취', '#FF9800');
+      this.showFloatingText(this.player.x, this.player.y - 20, '🥩 자동 섭취', '#FF9800');
     }
   }
 
@@ -951,16 +1366,24 @@ class GameScene extends Phaser.Scene {
     if (this.questIndex >= QUESTS.length) return;
     const q = QUESTS[this.questIndex];
     if (q.check(this.stats)) {
-      // Grant reward
       Object.entries(q.reward).forEach(([r, amt]) => this.res[r] = (this.res[r]||0) + amt);
       this.questCompleted.push(q.id);
       this.questIndex++;
-      this.showFloatingText(this.player.x, this.player.y - 40, `✅ ${q.name} 완료!`, '#FFD700');
+      
+      // Big quest complete notification
+      const cam = this.cameras.main;
+      const qText = this.add.text(cam.width/2, cam.height * 0.3, `🎉 퀘스트 완료!\n${q.name}`, {
+        fontSize: '20px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 4,
+        align: 'center', lineSpacing: 4
+      }).setScrollFactor(0).setDepth(200).setOrigin(0.5);
+      this.tweens.add({
+        targets: qText, y: qText.y - 30, alpha: 0,
+        duration: 2000, delay: 500, onComplete: () => qText.destroy()
+      });
     }
   }
 
   interactNearest() {
-    // E key: eat meat or interact
     if (this.res.meat > 0 && this.hunger < 80) {
       this.res.meat--;
       this.hunger = Math.min(this.maxHunger, this.hunger + 25);
@@ -970,43 +1393,53 @@ class GameScene extends Phaser.Scene {
   }
 
   showFloatingText(x, y, text, color) {
-    const t = this.add.text(x, y, text, {fontSize:'14px',fontFamily:'monospace',color:color,stroke:'#000',strokeThickness:2}).setDepth(20).setOrigin(0.5);
-    this.tweens.add({targets:t, y:t.y-30, alpha:0, duration:800, onComplete:()=>t.destroy()});
+    const t = this.add.text(x, y, text, {
+      fontSize: '14px', fontFamily: 'monospace', color: color, stroke: '#000', strokeThickness: 3
+    }).setDepth(20).setOrigin(0.5);
+    this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 
   // ── Joystick (mobile) ──
   createJoystick() {
-    this.joystickBase = this.add.image(0,0,'snowflake').setScrollFactor(0).setDepth(100).setAlpha(0).setScale(25);
-    this.joystickThumb = this.add.image(0,0,'snowflake').setScrollFactor(0).setDepth(101).setAlpha(0).setScale(12);
+    this.joystickBase = this.add.graphics().setScrollFactor(0).setDepth(100).setAlpha(0);
+    this.joystickThumb = this.add.graphics().setScrollFactor(0).setDepth(101).setAlpha(0);
     this.joystickActive = false; this.joystickPID = null;
 
     this.input.on('pointerdown', p => {
       if (this.gameOver || this.isUIArea(p)) return;
-      if (p.x < this.cameras.main.width * 0.4 && p.y > this.cameras.main.height * 0.4) {
+      if (p.x < this.cameras.main.width * 0.45 && p.y > this.cameras.main.height * 0.35) {
         this.joystickActive = true; this.joystickPID = p.id;
-        this.joystickBase.setPosition(p.x, p.y).setAlpha(0.15);
-        this.joystickThumb.setPosition(p.x, p.y).setAlpha(0.3);
         this.joyOrigin = {x:p.x, y:p.y};
+        // Draw base
+        this.joystickBase.clear().setAlpha(1);
+        this.joystickBase.lineStyle(3, 0xFFFFFF, 0.2);
+        this.joystickBase.strokeCircle(p.x, p.y, 50);
+        this.joystickBase.fillStyle(0xFFFFFF, 0.05);
+        this.joystickBase.fillCircle(p.x, p.y, 50);
+        // Draw thumb
+        this.joystickThumb.clear().setAlpha(1);
+        this.joystickThumb.fillStyle(0xFFFFFF, 0.3);
+        this.joystickThumb.fillCircle(p.x, p.y, 20);
       }
     });
     this.input.on('pointermove', p => {
       if (!this.joystickActive || p.id !== this.joystickPID) return;
       const dx=p.x-this.joyOrigin.x, dy=p.y-this.joyOrigin.y;
       const dist=Math.sqrt(dx*dx+dy*dy), max=50, clamp=Math.min(dist,max), ang=Math.atan2(dy,dx);
-      this.joystickThumb.setPosition(this.joyOrigin.x+Math.cos(ang)*clamp, this.joyOrigin.y+Math.sin(ang)*clamp);
+      const tx = this.joyOrigin.x+Math.cos(ang)*clamp;
+      const ty = this.joyOrigin.y+Math.sin(ang)*clamp;
+      this.joystickThumb.clear();
+      this.joystickThumb.fillStyle(0xFFFFFF, 0.4);
+      this.joystickThumb.fillCircle(tx, ty, 20);
       if(dist>8){this.moveDir.x=Math.cos(ang);this.moveDir.y=Math.sin(ang);}else{this.moveDir.x=0;this.moveDir.y=0;}
     });
     this.input.on('pointerup', p => {
-      if(p.id===this.joystickPID){this.joystickActive=false;this.joystickPID=null;this.joystickBase.setAlpha(0);this.joystickThumb.setAlpha(0);this.moveDir.x=0;this.moveDir.y=0;}
+      if(p.id===this.joystickPID){
+        this.joystickActive=false; this.joystickPID=null;
+        this.joystickBase.setAlpha(0); this.joystickThumb.setAlpha(0);
+        this.moveDir.x=0; this.moveDir.y=0;
+      }
     });
-  }
-
-  getSafeBottomMargin() {
-    // Extra margin for iOS Safari bottom bar
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isSafari = /Safari/i.test(navigator.userAgent) && !/CriOS|Chrome/i.test(navigator.userAgent);
-    if (isIOS && isSafari) return Math.max(34, this.cameras.main.height * 0.06);
-    return Math.max(20, this.cameras.main.height * 0.03);
   }
 
   isJoystickArea(p) {
@@ -1015,73 +1448,73 @@ class GameScene extends Phaser.Scene {
 
   // ── UI ──
   createUI() {
-    const s = {fontSize:'14px',fontFamily:'monospace',color:'#fff',stroke:'#000',strokeThickness:3};
-    const sb = {...s, fontSize:'12px'};
+    const s = {fontSize:'13px', fontFamily:'monospace', color:'#fff', stroke:'#000', strokeThickness:3};
 
-    // Top bar
-    this.uiRes = this.add.text(8, 8, '', s).setScrollFactor(0).setDepth(100);
+    // Resource bar (top)
+    this.uiResBg = this.add.graphics().setScrollFactor(0).setDepth(99);
+    this.uiRes = this.add.text(10, 8, '', s).setScrollFactor(0).setDepth(100);
+    
+    // Status bars
     this.uiHP = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.uiHPText = this.add.text(8, 28, '', sb).setScrollFactor(0).setDepth(101);
+    this.uiHPText = this.add.text(10, 28, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
     this.uiTemp = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.uiTempText = this.add.text(8, 44, '', sb).setScrollFactor(0).setDepth(101);
+    this.uiTempText = this.add.text(10, 44, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
     this.uiHunger = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.uiHungerText = this.add.text(8, 60, '', sb).setScrollFactor(0).setDepth(101);
+    this.uiHungerText = this.add.text(10, 60, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
 
     // Quest
-    this.uiQuest = this.add.text(8, 82, '', {...sb, color:'#FFD700', wordWrap:{width:200}}).setScrollFactor(0).setDepth(100);
+    this.uiQuest = this.add.text(10, 82, '', {...s, fontSize:'11px', color:'#FFD700', wordWrap:{width:220}}).setScrollFactor(0).setDepth(100);
 
     // Bottom buttons
     this.uiBtns = [];
     const btnData = [
-      { label: '⚔️', action: () => this.performAttackNearest(), mobile: true },
+      { label: '⚔️공격', action: () => this.performAttackNearest() },
       { label: '🔥건설', action: () => this.toggleBuildMenu() },
       { label: '🔨제작', action: () => this.toggleCraftMenu() },
       { label: '👥고용', action: () => this.toggleHireMenu() },
       { label: '🥩먹기', action: () => this.interactNearest() },
     ];
 
-    btnData.forEach((bd, i) => {
-      if (bd.mobile && !this.isMobile) return;
+    btnData.forEach((bd) => {
       const btn = this.add.text(0, 0, bd.label, {
-        fontSize: '16px', fontFamily: 'monospace', color: '#fff', backgroundColor: '#333a',
-        padding: { x: 10, y: 8 }, stroke: '#000', strokeThickness: 1,
+        fontSize: '14px', fontFamily: 'monospace', color: '#fff',
+        backgroundColor: '#222244cc',
+        padding: { x: 8, y: 6 }, stroke: '#000', strokeThickness: 2,
       }).setScrollFactor(0).setDepth(100).setInteractive();
-      btn.on('pointerdown', bd.action);
+      btn.on('pointerdown', (e) => { e.stopPropagation(); bd.action(); });
       this.uiBtns.push(btn);
     });
 
-    // Panels (hidden by default)
+    // Panel
     this.panelBg = this.add.graphics().setScrollFactor(0).setDepth(110).setVisible(false);
     this.panelTexts = [];
     this.panelZones = [];
     this.activePanel = null;
 
-    // NPC labels container
     this.npcLabels = [];
-
     this.positionUI();
     this.scale.on('resize', () => this.positionUI());
   }
 
   positionUI() {
     const w = this.cameras.main.width, h = this.cameras.main.height;
-    const safeBottom = this.getSafeBottomMargin();
-    // Bottom buttons - positioned above safe area
     const totalBtns = this.uiBtns.length;
-    const btnW = 70, gap = 6;
-    const startX = w - (totalBtns * (btnW + gap));
-    this.uiBtns.forEach((btn, i) => {
-      btn.setPosition(startX + i * (btnW + gap), h - 44 - safeBottom);
+    const gap = 4;
+    // Calculate button widths and center them
+    let totalW = 0;
+    this.uiBtns.forEach(btn => { totalW += btn.width + gap; });
+    let startX = (w - totalW) / 2;
+    this.uiBtns.forEach((btn) => {
+      btn.setPosition(startX, h - 40);
+      startX += btn.width + gap;
     });
   }
 
   isUIArea(p) {
     const h = this.cameras.main.height, w = this.cameras.main.width;
-    const safeBottom = this.getSafeBottomMargin();
-    // Bottom buttons area (right side)
-    if (p.y > h - 60 - safeBottom && p.x > w * 0.4) return true;
-    // Panel area
-    if (this.activePanel && p.x > w - 220 && p.y > 80 && p.y < h - 60) return true;
+    if (p.y > h - 50) return true;
+    if (p.y < 100 && p.x < 250) return true;
+    if (this.activePanel && p.x > w - 230 && p.y > 60 && p.y < h - 60) return true;
     return false;
   }
 
@@ -1090,13 +1523,12 @@ class GameScene extends Phaser.Scene {
   toggleHireMenu() { this.showPanel('hire'); }
 
   showPanel(type) {
-    // Clear existing
     this.clearPanel();
     if (this.activePanel === type) { this.activePanel = null; return; }
     this.activePanel = type;
 
     const w = this.cameras.main.width, h = this.cameras.main.height;
-    const px = w - 210, py = 80, pw = 200;
+    const px = w - 220, py = 70, pw = 210;
 
     let items = [];
     if (type === 'build') {
@@ -1105,7 +1537,7 @@ class GameScene extends Phaser.Scene {
         sub: Object.entries(v.cost).map(([r,a])=>`${r}:${a}`).join(' '),
         desc: v.desc,
         action: () => { this.buildMode = k; this.clearPanel(); this.activePanel = null;
-          this.showFloatingText(this.player.x, this.player.y-20, '클릭으로 설치', '#AAFFAA'); }
+          this.showFloatingText(this.player.x, this.player.y-20, '👆 터치로 설치', '#AAFFAA'); }
       }));
     } else if (type === 'craft') {
       items = Object.entries(RECIPES).map(([k, v]) => ({
@@ -1123,22 +1555,39 @@ class GameScene extends Phaser.Scene {
       }));
     }
 
+    const panelH = items.length * 58 + 16;
     this.panelBg.setVisible(true);
     this.panelBg.clear();
-    this.panelBg.fillStyle(0x1a1a2e, 0.9);
-    this.panelBg.fillRoundedRect(px, py, pw, items.length * 55 + 10, 8);
-    this.panelBg.lineStyle(1, 0x4444aa, 0.5);
-    this.panelBg.strokeRoundedRect(px, py, pw, items.length * 55 + 10, 8);
+    this.panelBg.fillStyle(0x0a0a1e, 0.92);
+    this.panelBg.fillRoundedRect(px, py, pw, panelH, 10);
+    this.panelBg.lineStyle(2, 0x4466aa, 0.6);
+    this.panelBg.strokeRoundedRect(px, py, pw, panelH, 10);
+
+    // Panel title
+    const titles = { build: '🔥 건설', craft: '🔨 제작', hire: '👥 고용' };
+    const titleText = this.add.text(px + pw/2, py + 2, titles[type], {
+      fontSize: '14px', fontFamily: 'monospace', color: '#AACCFF', stroke: '#000', strokeThickness: 2
+    }).setScrollFactor(0).setDepth(111).setOrigin(0.5, 0);
+    this.panelTexts.push(titleText);
 
     items.forEach((item, i) => {
-      const iy = py + 8 + i * 55;
-      const t1 = this.add.text(px+8, iy, item.label, {fontSize:'14px',fontFamily:'monospace',color:'#fff',stroke:'#000',strokeThickness:2}).setScrollFactor(0).setDepth(111);
-      const t2 = this.add.text(px+8, iy+18, item.sub, {fontSize:'10px',fontFamily:'monospace',color:'#aaa'}).setScrollFactor(0).setDepth(111);
-      const t3 = this.add.text(px+8, iy+32, item.desc, {fontSize:'10px',fontFamily:'monospace',color:'#8f8'}).setScrollFactor(0).setDepth(111);
+      const iy = py + 22 + i * 58;
+      
+      // Item bg on hover
+      const itemBg = this.add.graphics().setScrollFactor(0).setDepth(110.5);
+      itemBg.fillStyle(0x223366, 0.3);
+      itemBg.fillRoundedRect(px + 4, iy, pw - 8, 52, 6);
+      this.panelTexts.push(itemBg);
+
+      const t1 = this.add.text(px+12, iy+4, item.label, {fontSize:'13px',fontFamily:'monospace',color:'#fff',stroke:'#000',strokeThickness:2}).setScrollFactor(0).setDepth(111);
+      const t2 = this.add.text(px+12, iy+20, item.sub, {fontSize:'10px',fontFamily:'monospace',color:'#AABBCC'}).setScrollFactor(0).setDepth(111);
+      const t3 = this.add.text(px+12, iy+34, item.desc, {fontSize:'10px',fontFamily:'monospace',color:'#88FF88'}).setScrollFactor(0).setDepth(111);
       this.panelTexts.push(t1, t2, t3);
 
-      const zone = this.add.zone(px + pw/2, iy + 25, pw, 50).setScrollFactor(0).setDepth(112).setInteractive();
+      const zone = this.add.zone(px + pw/2, iy + 26, pw, 52).setScrollFactor(0).setDepth(112).setInteractive();
       zone.on('pointerdown', item.action);
+      zone.on('pointerover', () => itemBg.clear().fillStyle(0x334488, 0.5).fillRoundedRect(px+4, iy, pw-8, 52, 6));
+      zone.on('pointerout', () => itemBg.clear().fillStyle(0x223366, 0.3).fillRoundedRect(px+4, iy, pw-8, 52, 6));
       this.panelZones.push(zone);
     });
   }
@@ -1151,33 +1600,58 @@ class GameScene extends Phaser.Scene {
     this.panelZones = [];
   }
 
-  drawBar(g, x, y, w, h, ratio, color) {
-    g.fillStyle(0x222222, 0.8); g.fillRect(x, y, w, h);
-    g.fillStyle(color, 1); g.fillRect(x+1, y+1, (w-2)*Math.max(0,ratio), h-2);
+  drawBar(g, x, y, w, h, ratio, color1, color2) {
+    // Background
+    g.fillStyle(0x111122, 0.85);
+    g.fillRoundedRect(x, y, w, h, 3);
+    // Border
+    g.lineStyle(1, 0x334466, 0.5);
+    g.strokeRoundedRect(x, y, w, h, 3);
+    // Fill with gradient feel
+    const r = Math.max(0, Math.min(1, ratio));
+    if (r > 0) {
+      g.fillStyle(color1, 1);
+      g.fillRoundedRect(x+1, y+1, (w-2)*r, h-2, 2);
+      // Highlight on top
+      if (color2) {
+        g.fillStyle(color2, 0.3);
+        g.fillRect(x+2, y+2, (w-4)*r, (h-4)/2);
+      }
+    }
   }
 
   updateUI() {
     const icons = {meat:'🥩',wood:'🪵',stone:'🪨',leather:'🧶',gold:'💰'};
+    
+    // Resource background
+    this.uiResBg.clear();
+    this.uiResBg.fillStyle(0x0a0a1e, 0.7);
+    this.uiResBg.fillRoundedRect(4, 4, 240, 96, 8);
+    
     this.uiRes.setText(Object.entries(this.res).filter(([_,v])=>v>0).map(([k,v])=>`${icons[k]||k}${v}`).join(' '));
 
+    // HP bar (red → yellow → green gradient)
     this.uiHP.clear();
-    this.drawBar(this.uiHP, 8, 28, 140, 12, this.playerHP/this.playerMaxHP, 0xF44336);
+    const hpR = this.playerHP/this.playerMaxHP;
+    const hpCol = hpR > 0.6 ? 0x4CAF50 : hpR > 0.3 ? 0xFFCC00 : 0xF44336;
+    const hpCol2 = hpR > 0.6 ? 0x66DD66 : hpR > 0.3 ? 0xFFEE44 : 0xFF6666;
+    this.drawBar(this.uiHP, 10, 28, 150, 13, hpR, hpCol, hpCol2);
     this.uiHPText.setText(`❤️ ${Math.ceil(Math.max(0,this.playerHP))}/${this.playerMaxHP}`);
 
     this.uiTemp.clear();
-    this.drawBar(this.uiTemp, 8, 44, 140, 12, this.temperature/this.maxTemp, 0x42A5F5);
+    this.drawBar(this.uiTemp, 10, 44, 150, 13, this.temperature/this.maxTemp, 0x42A5F5, 0x66CCFF);
     this.uiTempText.setText(`🌡️ ${Math.ceil(this.temperature)}%`);
 
     this.uiHunger.clear();
-    this.drawBar(this.uiHunger, 8, 60, 140, 12, this.hunger/this.maxHunger, 0xFF9800);
+    this.drawBar(this.uiHunger, 10, 60, 150, 13, this.hunger/this.maxHunger, 0xFF9800, 0xFFBB44);
     this.uiHungerText.setText(`🍖 ${Math.ceil(this.hunger)}%`);
 
     // Quest
     if (this.questIndex < QUESTS.length) {
       const q = QUESTS[this.questIndex];
-      this.uiQuest.setText(`📋 ${q.name}\n   ${q.desc}`);
+      this.uiQuest.setText(`📋 ${q.name}: ${q.desc}`);
     } else {
-      this.uiQuest.setText('📋 모든 퀘스트 완료!');
+      this.uiQuest.setText('📋 모든 퀘스트 완료! 🎉');
     }
 
     // NPC labels
@@ -1185,85 +1659,10 @@ class GameScene extends Phaser.Scene {
     this.npcLabels = [];
     this.npcsOwned.forEach(npc => {
       if (!npc.active) return;
-      const l = this.add.text(npc.x, npc.y-18, npc.npcDef.name, {fontSize:'9px',fontFamily:'monospace',color:'#fff',stroke:'#000',strokeThickness:2}).setDepth(12).setOrigin(0.5);
+      const l = this.add.text(npc.x, npc.y-20, npc.npcDef.name, {
+        fontSize:'10px', fontFamily:'monospace', color:'#FFDD88', stroke:'#000', strokeThickness:2
+      }).setDepth(12).setOrigin(0.5);
       this.npcLabels.push(l);
-    });
-  }
-
-  updateWarmthVisuals(dt) {
-    // Animate warmth pulse
-    if (!this._warmthPulse) this._warmthPulse = 0;
-    this._warmthPulse += dt * 1.5;
-    const pulse = Math.sin(this._warmthPulse) * 0.06 + 1.0; // gentle 0.94~1.06 pulse
-
-    const WARMTH_RADIUS = 80; // matches the overlap distance in updateSurvival
-    const playerInWarmth = { near: false };
-
-    this.placedBuildings.forEach(b => {
-      if (!b.def.warmth || !b.warmthGfx) return;
-      const g = b.warmthGfx;
-      g.clear();
-
-      const r = WARMTH_RADIUS * pulse;
-      const innerR = r * 0.5;
-
-      // Outer warmth zone - soft orange glow
-      g.fillStyle(0xFF8C00, 0.08);
-      g.fillCircle(b.x, b.y, r);
-
-      // Middle warmth zone
-      g.fillStyle(0xFF6600, 0.12);
-      g.fillCircle(b.x, b.y, r * 0.7);
-
-      // Inner strong warmth - warm core
-      g.fillStyle(0xFF4500, 0.18);
-      g.fillCircle(b.x, b.y, innerR);
-
-      // Dashed border ring
-      const segments = 32;
-      g.lineStyle(1.5, 0xFF8C00, 0.35);
-      for (let i = 0; i < segments; i += 2) {
-        const a1 = (i / segments) * Math.PI * 2;
-        const a2 = ((i + 1) / segments) * Math.PI * 2;
-        g.beginPath();
-        g.arc(b.x, b.y, r, a1, a2);
-        g.strokePath();
-      }
-
-      // Check if player is in range
-      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y);
-      if (dist < WARMTH_RADIUS) playerInWarmth.near = true;
-    });
-
-    // Show/hide warmth indicator on HUD
-    if (playerInWarmth.near && !this._warmthLabel) {
-      this._warmthLabel = this.add.text(160, 44, '🔥 따뜻함', {
-        fontSize: '12px', fontFamily: 'monospace', color: '#FF9800', stroke: '#000', strokeThickness: 2
-      }).setScrollFactor(0).setDepth(101);
-    } else if (!playerInWarmth.near && this._warmthLabel) {
-      this._warmthLabel.destroy();
-      this._warmthLabel = null;
-    }
-
-    // Fire particles for campfire/tent buildings (spawn occasionally)
-    this.placedBuildings.forEach(b => {
-      if (!b.def.warmth) return;
-      if (Math.random() < dt * 3) { // ~3 particles per second
-        const px = b.x + Phaser.Math.Between(-6, 6);
-        const py = b.y - 5;
-        const p = this.add.image(px, py, 'hit_particle').setDepth(4).setTint(
-          Phaser.Utils.Array.GetRandom([0xFF4500, 0xFF6600, 0xFFCC00, 0xFF0000])
-        ).setScale(Phaser.Math.FloatBetween(0.4, 0.8)).setAlpha(0.8);
-        this.tweens.add({
-          targets: p,
-          y: py - Phaser.Math.Between(20, 40),
-          x: px + Phaser.Math.Between(-10, 10),
-          alpha: 0,
-          scale: 0.1,
-          duration: Phaser.Math.Between(500, 900),
-          onComplete: () => p.destroy()
-        });
-      }
     });
   }
 
@@ -1272,16 +1671,25 @@ class GameScene extends Phaser.Scene {
     this.gameOver = true;
     const cam = this.cameras.main;
     const ov = this.add.graphics().setScrollFactor(0).setDepth(200);
-    ov.fillStyle(0x000000,0.75); ov.fillRect(0,0,cam.width,cam.height);
+    ov.fillStyle(0x000000, 0.8); ov.fillRect(0, 0, cam.width, cam.height);
 
-    this.add.text(cam.width/2, cam.height/2-60, '💀 사망', {fontSize:'36px',fontFamily:'monospace',color:'#FF4444',stroke:'#000',strokeThickness:4}).setScrollFactor(0).setDepth(201).setOrigin(0.5);
+    this.add.text(cam.width/2, cam.height/2-80, '💀 사망', {
+      fontSize:'40px', fontFamily:'monospace', color:'#FF4444', stroke:'#000', strokeThickness:5
+    }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
 
     const kills = Object.entries(this.stats.kills).map(([k,v])=>`${ANIMALS[k]?.name||k}: ${v}`).join(', ') || '없음';
-    const txt = `사냥: ${kills}\n건설: ${Object.values(this.stats.built).reduce((a,b)=>a+b,0)}개\n제작: ${this.stats.crafted}개\nNPC: ${this.stats.npcsHired}명\n퀘스트: ${this.questCompleted.length}/${QUESTS.length}`;
-    this.add.text(cam.width/2, cam.height/2+10, txt, {fontSize:'16px',fontFamily:'monospace',color:'#fff',stroke:'#000',strokeThickness:2,align:'center',lineSpacing:6}).setScrollFactor(0).setDepth(201).setOrigin(0.5);
+    const txt = `🎯 사냥: ${kills}\n🏗️ 건설: ${Object.values(this.stats.built).reduce((a,b)=>a+b,0)}개\n🔨 제작: ${this.stats.crafted}개\n👥 NPC: ${this.stats.npcsHired}명\n📋 퀘스트: ${this.questCompleted.length}/${QUESTS.length}`;
+    this.add.text(cam.width/2, cam.height/2+10, txt, {
+      fontSize:'15px', fontFamily:'monospace', color:'#fff', stroke:'#000', strokeThickness:2, align:'center', lineSpacing:8
+    }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
 
-    const rb = this.add.text(cam.width/2, cam.height/2+110, '🔄 다시 시작', {fontSize:'22px',fontFamily:'monospace',color:'#4CAF50',stroke:'#000',strokeThickness:3,backgroundColor:'#333',padding:{x:16,y:8}}).setScrollFactor(0).setDepth(201).setOrigin(0.5).setInteractive();
+    const rb = this.add.text(cam.width/2, cam.height/2+120, '🔄 다시 시작', {
+      fontSize:'24px', fontFamily:'monospace', color:'#4CAF50', stroke:'#000', strokeThickness:3,
+      backgroundColor:'#222244', padding:{x:20,y:10}
+    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setInteractive();
     rb.on('pointerdown', () => this.scene.restart());
+    rb.on('pointerover', () => rb.setColor('#66FF66'));
+    rb.on('pointerout', () => rb.setColor('#4CAF50'));
   }
 
   // ── Main Update ──
@@ -1289,23 +1697,38 @@ class GameScene extends Phaser.Scene {
     if (this.gameOver) return;
     const dt = deltaMs / 1000;
 
-    // Attack cooldown
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
-    // Mobile auto-attack: automatically attack nearest animal within 48px
+    // Mobile auto-attack: animals AND resource nodes within 50px
     if (this.isMobile && this.attackCooldown <= 0) {
       let nearest = null, nearestDist = Infinity;
       this.animals.getChildren().forEach(a => {
         if (!a.active) return;
         const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
-        if (d < 60 && d < nearestDist) { nearest = a; nearestDist = d; }
+        if (d < 50 && d < nearestDist) { nearest = a; nearestDist = d; }
       });
       if (nearest) {
         this.attackCooldown = 0.4;
         this.player.setTexture('player_attack');
-        this.time.delayedCall(100, () => { if (this.player.active) this.player.setTexture('player'); });
+        this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
         this.damageAnimal(nearest, this.playerDamage);
         this.showAttackFX(nearest.x, nearest.y, true);
+        this.cameras.main.shake(50, 0.003);
+      } else {
+        // Try auto-harvest nodes
+        let nearestNode = null, nearestND = Infinity;
+        this.resourceNodes.forEach(n => {
+          if (n.depleted) return;
+          const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, n.x, n.y);
+          if (d < 50 && d < nearestND) { nearestNode = n; nearestND = d; }
+        });
+        if (nearestNode) {
+          this.attackCooldown = 0.4;
+          this.player.setTexture('player_attack');
+          this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
+          this.harvestNode(nearestNode);
+          this.showAttackFX(nearestNode.x, nearestNode.y, true);
+        }
       }
     }
 
@@ -1320,14 +1743,14 @@ class GameScene extends Phaser.Scene {
       else if(!this.joystickActive){this.moveDir.x=0;this.moveDir.y=0;}
     }
     this.player.body.setVelocity(this.moveDir.x*this.playerSpeed, this.moveDir.y*this.playerSpeed);
+    
+    // Player flip
+    if (this.moveDir.x > 0.1) { this.player.setFlipX(false); this.facingRight = true; }
+    else if (this.moveDir.x < -0.1) { this.player.setFlipX(true); this.facingRight = false; }
 
     // Animal AI
     this.updateAnimalAI(dt);
-
-    // NPC AI
     this.updateNPCs(dt);
-
-    // Survival
     this.updateSurvival(dt);
 
     // Resource node regen
@@ -1348,50 +1771,34 @@ class GameScene extends Phaser.Scene {
       const alive = this.animals.getChildren().length;
       if (alive < 20) {
         const types = ['rabbit','rabbit','deer','penguin','seal','wolf'];
-        if (this.stats.kills.wolf >= 2 || (this.stats.kills.bear||0) >= 1) types.push('bear');
+        if ((this.stats.kills.wolf||0) >= 2 || (this.stats.kills.bear||0) >= 1) types.push('bear');
         for (let i = 0; i < 3; i++) this.spawnAnimal(Phaser.Utils.Array.GetRandom(types));
       }
     }
 
-    // Drop magnet
+    // Drop magnet (stronger, smoother)
     this.drops.getChildren().forEach(d => {
       if(!d.active) return;
-      const dist = Phaser.Math.Distance.Between(this.player.x,this.player.y,d.x,d.y);
-      if(dist<50){
-        const a=Phaser.Math.Angle.Between(d.x,d.y,this.player.x,this.player.y);
-        d.x+=Math.cos(a)*180*dt; d.y+=Math.sin(a)*180*dt;
-        if(dist<15) this.collectDrop(d);
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, d.x, d.y);
+      if (dist < 60) {
+        const a = Phaser.Math.Angle.Between(d.x, d.y, this.player.x, this.player.y);
+        const speed = 200 * (1 - dist/60); // faster when closer
+        d.x += Math.cos(a) * speed * dt;
+        d.y += Math.sin(a) * speed * dt;
+        if (dist < 15) this.collectDrop(d);
       }
     });
 
-    // Quests
     this.checkQuests();
-
-    // Warmth area visualization
-    this.updateWarmthVisuals(dt);
-
-    // UI
     this.updateUI();
   }
-}
-
-// Get safe game height accounting for iOS safe areas
-function getGameHeight() {
-  // Use visualViewport if available (more accurate on iOS)
-  if (window.visualViewport) return window.visualViewport.height;
-  return window.innerHeight;
-}
-
-function getGameWidth() {
-  if (window.visualViewport) return window.visualViewport.width;
-  return window.innerWidth;
 }
 
 const config = {
   type: Phaser.AUTO,
   parent: 'game-container',
-  width: getGameWidth(),
-  height: getGameHeight(),
+  width: window.innerWidth,
+  height: window.innerHeight,
   backgroundColor: '#1a1a2e',
   physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
   scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
@@ -1399,16 +1806,4 @@ const config = {
   input: { activePointers: 3 },
 };
 
-const game = new Phaser.Game(config);
-
-// Handle iOS Safari resize/orientation changes
-function handleResize() {
-  if (game && game.scale) {
-    game.scale.resize(getGameWidth(), getGameHeight());
-  }
-}
-window.addEventListener('resize', handleResize);
-window.addEventListener('orientationchange', () => setTimeout(handleResize, 200));
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', handleResize);
-}
+new Phaser.Game(config);
