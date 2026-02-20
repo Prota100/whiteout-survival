@@ -1583,10 +1583,6 @@ class GameScene extends Phaser.Scene {
   }
 
   createVirtualJoystick() {
-    // Hide old joystick zone
-    const oldZone = document.getElementById('joystick-zone');
-    if (oldZone) oldZone.style.display = 'none';
-
     this.joystickActive = false;
     this._vjoy = null; // virtual joystick state
     this._smoothMove = { x: 0, y: 0 }; // for lerp smoothing
@@ -1726,7 +1722,6 @@ class GameScene extends Phaser.Scene {
       if (!el) return;
       el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); resumeAudio(); fn(); });
     };
-    bind('btn-attack', () => scene.performAttackNearest());
     bind('btn-build', () => scene.toggleBuildMenu());
     bind('btn-craft', () => scene.toggleCraftMenu());
     bind('btn-hire', () => scene.toggleHireMenu());
@@ -1888,7 +1883,7 @@ class GameScene extends Phaser.Scene {
       this.animals.getChildren().forEach(a => {
         if (!a.active) return;
         const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
-        if (d < 55 && d < nearestDist) { nearest = a; nearestDist = d; }
+        if (d < 60 && d < nearestDist) { nearest = a; nearestDist = d; }
       });
       if (nearest) {
         this.attackCooldown = this.getAttackCooldown();
@@ -1902,7 +1897,7 @@ class GameScene extends Phaser.Scene {
         this.resourceNodes.forEach(n => {
           if (n.depleted) return;
           const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, n.x, n.y);
-          if (d < 55 && d < nearestND) { nearestNode = n; nearestND = d; }
+          if (d < 60 && d < nearestND) { nearestNode = n; nearestND = d; }
         });
         if (nearestNode) {
           this.attackCooldown = this.getAttackCooldown();
