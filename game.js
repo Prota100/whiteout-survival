@@ -1,26 +1,69 @@
 // Whiteout Survival - ULTIMATE with Sound FX
 // All feedback applied: mobile, balance, visuals, campfire, buildings, SOUND
 
-// ═══ 🔊 SOUND ENGINE ═══
+// ═══ 🔊 SOUND ENGINE (ElevenLabs + Web Audio) ═══
 let audioCtx=null,soundEnabled=true,fireAmbSrc=null;
-function initAudio(){try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){soundEnabled=false}}
-function resumeAudio(){if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume()}
-function _osc(type,f1,f2,dur,vol){if(!audioCtx||!soundEnabled)return;const t=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(f1,t);o.frequency.exponentialRampToValueAtTime(f2,t+dur);g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);o.connect(g).connect(audioCtx.destination);o.start(t);o.stop(t+dur)}
-function _noise(dur,vol,decay){if(!audioCtx||!soundEnabled)return;const t=audioCtx.currentTime,bs=Math.floor(audioCtx.sampleRate*dur),b=audioCtx.createBuffer(1,bs,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<bs;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/bs,decay);const s=audioCtx.createBufferSource(),g=audioCtx.createGain();s.buffer=b;g.gain.value=vol;s.connect(g).connect(audioCtx.destination);s.start(t)}
-function _arp(type,freqs,gap,vol,dur){if(!audioCtx||!soundEnabled)return;const t=audioCtx.currentTime;freqs.forEach((f,i)=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(vol,t+i*gap);g.gain.exponentialRampToValueAtTime(0.001,t+i*gap+dur);o.connect(g).connect(audioCtx.destination);o.start(t+i*gap);o.stop(t+i*gap+dur)})}
-function playSlash(){_osc('sawtooth',1200,200,0.12,0.25)}
-function playHit(){_noise(0.06,0.5,1.5);_osc('sine',150,40,0.1,0.3)}
-function playKill(){_osc('triangle',600,80,0.3,0.2);_noise(0.08,0.4,3)}
-function playCoin(){_osc('sine',880,1760,0.12,0.15)}
-function playChop(){_osc('square',300,100,0.08,0.15)}
-function playBuild(){_arp('sine',[440,554,659],0.08,0.12,0.15)}
-function playCraft(){_arp('triangle',[523,659,784,1047],0.06,0.1,0.12)}
-function playHire(){_arp('sine',[392,494,587,784],0.1,0.15,0.2)}
-function playHurt(){_osc('sawtooth',200,80,0.15,0.2)}
-function playEat(){_arp('sine',[200,250,300],0.06,0.08,0.06)}
-function playQuest(){_arp('sine',[523,659,784,1047,1319],0.08,0.12,0.25)}
-function playDeath(){_arp('sawtooth',[400,300,200,100],0.15,0.15,0.3)}
-function playWhiff(){_osc('sine',800,400,0.06,0.06)}
+const _sfxCache={};const _sfxPool={};
+let _bgm=null,_bgmStarted=false;
+
+function initAudio(){
+  try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){soundEnabled=false}
+  // Preload all sound files
+  const sounds=['bgm','slash','hit','kill','coin','chop','build','craft','hire','hurt','eat','quest','death'];
+  sounds.forEach(name=>{
+    fetch('sounds/'+name+'.mp3').then(r=>r.arrayBuffer()).then(buf=>{
+      if(audioCtx)audioCtx.decodeAudioData(buf,decoded=>{_sfxCache[name]=decoded;},()=>{});
+    }).catch(()=>{});
+  });
+}
+
+function resumeAudio(){
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+  // Start BGM on first interaction
+  if(!_bgmStarted&&soundEnabled){_bgmStarted=true;startBGM();}
+}
+
+function _playSFX(name,vol=0.5){
+  if(!audioCtx||!soundEnabled||!_sfxCache[name])return;
+  const src=audioCtx.createBufferSource();
+  const gain=audioCtx.createGain();
+  src.buffer=_sfxCache[name];
+  gain.gain.value=vol;
+  src.connect(gain).connect(audioCtx.destination);
+  src.start(0);
+  return src;
+}
+
+function startBGM(){
+  if(!audioCtx||!soundEnabled||_bgm)return;
+  if(!_sfxCache.bgm){setTimeout(startBGM,500);return;}
+  const src=audioCtx.createBufferSource();
+  const gain=audioCtx.createGain();
+  src.buffer=_sfxCache.bgm;
+  src.loop=true;
+  gain.gain.value=0.15;
+  src.connect(gain).connect(audioCtx.destination);
+  src.start(0);
+  _bgm={src,gain};
+}
+function stopBGM(){if(_bgm){try{_bgm.src.stop();}catch(e){}_bgm=null;}}
+
+// Legacy-compatible sound functions using ElevenLabs SFX
+function playSlash(){_playSFX('slash',0.4)}
+function playHit(){_playSFX('hit',0.5)}
+function playKill(){_playSFX('kill',0.5)}
+function playCoin(){_playSFX('coin',0.35)}
+function playChop(){_playSFX('chop',0.4)}
+function playBuild(){_playSFX('build',0.5)}
+function playCraft(){_playSFX('craft',0.45)}
+function playHire(){_playSFX('hire',0.5)}
+function playHurt(){_playSFX('hurt',0.6)}
+function playEat(){_playSFX('eat',0.4)}
+function playQuest(){_playSFX('quest',0.5)}
+function playDeath(){_playSFX('death',0.6)}
+function playWhiff(){_playSFX('slash',0.1)}
+
+// Fire ambient (keep Web Audio procedural for looping crackle)
 function startFire(){if(!audioCtx||!soundEnabled||fireAmbSrc)return;const bs=Math.floor(audioCtx.sampleRate*2),b=audioCtx.createBuffer(1,bs,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<bs;i++){d[i]=(Math.random()*2-1)*0.03;if(Math.random()<0.002)d[i]*=8}const s=audioCtx.createBufferSource(),g=audioCtx.createGain();s.buffer=b;s.loop=true;g.gain.value=0.12;s.connect(g).connect(audioCtx.destination);s.start();fireAmbSrc={s,g}}
 function stopFire(){if(fireAmbSrc){try{fireAmbSrc.s.stop()}catch(e){}fireAmbSrc=null}}
 // ═══ END SOUND ═══
@@ -1319,7 +1362,8 @@ class GameScene extends Phaser.Scene {
     bind('btn-eat', () => scene.interactNearest());
     bind('btn-sound', () => {
       soundEnabled = !soundEnabled;
-      if (!soundEnabled) stopFire();
+      if (!soundEnabled) { stopFire(); stopBGM(); _bgmStarted=false; }
+      else { _bgmStarted=false; resumeAudio(); }
       const el = document.getElementById('btn-sound');
       if (el) el.textContent = soundEnabled ? '🔊' : '🔇';
     });
@@ -1441,7 +1485,7 @@ class GameScene extends Phaser.Scene {
 
   endGame() {
     if (this.gameOver) return;
-    this.gameOver = true; playDeath(); stopFire();
+    this.gameOver = true; playDeath(); stopFire(); stopBGM(); _bgmStarted=false;
     const cam = this.cameras.main;
     const ov = this.add.graphics().setScrollFactor(0).setDepth(200);
     ov.fillStyle(0x000000, 0.8); ov.fillRect(0, 0, cam.width, cam.height);
