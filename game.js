@@ -2346,6 +2346,54 @@ class GameScene extends Phaser.Scene {
     document.addEventListener('touchmove', onMove, { passive: false });
     document.addEventListener('touchend', onEnd, { passive: false });
     document.addEventListener('touchcancel', onEnd, { passive: false });
+
+    // ─── Desktop mouse support (joystick via mouse drag) ───
+    const MOUSE_ID = -1; // synthetic touch id for mouse
+    const onMouseDown = (e) => {
+      if (self.gameOver) return;
+      if (isUITouch(e.clientX, e.clientY)) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (el && (el.tagName === 'BUTTON' || el.closest('#bottom-buttons') || el.closest('#dom-hud'))) return;
+      if (activeTouchId !== null) return;
+      activeTouchId = MOUSE_ID;
+      self.joystickActive = true;
+      const rect = base.getBoundingClientRect();
+      self._vjoy = { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
+      base.style.opacity = '0.55';
+      knob.style.opacity = '0.9';
+      knob.style.transform = 'translate(-50%, -50%)';
+    };
+    const onMouseMove = (e) => {
+      if (activeTouchId !== MOUSE_ID) return;
+      const dx = e.clientX - self._vjoy.cx;
+      const dy = e.clientY - self._vjoy.cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxR = 60;
+      const clamp = Math.min(dist, maxR);
+      const ang = Math.atan2(dy, dx);
+      knob.style.transform = `translate(calc(-50% + ${Math.cos(ang)*clamp}px), calc(-50% + ${Math.sin(ang)*clamp}px))`;
+      if (dist > 8) {
+        const strength = Math.min(1, dist / maxR);
+        self._smoothMove.x = Math.cos(ang) * strength;
+        self._smoothMove.y = Math.sin(ang) * strength;
+      } else {
+        self._smoothMove.x = 0;
+        self._smoothMove.y = 0;
+      }
+    };
+    const onMouseUp = () => {
+      if (activeTouchId !== MOUSE_ID) return;
+      activeTouchId = null;
+      self.joystickActive = false;
+      self._smoothMove.x = 0;
+      self._smoothMove.y = 0;
+      base.style.opacity = '0.35';
+      knob.style.opacity = '0.7';
+      knob.style.transform = 'translate(-50%, -50%)';
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
   }
 
   createUI() {
