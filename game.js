@@ -6,7 +6,7 @@ const WORLD_H = 2400;
 
 // ── Animal Definitions ──
 const ANIMALS = {
-  rabbit:  { hp: 1,  speed: 35,  damage: 0, drops: { meat: 1 }, color: 0xCCCCCC, size: 8,  behavior: 'flee', name: '토끼', aggroRange: 100, fleeRange: 80 },
+  rabbit:  { hp: 1,  speed: 30,  damage: 0, drops: { meat: 1 }, color: 0xCCCCCC, size: 8,  behavior: 'flee', name: '토끼', aggroRange: 60, fleeRange: 40 },
   deer:    { hp: 3,  speed: 40,  damage: 0, drops: { meat: 2, leather: 1 }, color: 0xC4A46C, size: 12, behavior: 'flee', name: '사슴', aggroRange: 120, fleeRange: 100 },
   penguin: { hp: 2,  speed: 25,  damage: 0, drops: { meat: 1 }, color: 0x222222, size: 10, behavior: 'wander', name: '펭귄', aggroRange: 0, fleeRange: 0 },
   seal:    { hp: 4,  speed: 20,  damage: 0, drops: { meat: 2, leather: 2 }, color: 0x7B8D9E, size: 14, behavior: 'wander', name: '물개', aggroRange: 0, fleeRange: 0 },
@@ -107,7 +107,7 @@ class GameScene extends Phaser.Scene {
     // ── State ──
     this.res = { meat: 0, wood: 0, stone: 0, leather: 0, gold: 0 };
     this.playerHP = 15; this.playerMaxHP = 15;
-    this.playerDamage = 1; this.playerSpeed = 140;
+    this.playerDamage = 1; this.playerSpeed = 150;
     this.warmthResist = 1; // multiplier (lower = less cold)
     this.woodBonus = 0; this.stoneBonus = 0;
     this.temperature = 100; this.maxTemp = 100;
