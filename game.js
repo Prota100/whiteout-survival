@@ -79,6 +79,61 @@ function playUpgradeSelect(){_playSFX('upgrade_select',0.6)}
 function playBoxAppear(){_playSFX('box_appear',0.5)}
 function playEpicCard(){_playSFX('epic_card',0.7)}
 
+// ═══ NEW SOUND FX (Web Audio procedural) ═══
+function playBossSpawn(){
+  if(!audioCtx||!soundEnabled)return;
+  // Deep threatening bass rumble + horn
+  [55, 65, 82.4].forEach((freq,i)=>{
+    const osc=audioCtx.createOscillator();const g=audioCtx.createGain();
+    osc.type='sawtooth';osc.frequency.value=freq;
+    osc.frequency.linearRampToValueAtTime(freq*0.7,audioCtx.currentTime+1.5);
+    g.gain.setValueAtTime(0.25,audioCtx.currentTime+i*0.15);
+    g.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+1.8);
+    osc.connect(g).connect(audioCtx.destination);
+    osc.start(audioCtx.currentTime+i*0.15);osc.stop(audioCtx.currentTime+2);
+  });
+  // Sub-bass rumble
+  const sub=audioCtx.createOscillator();const sg=audioCtx.createGain();
+  sub.type='sine';sub.frequency.value=35;
+  sg.gain.setValueAtTime(0.3,audioCtx.currentTime);
+  sg.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+2);
+  sub.connect(sg).connect(audioCtx.destination);
+  sub.start();sub.stop(audioCtx.currentTime+2);
+}
+
+function playGameOverSound(){
+  if(!audioCtx||!soundEnabled)return;
+  // Sad descending melody
+  const notes=[659.25,587.33,523.25,493.88,440];
+  notes.forEach((freq,i)=>{
+    const osc=audioCtx.createOscillator();const g=audioCtx.createGain();
+    osc.type='sine';osc.frequency.value=freq;
+    g.gain.setValueAtTime(0.2,audioCtx.currentTime+i*0.5);
+    g.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+i*0.5+0.6);
+    osc.connect(g).connect(audioCtx.destination);
+    osc.start(audioCtx.currentTime+i*0.5);osc.stop(audioCtx.currentTime+i*0.5+0.7);
+  });
+}
+
+function playBlizzardStart(){
+  if(!audioCtx||!soundEnabled)return;
+  // Wind howl effect using filtered noise
+  const bs=audioCtx.sampleRate*3,buf=audioCtx.createBuffer(1,bs,audioCtx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<bs;i++)d[i]=(Math.random()*2-1);
+  const src=audioCtx.createBufferSource();src.buffer=buf;
+  const bp=audioCtx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=400;bp.Q.value=2;
+  bp.frequency.linearRampToValueAtTime(800,audioCtx.currentTime+1.5);
+  bp.frequency.linearRampToValueAtTime(300,audioCtx.currentTime+3);
+  const g=audioCtx.createGain();
+  g.gain.setValueAtTime(0,audioCtx.currentTime);
+  g.gain.linearRampToValueAtTime(0.3,audioCtx.currentTime+0.5);
+  g.gain.linearRampToValueAtTime(0.15,audioCtx.currentTime+2);
+  g.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+3);
+  src.connect(bp).connect(g).connect(audioCtx.destination);
+  src.start();src.stop(audioCtx.currentTime+3);
+}
+
 // Fire ambient (keep Web Audio procedural for looping crackle)
 function startFire(){if(!audioCtx||!soundEnabled||fireAmbSrc)return;const bs=Math.floor(audioCtx.sampleRate*2),b=audioCtx.createBuffer(1,bs,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<bs;i++){d[i]=(Math.random()*2-1)*0.03;if(Math.random()<0.002)d[i]*=8}const s=audioCtx.createBufferSource(),g=audioCtx.createGain();s.buffer=b;s.loop=true;g.gain.value=0.12;s.connect(g).connect(audioCtx.destination);s.start();fireAmbSrc={s,g}}
 function stopFire(){if(fireAmbSrc){try{fireAmbSrc.s.stop()}catch(e){}fireAmbSrc=null}}
@@ -212,20 +267,23 @@ const UPGRADES = {
 };
 
 // ═══ 경험치(XP) 시스템 ═══
-const XP_TABLE = [0, 25, 40, 55, 75, 95, 120, 150, 185, 225, 270, 330, 400, 490, 600, 730, 900, 1100, 1350, 1650, 2000];
+const XP_TABLE = [0, 12, 20, 30, 42, 55, 70, 90, 115, 145, 180, 220, 270, 330, 400, 490, 600, 730, 900, 1100, 1350];
 const XP_SOURCES = {
-  rabbit: 3, deer: 5, penguin: 4, seal: 8,
-  wolf: 12, bear: 25, boss: 50, tree: 1, rock: 1, gold: 3,
-  default: 3,
+  rabbit: 5, deer: 8, penguin: 6, seal: 12,
+  wolf: 18, bear: 35, boss: 80, tree: 2, rock: 2, gold: 5,
+  default: 5,
 };
 
 // ═══ 한파 스케줄 ═══
 const BLIZZARD_SCHEDULE = [
-  { startMs: 3*60*1000,      duration: 30*1000, tempMult: 2,   reward: { boxes: 1, gold: 20 } },
-  { startMs: 6*60*1000,      duration: 35*1000, tempMult: 2.5, reward: { boxes: 2, gold: 40 } },
-  { startMs: 8.5*60*1000,    duration: 40*1000, tempMult: 3,   reward: { boxes: 2, gold: 60 } },
-  { startMs: 10.5*60*1000,   duration: 45*1000, tempMult: 3.5, reward: { boxes: 2, gold: 80 } },
-  { startMs: 12.5*60*1000,   duration: 50*1000, tempMult: 4,   reward: { boxes: 3, gold: 100 } },
+  { startMs: 3*60*1000,      duration: 25*1000, tempMult: 1.8, reward: { boxes: 1, gold: 15 } },
+  { startMs: 7*60*1000,      duration: 30*1000, tempMult: 2.2, reward: { boxes: 1, gold: 25 } },
+  { startMs: 12*60*1000,     duration: 35*1000, tempMult: 2.6, reward: { boxes: 2, gold: 40 } },
+  { startMs: 18*60*1000,     duration: 40*1000, tempMult: 3.0, reward: { boxes: 2, gold: 60 } },
+  { startMs: 25*60*1000,     duration: 45*1000, tempMult: 3.5, reward: { boxes: 2, gold: 80 } },
+  { startMs: 33*60*1000,     duration: 50*1000, tempMult: 4.0, reward: { boxes: 3, gold: 100 } },
+  { startMs: 42*60*1000,     duration: 55*1000, tempMult: 4.5, reward: { boxes: 3, gold: 130 } },
+  { startMs: 52*60*1000,     duration: 60*1000, tempMult: 5.0, reward: { boxes: 4, gold: 160 } },
 ];
 
 // ═══ 맵 구역 시스템 ═══
@@ -1266,6 +1324,11 @@ class GameScene extends Phaser.Scene {
       // If save requested but not found → safe fallback (no crash)
     }
     
+    // ── Tutorial Overlay (새 게임 시작 시 3초 표시) ──
+    if (!loadSave) {
+      this._showTutorialOverlay();
+    }
+
     // ── Auto-Save Timer (60초) ──
     this.autoSaveTimer = this.time.addEvent({
       delay: 60000,
@@ -1716,6 +1779,49 @@ class GameScene extends Phaser.Scene {
     } else {
       if (this._tutorialText) this._tutorialText.setVisible(false);
     }
+  }
+
+  _showTutorialOverlay() {
+    const cam = this.cameras.main;
+    const ov = this.add.graphics().setScrollFactor(0).setDepth(300);
+    ov.fillStyle(0x000000, 0.85); ov.fillRect(0, 0, cam.width, cam.height);
+
+    const title = this.add.text(cam.width/2, cam.height*0.18, '❄️ 생존 가이드', {
+      fontSize: '28px', fontFamily: 'monospace', color: '#e0e8ff', stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(301);
+
+    const tips = [
+      '🕹️  조이스틱으로 이동 (적에게 다가가면 자동 공격)',
+      '🪵  나무·돌을 채취해 건물을 건설하세요',
+      '🔥  모닥불 근처에서 체온을 유지하세요',
+      '🌡️  온도 0 이하 → HP 감소! 한파에 주의',
+      '⬆️  적 처치 → XP → 레벨업 → 강화 선택',
+    ];
+    const tipTexts = tips.map((t, i) => {
+      return this.add.text(cam.width/2, cam.height*0.32 + i*36, t, {
+        fontSize: '14px', fontFamily: 'monospace', color: '#AABBDD', stroke: '#000', strokeThickness: 2
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(301).setAlpha(0);
+    });
+
+    const startMsg = this.add.text(cam.width/2, cam.height*0.78, '탭하여 시작', {
+      fontSize: '20px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(301).setAlpha(0);
+
+    // Stagger fade in tips
+    tipTexts.forEach((t, i) => {
+      this.tweens.add({ targets: t, alpha: 1, duration: 300, delay: 200 + i * 150 });
+    });
+    this.tweens.add({ targets: startMsg, alpha: 1, duration: 400, delay: 1200, yoyo: true, repeat: -1, hold: 800 });
+
+    // Pause game until tap
+    this.gameOver = true; // temporarily pause update loop
+    const hitArea = this.add.rectangle(cam.width/2, cam.height/2, cam.width, cam.height, 0, 0)
+      .setScrollFactor(0).setDepth(302).setInteractive();
+    hitArea.once('pointerdown', () => {
+      resumeAudio();
+      this.gameOver = false;
+      [ov, title, startMsg, hitArea, ...tipTexts].forEach(o => o.destroy());
+    });
   }
 
   spawnDrop(resource, tx, ty, ox, oy) {
@@ -2982,38 +3088,44 @@ class GameScene extends Phaser.Scene {
   // ═══ 5-ACT ENEMY SYSTEM ═══
   getCurrentAct() {
     const min = this.gameElapsed / 60;
-    if (min < 10) return 1;
-    if (min < 20) return 2;
-    if (min < 35) return 3;
-    if (min < 50) return 4;
+    if (min < 12) return 1;
+    if (min < 25) return 2;
+    if (min < 40) return 3;
+    if (min < 55) return 4;
     return 5;
   }
 
   getWaveSize() {
     const min = this.gameElapsed / 60;
-    if (min < 4) return 10;
-    if (min < 8) return 20;
-    if (min < 12) return 40;
-    if (min < 20) return 60;
-    if (min < 30) return 80;
+    if (min < 5) return 10;
+    if (min < 12) return 20;
+    if (min < 25) return 40;
+    if (min < 40) return 60;
+    if (min < 55) return 80;
     return 100;
   }
 
   getSpawnConfig() {
     const min = this.gameElapsed / 60;
     let weights, maxCount, spawnInterval;
-    if (min < 3) {
+    if (min < 5) {
+      // 초반: 순한 동물 위주
       weights = { rabbit: 5, deer: 3, penguin: 2 }; maxCount = 12; spawnInterval = 10000;
-    } else if (min < 6) {
-      weights = { rabbit: 4, deer: 3, penguin: 2, wolf: 1 }; maxCount = 18; spawnInterval = 8000;
     } else if (min < 10) {
-      weights = { rabbit: 3, deer: 2, penguin: 2, wolf: 2, bear: 1 }; maxCount = 24; spawnInterval = 7000;
-    } else if (min < 15) {
-      weights = { rabbit: 2, deer: 2, penguin: 1, wolf: 3, bear: 2 }; maxCount = 30; spawnInterval = 6000;
-    } else if (min < 20) {
-      weights = { rabbit: 1, deer: 1, wolf: 3, bear: 3, seal: 2 }; maxCount = 36; spawnInterval = 5000;
+      weights = { rabbit: 4, deer: 3, penguin: 2, wolf: 1 }; maxCount = 16; spawnInterval = 9000;
+    } else if (min < 18) {
+      weights = { rabbit: 3, deer: 2, penguin: 2, wolf: 2, bear: 1 }; maxCount = 22; spawnInterval = 8000;
+    } else if (min < 28) {
+      // 중반: 적대 동물 증가
+      weights = { rabbit: 2, deer: 2, penguin: 1, wolf: 3, bear: 2 }; maxCount = 28; spawnInterval = 7000;
+    } else if (min < 40) {
+      weights = { rabbit: 1, deer: 1, wolf: 3, bear: 3, seal: 2 }; maxCount = 34; spawnInterval = 6000;
+    } else if (min < 52) {
+      // 후반: 강적 위주
+      weights = { wolf: 3, bear: 4, seal: 3 }; maxCount = 40; spawnInterval = 5000;
     } else {
-      weights = { wolf: 3, bear: 4, seal: 3 }; maxCount = 40; spawnInterval = 4000;
+      // 최후반: 극한
+      weights = { wolf: 2, bear: 5, seal: 4 }; maxCount = 48; spawnInterval = 4000;
     }
     return { weights, maxCount, spawnInterval };
   }
@@ -3077,6 +3189,7 @@ class GameScene extends Phaser.Scene {
   }
 
   startBlizzard(config) {
+    playBlizzardStart();
     this.blizzardActive = true;
     this.blizzardMultiplier = config.tempMult;
     this.blizzardIndex++;
@@ -3146,10 +3259,10 @@ class GameScene extends Phaser.Scene {
   // ═══ BOSS SYSTEM ═══
   spawnBoss(type) {
     const isFinal = type === 'final';
-    const bossHP = isFinal ? 2000 : 500;
-    const bossScale = isFinal ? 2.5 : 1.8; // visual scale (sprite)
-    const bossDmg = isFinal ? 25 : 12;
-    const bossSpeed = isFinal ? 55 : 50;
+    const bossHP = isFinal ? 4000 : 1000;
+    const bossScale = isFinal ? 2.8 : 2.0;
+    const bossDmg = isFinal ? 35 : 18;
+    const bossSpeed = isFinal ? 60 : 55;
     const bossName = isFinal ? '❄️ 폭풍왕' : '🐻‍❄️ 서리곰';
 
     // Spawn away from player
@@ -3178,6 +3291,7 @@ class GameScene extends Phaser.Scene {
     this.animals.add(boss);
 
     // Epic entrance
+    playBossSpawn();
     this.showCenterAlert(`⚠️ 보스 출현: ${bossName}`, '#FF4444');
     this.cameras.main.shake(500, 0.015);
     this.cameras.main.flash(300, 100, 100, 255);
@@ -3258,30 +3372,49 @@ class GameScene extends Phaser.Scene {
   }
 
   endGame() {
-    // GDD: HP 0 → 마을로 리스폰 2초 (게임오버 없음)
+    // GDD: HP 0 → 마을로 리스폰 3초 (통계 표시)
     if (this.gameOver || this.isRespawning) return;
     this.isRespawning = true;
-    playHurt();
+    playGameOverSound();
     const cam = this.cameras.main;
     cam.flash(400, 255, 0, 0);
     cam.shake(500, 0.02);
 
-    const ov = this.add.graphics().setScrollFactor(0).setDepth(200);
-    ov.fillStyle(0x000000, 0.6); ov.fillRect(0, 0, cam.width, cam.height);
-    const msg = this.add.text(cam.width/2, cam.height/2, '💀 기절...\n마을로 이동 중', {
-      fontSize:'32px', fontFamily:'monospace', color:'#FF8888', stroke:'#000', strokeThickness:4, align:'center', lineSpacing:8
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
+    // 통계 계산
+    const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
+    const survMin = Math.floor(this.gameElapsed / 60);
+    const survSec = Math.floor(this.gameElapsed % 60);
 
-    this.time.delayedCall(2000, () => {
-      // Restore player
-      this.playerHP = Math.floor(this.playerMaxHP * 0.5); // 50% HP on respawn
+    const ov = this.add.graphics().setScrollFactor(0).setDepth(200);
+    ov.fillStyle(0x000000, 0).fillRect(0, 0, cam.width, cam.height);
+    // Fade in overlay
+    this.tweens.add({ targets: ov, alpha: 0.75, duration: 500 });
+
+    const msg = this.add.text(cam.width/2, cam.height/2 - 30, '💀 기절...', {
+      fontSize:'36px', fontFamily:'monospace', color:'#FF8888', stroke:'#000', strokeThickness:4, align:'center'
+    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
+
+    const statsText = this.add.text(cam.width/2, cam.height/2 + 30, 
+      `⏱️ 생존: ${survMin}분 ${survSec}초  |  ⚔️ 처치: ${totalKills}  |  ⭐ Lv.${this.playerLevel}`, {
+      fontSize:'16px', fontFamily:'monospace', color:'#AABBCC', stroke:'#000', strokeThickness:3, align:'center'
+    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
+
+    const respawnMsg = this.add.text(cam.width/2, cam.height/2 + 65, '마을로 이동 중...', {
+      fontSize:'14px', fontFamily:'monospace', color:'#888', stroke:'#000', strokeThickness:2
+    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
+
+    // Fade in text sequentially
+    this.tweens.add({ targets: msg, alpha: 1, duration: 400, delay: 200 });
+    this.tweens.add({ targets: statsText, alpha: 1, duration: 400, delay: 600 });
+    this.tweens.add({ targets: respawnMsg, alpha: 1, duration: 400, delay: 1000 });
+
+    this.time.delayedCall(3000, () => {
+      this.playerHP = Math.floor(this.playerMaxHP * 0.5);
       this.hunger = Math.min(this.maxHunger, this.hunger + 30);
       this.temperature = Math.min(this.maxTemp, this.maxTemp * 0.8);
-      // Move to town center
       this.player.setPosition(WORLD_W / 2, WORLD_H - 200);
       this.cameras.main.flash(300, 255, 255, 255);
-      ov.destroy();
-      msg.destroy();
+      ov.destroy(); msg.destroy(); statsText.destroy(); respawnMsg.destroy();
       this.isRespawning = false;
     });
   }
@@ -3413,11 +3546,11 @@ class GameScene extends Phaser.Scene {
     this.updateBlizzardVisuals(dt);
 
     // ═══ Phase 2: Boss Spawns ═══
-    if (!this.boss1Spawned && this.gameElapsed >= 8 * 60) { // 8분으로 단축
+    if (!this.boss1Spawned && this.gameElapsed >= 25 * 60) { // 25분
       this.boss1Spawned = true;
       this.spawnBoss('first');
     }
-    if (!this.boss2Spawned && this.gameElapsed >= 18 * 60) { // 18분으로 단축
+    if (!this.boss2Spawned && this.gameElapsed >= 50 * 60) { // 50분
       this.boss2Spawned = true;
       this.spawnBoss('final');
     }
