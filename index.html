@@ -85,6 +85,12 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
         <div class="sbar"><span style="font-size:11px">🌡️</span><div class="bar-c"><div class="bar-f" id="temp-fill" style="width:100%;background:#42A5F5"></div></div><span class="bar-t" id="temp-text">100%</span></div>
         <div class="sbar"><span style="font-size:11px">🍖</span><div class="bar-c"><div class="bar-f" id="hunger-fill" style="width:100%;background:#FF9800"></div></div><span class="bar-t" id="hunger-text">100%</span></div>
       </div>
+      <div id="xp-bar-container" style="margin-top:3px;">
+        <div id="xp-bar" style="height:4px;background:#334;border-radius:2px;">
+          <div id="xp-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#4488FF,#88CCFF);border-radius:2px;transition:width 0.2s;"></div>
+        </div>
+        <div id="xp-text" style="font-size:10px;color:#6688AA;">Lv1 · 0/20 XP</div>
+      </div>
       <div id="quest-text" style="font-family:monospace;font-size:11px;color:#FFD700;text-shadow:0 0 3px #000,0 0 3px #000;margin-top:2px;max-width:220px;"></div>
       <div id="buff-text" style="font-family:monospace;font-size:10px;color:#FF8844;text-shadow:0 0 3px #000;display:none;">🔥 화덕 버프</div>
     </div>
@@ -101,10 +107,10 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
 </div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 <script>
-var GV="ultimate-014-phase4-upgrades";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
+var GV="ultimate-015-xp-escalation";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
 if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(g){g.unregister();});});
 if('caches' in window)caches.keys().then(function(n){n.forEach(function(k){caches.delete(k);});});
 </script>
-<script src="game.js?v=20250220-inventory-shop-017"></script>
+<script src="game.js?v=20250220-xp-escalation-018"></script>
 </body>
 </html>

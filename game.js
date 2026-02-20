@@ -106,6 +106,8 @@ class SaveManager {
         buildings: scene.placedBuildings.map(b => ({ type: b.type, x: b.x, y: b.y })),
         npcs: scene.npcsOwned.map(n => ({ type: n.npcType, x: n.x, y: n.y })),
         upgrades: scene.upgradeManager.toJSON(),
+        playerXP: scene.playerXP,
+        playerLevel: scene.playerLevel,
       };
       localStorage.setItem(SaveManager.SAVE_KEY, JSON.stringify(saveData));
       return true;
@@ -177,6 +179,13 @@ const UPGRADES = {
   EXPLOSION:    { name: '폭발', desc: '처치 시 폭발 데미지', icon: '💣', category: 'special', maxLevel: 2, rarity: 'epic' },
   CAMPFIRE_BOOST:{ name: '화덕 마스터', desc: '화덕 효과 +50%', icon: '🔥', category: 'special', maxLevel: 2, rarity: 'rare' },
   TIME_BONUS:   { name: '시간 조작', desc: '쿨다운 -20%', icon: '⏱️', category: 'special', maxLevel: 2, rarity: 'rare' },
+};
+
+// ═══ 경험치(XP) 시스템 ═══
+const XP_PER_LEVEL = [0, 20, 45, 75, 110, 150, 200, 260, 330, 400];
+const XP_SOURCES = {
+  rabbit: 2, deer: 3, penguin: 2, seal: 3,
+  wolf: 6, bear: 12, tree: 1, rock: 1,
 };
 
 const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5 };
@@ -1050,6 +1059,10 @@ class GameScene extends Phaser.Scene {
     this.upgradeManager = new UpgradeManager();
     this.supplyCrates = [];
     this.upgradeUIActive = false;
+    this.playerXP = 0;
+    this.playerLevel = 1;
+    this.xpToNext = XP_PER_LEVEL[1]; // 20
+    this.levelUpQueue = 0; // queued level-ups while upgrade UI is active
     this.isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || ('ontouchstart' in window);
     this.facingRight = true;
 
@@ -1181,6 +1194,14 @@ class GameScene extends Phaser.Scene {
     if (save.stats) this.stats = save.stats;
     if (save.questCompleted) this.questCompleted = save.questCompleted;
     if (save.questIndex != null) this.questIndex = save.questIndex;
+    // XP system
+    if (save.playerXP != null) this.playerXP = save.playerXP;
+    if (save.playerLevel != null) {
+      this.playerLevel = save.playerLevel;
+      this.xpToNext = this.playerLevel < XP_PER_LEVEL.length
+        ? XP_PER_LEVEL[this.playerLevel]
+        : 400 + (this.playerLevel - 9) * 80;
+    }
     // Buildings
     if (save.buildings) {
       save.buildings.forEach(b => {
@@ -1295,6 +1316,7 @@ class GameScene extends Phaser.Scene {
       for (let i = 0; i < amount; i++)
         this.spawnDrop(def.resource, node.x + Phaser.Math.Between(-20, 20), node.y + Phaser.Math.Between(-10, 10));
       if (def.resource === 'wood') this.stats.woodGathered += amount;
+      this.gainXP(XP_SOURCES[node.nodeType] || 1);
       node.depleted = true; node.setAlpha(0.15); node.regenTimer = def.regen;
     }
   }
@@ -1425,8 +1447,8 @@ class GameScene extends Phaser.Scene {
     });
     if (!this.stats.kills[a.animalType]) this.stats.kills[a.animalType] = 0;
     this.stats.kills[a.animalType]++;
-    // Upgrade triggers
-    this.upgradeManager.onKill(this);
+    // XP gain on kill (replaces old crate-based system)
+    this.gainXP(XP_SOURCES[a.animalType] || 3);
     if (this.upgradeManager.explosionLevel > 0) this.triggerExplosion(a.x, a.y);
     if (this.upgradeManager.lifestealAmount > 0) {
       this.playerHP = Math.min(this.playerMaxHP, this.playerHP + this.upgradeManager.lifestealAmount);
@@ -1477,6 +1499,45 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: t.y - 25, alpha: 0, scale: { from: 1.2, to: 0.8 },
       duration: 500, ease: 'Quad.Out', onComplete: () => t.destroy() });
     drop.destroy();
+  }
+
+  // ═══ XP SYSTEM ═══
+  gainXP(amount) {
+    this.playerXP += amount;
+    while (this.playerXP >= this.xpToNext) {
+      this.playerXP -= this.xpToNext;
+      this.playerLevel++;
+      this.xpToNext = this.playerLevel < XP_PER_LEVEL.length
+        ? XP_PER_LEVEL[this.playerLevel]
+        : 400 + (this.playerLevel - 9) * 80;
+      this.onLevelUp();
+    }
+  }
+
+  onLevelUp() {
+    // If upgrade UI is already active, queue it
+    if (this.upgradeUIActive) {
+      this.levelUpQueue = (this.levelUpQueue || 0) + 1;
+      return;
+    }
+    const cards = this.upgradeManager.pickThreeCards();
+    if (cards.length > 0) {
+      this.showUpgradeUI(cards);
+    }
+    // Level up effect
+    this.showFloatingText(this.player.x, this.player.y - 40, `⬆️ Level ${this.playerLevel}!`, '#FFD700');
+    this.cameras.main.shake(200, 0.005);
+  }
+
+  processLevelUpQueue() {
+    if (this.levelUpQueue > 0 && !this.upgradeUIActive) {
+      this.levelUpQueue--;
+      const cards = this.upgradeManager.pickThreeCards();
+      if (cards.length > 0) {
+        this.showUpgradeUI(cards);
+        this.showFloatingText(this.player.x, this.player.y - 40, `⬆️ Level ${this.playerLevel}!`, '#FFD700');
+      }
+    }
   }
 
   showAttackFX(x, y, hit) {
@@ -2002,6 +2063,8 @@ class GameScene extends Phaser.Scene {
       hungerText: document.getElementById('hunger-text'),
       quest: document.getElementById('quest-text'),
       buff: document.getElementById('buff-text'),
+      xpFill: document.getElementById('xp-fill'),
+      xpText: document.getElementById('xp-text'),
     };
 
     // ═══ DOM Buttons (100% reliable touch) ═══
@@ -2160,6 +2223,12 @@ class GameScene extends Phaser.Scene {
     } else d.quest.textContent = '📋 모든 퀘스트 완료! 🎉';
     
     d.buff.style.display = this._nearCampfire ? 'block' : 'none';
+    
+    if (d.xpFill) {
+      const xpR = this.playerXP / this.xpToNext;
+      d.xpFill.style.width = (xpR * 100) + '%';
+      d.xpText.textContent = `Lv${this.playerLevel} · ${Math.floor(this.playerXP)}/${this.xpToNext} XP`;
+    }
     
     this.npcLabels.forEach(l=>l.destroy()); this.npcLabels = [];
     this.npcsOwned.forEach(npc => {
@@ -2493,6 +2562,8 @@ class GameScene extends Phaser.Scene {
         this.physics.resume();
         // Auto-save after upgrade
         SaveManager.save(this);
+        // Process queued level-ups
+        this.time.delayedCall(200, () => this.processLevelUpQueue());
       });
     });
   }
@@ -2527,6 +2598,25 @@ class GameScene extends Phaser.Scene {
         alpha: 0, scale: 0, duration: 400, onComplete: () => p.destroy()
       });
     }
+  }
+
+  // ═══ ENEMY ESCALATION ═══
+  getSpawnWeights() {
+    const elapsed = this.time.now / 60000;
+    if (elapsed < 2) {
+      return { rabbit: 5, deer: 3, penguin: 2, seal: 1, wolf: 0, bear: 0 };
+    } else if (elapsed < 5) {
+      return { rabbit: 3, deer: 2, penguin: 2, seal: 1, wolf: 2, bear: 0 };
+    } else if (elapsed < 8) {
+      return { rabbit: 2, deer: 2, penguin: 1, seal: 1, wolf: 3, bear: 1 };
+    } else {
+      return { rabbit: 1, deer: 1, penguin: 1, seal: 1, wolf: 3, bear: 3 };
+    }
+  }
+
+  getMaxAnimals() {
+    const elapsed = this.time.now / 60000;
+    return Math.min(40, 15 + Math.floor(elapsed * 2));
   }
 
   endGame() {
@@ -2639,12 +2729,18 @@ class GameScene extends Phaser.Scene {
     });
 
     this.animalSpawnTimer += dt;
-    if (this.animalSpawnTimer > 12) {
+    if (this.animalSpawnTimer > 10) {
       this.animalSpawnTimer = 0;
-      if (this.animals.getChildren().length < 22) {
-        const types = ['rabbit','rabbit','rabbit','deer','penguin','seal','wolf'];
-        if ((this.stats.kills.wolf||0) >= 2 || (this.stats.kills.bear||0) >= 1) types.push('bear');
-        for (let i = 0; i < 3; i++) this.spawnAnimal(Phaser.Utils.Array.GetRandom(types));
+      const maxAnimals = this.getMaxAnimals();
+      if (this.animals.getChildren().length < maxAnimals) {
+        const weights = this.getSpawnWeights();
+        const weighted = [];
+        Object.entries(weights).forEach(([type, w]) => {
+          for (let i = 0; i < w; i++) weighted.push(type);
+        });
+        if (weighted.length > 0) {
+          for (let i = 0; i < 3; i++) this.spawnAnimal(Phaser.Utils.Array.GetRandom(weighted));
+        }
       }
     }
 
