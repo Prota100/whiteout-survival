@@ -6,12 +6,12 @@ const WORLD_H = 2400;
 
 // ── Animal Definitions ──
 const ANIMALS = {
-  rabbit:  { hp: 1,  speed: 30,  damage: 0, drops: { meat: 1 }, color: 0xCCCCCC, size: 8,  behavior: 'flee', name: '토끼', aggroRange: 60, fleeRange: 40 },
-  deer:    { hp: 3,  speed: 40,  damage: 0, drops: { meat: 2, leather: 1 }, color: 0xC4A46C, size: 12, behavior: 'flee', name: '사슴', aggroRange: 120, fleeRange: 100 },
-  penguin: { hp: 2,  speed: 25,  damage: 0, drops: { meat: 1 }, color: 0x222222, size: 10, behavior: 'wander', name: '펭귄', aggroRange: 0, fleeRange: 0 },
+  rabbit:  { hp: 1,  speed: 30,  damage: 0, drops: { meat: 1 }, color: 0xCCCCCC, size: 12, behavior: 'flee', name: '토끼', aggroRange: 60, fleeRange: 40 },
+  deer:    { hp: 3,  speed: 40,  damage: 0, drops: { meat: 2, leather: 1 }, color: 0xC4A46C, size: 14, behavior: 'flee', name: '사슴', aggroRange: 120, fleeRange: 100 },
+  penguin: { hp: 2,  speed: 25,  damage: 0, drops: { meat: 1 }, color: 0x222222, size: 12, behavior: 'wander', name: '펭귄', aggroRange: 0, fleeRange: 0 },
   seal:    { hp: 4,  speed: 20,  damage: 0, drops: { meat: 2, leather: 2 }, color: 0x7B8D9E, size: 14, behavior: 'wander', name: '물개', aggroRange: 0, fleeRange: 0 },
-  wolf:    { hp: 5,  speed: 70,  damage: 1, drops: { meat: 3, leather: 1 }, color: 0x555555, size: 12, behavior: 'chase', name: '늑대', aggroRange: 180, fleeRange: 0 },
-  bear:    { hp: 12, speed: 50,  damage: 3, drops: { meat: 6, leather: 3 }, color: 0x6B4226, size: 20, behavior: 'chase', name: '곰', aggroRange: 200, fleeRange: 0 },
+  wolf:    { hp: 5,  speed: 70,  damage: 1, drops: { meat: 3, leather: 1 }, color: 0x555555, size: 14, behavior: 'chase', name: '늑대', aggroRange: 180, fleeRange: 0 },
+  bear:    { hp: 12, speed: 50,  damage: 3, drops: { meat: 6, leather: 3 }, color: 0x6B4226, size: 18, behavior: 'chase', name: '곰', aggroRange: 200, fleeRange: 0 },
 };
 
 // ── Building Definitions ──
@@ -61,41 +61,318 @@ const QUESTS = [
 class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
   create() {
-    const mk = (key, r, col, a=1) => {
-      const g = this.add.graphics(); g.fillStyle(col, a); g.fillCircle(r, r, r);
-      g.generateTexture(key, r*2, r*2); g.destroy();
-    };
-    mk('player', 14, 0x42A5F5);
-    mk('player_attack', 16, 0x64B5F6);
-    mk('snowflake', 2, 0xFFFFFF);
-    mk('hit_particle', 3, 0xFF0000);
-    mk('gold_particle', 3, 0xFFD700);
-    mk('meat_drop', 6, 0xFF5722);
-    mk('wood_drop', 6, 0x8B4513);
-    mk('stone_drop', 6, 0x9E9E9E);
-    mk('leather_drop', 6, 0xC4A46C);
-    // animals
-    Object.entries(ANIMALS).forEach(([k,v]) => mk(k, v.size, v.color));
-    // npcs
-    NPC_DEFS.forEach(d => mk(`npc_${d.type}`, 12, d.color));
-    // resource nodes
-    // tree texture: triangle
-    let g = this.add.graphics();
-    g.fillStyle(0x2E7D32, 1);
-    g.fillTriangle(16, 0, 0, 32, 32, 32);
-    g.fillStyle(0x4E342E, 1);
-    g.fillRect(12, 28, 8, 8);
-    g.generateTexture('tree_node', 32, 36);
-    g.destroy();
-    // rock texture
-    g = this.add.graphics();
-    g.fillStyle(0x757575, 1);
-    g.fillRoundedRect(0, 4, 28, 20, 6);
-    g.fillStyle(0x9E9E9E, 1);
-    g.fillRoundedRect(2, 6, 12, 10, 4);
-    g.generateTexture('rock_node', 28, 28);
-    g.destroy();
+    const g = this.add.graphics();
+    const px = (g, x, y, w, h, col) => { g.fillStyle(col, 1); g.fillRect(x, y, w, h); };
 
+    // ── Player (32x32) - 파카 입은 탐험가 ──
+    g.clear();
+    // 그림자
+    g.fillStyle(0x000000, 0.2); g.fillEllipse(16, 30, 20, 6);
+    // 부츠
+    px(g, 10, 26, 5, 4, 0x4E342E); px(g, 17, 26, 5, 4, 0x4E342E);
+    // 다리
+    px(g, 11, 22, 4, 5, 0x37474F); px(g, 17, 22, 4, 5, 0x37474F);
+    // 몸통 (파란 파카)
+    g.fillStyle(0x1565C0, 1); g.fillRoundedRect(9, 12, 14, 11, 2);
+    // 파카 디테일
+    px(g, 14, 13, 4, 10, 0x1976D2); // 지퍼 라인
+    g.fillStyle(0x0D47A1, 1); g.fillRect(9, 12, 14, 2); // 어깨
+    // 팔
+    px(g, 6, 14, 4, 8, 0x1565C0); px(g, 22, 14, 4, 8, 0x1565C0);
+    px(g, 6, 21, 4, 2, 0x8D6E63); px(g, 22, 21, 4, 2, 0x8D6E63); // 장갑
+    // 머리
+    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(11, 5, 10, 8, 2);
+    // 눈
+    px(g, 13, 8, 2, 2, 0x212121); px(g, 18, 8, 2, 2, 0x212121);
+    // 모자 (털모자)
+    g.fillStyle(0xD32F2F, 1); g.fillRoundedRect(10, 2, 12, 5, 2);
+    px(g, 14, 0, 4, 3, 0xD32F2F); // 꼭대기
+    g.fillStyle(0xFFFFFF, 1); g.fillRect(10, 6, 12, 2); // 모자 테두리 (털)
+    // 외곽선
+    g.lineStyle(1, 0x263238, 0.6); g.strokeRoundedRect(9, 12, 14, 11, 2);
+    g.generateTexture('player', 32, 32); g.clear();
+
+    // ── Player Attack (32x32) ──
+    g.fillStyle(0x000000, 0.2); g.fillEllipse(16, 30, 20, 6);
+    px(g, 10, 26, 5, 4, 0x4E342E); px(g, 17, 26, 5, 4, 0x4E342E);
+    px(g, 11, 22, 4, 5, 0x37474F); px(g, 17, 22, 4, 5, 0x37474F);
+    g.fillStyle(0x1565C0, 1); g.fillRoundedRect(9, 12, 14, 11, 2);
+    px(g, 14, 13, 4, 10, 0x1976D2);
+    px(g, 6, 13, 4, 6, 0x1565C0); // 왼팔
+    // 오른팔 (공격 자세 - 위로)
+    px(g, 22, 8, 4, 8, 0x1565C0);
+    px(g, 22, 6, 4, 3, 0x8D6E63); // 장갑
+    // 무기 (칼)
+    px(g, 24, 0, 2, 7, 0xBDBDBD); px(g, 23, 7, 4, 2, 0x795548);
+    px(g, 6, 18, 4, 2, 0x8D6E63);
+    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(11, 5, 10, 8, 2);
+    px(g, 13, 8, 2, 2, 0x212121); px(g, 18, 8, 2, 2, 0x212121);
+    g.fillStyle(0xD32F2F, 1); g.fillRoundedRect(10, 2, 12, 5, 2);
+    px(g, 14, 0, 4, 3, 0xD32F2F);
+    g.fillStyle(0xFFFFFF, 1); g.fillRect(10, 6, 12, 2);
+    g.generateTexture('player_attack', 32, 32); g.clear();
+
+    // ── 토끼 (24x24) - 흰 토끼, 큰 귀 ──
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 22, 14, 4);
+    // 몸통
+    g.fillStyle(0xF5F5F5, 1); g.fillEllipse(12, 15, 12, 10);
+    // 머리
+    g.fillStyle(0xFAFAFA, 1); g.fillCircle(12, 9, 5);
+    // 귀 (길고 뾰족)
+    g.fillStyle(0xF5F5F5, 1); g.fillEllipse(8, 2, 3, 7); g.fillEllipse(16, 2, 3, 7);
+    g.fillStyle(0xFFB0B0, 1); g.fillEllipse(8, 2, 1.5, 5); g.fillEllipse(16, 2, 1.5, 5); // 귀 안쪽 핑크
+    // 눈 (빨간 눈)
+    px(g, 9, 8, 2, 2, 0xE53935); px(g, 13, 8, 2, 2, 0xE53935);
+    // 코
+    px(g, 11, 11, 2, 1, 0xFFB0B0);
+    // 꼬리
+    g.fillStyle(0xFFFFFF, 1); g.fillCircle(12, 20, 3);
+    // 외곽선
+    g.lineStyle(1, 0xBDBDBD, 0.5); g.strokeCircle(12, 9, 5);
+    g.generateTexture('rabbit', 24, 24); g.clear();
+
+    // ── 사슴 (28x28) - 갈색, 뿔 ──
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(14, 26, 16, 4);
+    // 다리
+    px(g, 6, 20, 2, 6, 0x8D6E63); px(g, 11, 20, 2, 6, 0x8D6E63);
+    px(g, 15, 20, 2, 6, 0x8D6E63); px(g, 20, 20, 2, 6, 0x8D6E63);
+    // 몸통
+    g.fillStyle(0xA1887F, 1); g.fillEllipse(14, 16, 16, 8);
+    g.fillStyle(0xBCAAA4, 1); g.fillEllipse(14, 18, 10, 4); // 배
+    // 머리
+    g.fillStyle(0x8D6E63, 1); g.fillCircle(14, 8, 5);
+    // 뿔
+    px(g, 7, 1, 2, 5, 0x795548); px(g, 5, 0, 2, 3, 0x795548);
+    px(g, 19, 1, 2, 5, 0x795548); px(g, 21, 0, 2, 3, 0x795548);
+    // 눈
+    px(g, 11, 7, 2, 2, 0x3E2723); px(g, 15, 7, 2, 2, 0x3E2723);
+    // 코
+    px(g, 13, 10, 2, 2, 0x5D4037);
+    // 하얀 반점
+    g.fillStyle(0xD7CCC8, 0.6); g.fillCircle(10, 14, 2); g.fillCircle(18, 15, 1.5);
+    g.generateTexture('deer', 28, 28); g.clear();
+
+    // ── 펭귄 (24x24) - 흑백 턱시도 ──
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 22, 12, 4);
+    // 몸통 (검정)
+    g.fillStyle(0x212121, 1); g.fillEllipse(12, 14, 12, 12);
+    // 배 (흰색)
+    g.fillStyle(0xFAFAFA, 1); g.fillEllipse(12, 15, 7, 9);
+    // 머리
+    g.fillStyle(0x212121, 1); g.fillCircle(12, 6, 5);
+    // 눈 (하얀 패치)
+    g.fillStyle(0xFFFFFF, 1); g.fillCircle(9, 5, 2.5); g.fillCircle(15, 5, 2.5);
+    px(g, 9, 5, 2, 2, 0x212121); px(g, 14, 5, 2, 2, 0x212121);
+    // 부리
+    g.fillStyle(0xFF9800, 1); g.fillTriangle(12, 7, 10, 10, 14, 10);
+    // 날개
+    px(g, 4, 12, 3, 8, 0x37474F); px(g, 17, 12, 3, 8, 0x37474F);
+    // 발
+    px(g, 8, 21, 4, 2, 0xFF9800); px(g, 14, 21, 4, 2, 0xFF9800);
+    g.generateTexture('penguin', 24, 24); g.clear();
+
+    // ── 물개 (28x28) - 둥글둥글 ──
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(14, 25, 18, 4);
+    // 몸통
+    g.fillStyle(0x78909C, 1); g.fillEllipse(14, 16, 18, 12);
+    g.fillStyle(0x90A4AE, 1); g.fillEllipse(14, 18, 12, 6); // 배
+    // 머리
+    g.fillStyle(0x607D8B, 1); g.fillCircle(14, 7, 6);
+    // 눈
+    px(g, 10, 6, 3, 3, 0x263238); px(g, 16, 6, 3, 3, 0x263238);
+    g.fillStyle(0xFFFFFF, 1); g.fillCircle(11, 6, 1); g.fillCircle(17, 6, 1);
+    // 코
+    g.fillStyle(0x37474F, 1); g.fillCircle(14, 10, 2);
+    // 수염
+    g.lineStyle(1, 0xB0BEC5, 0.6);
+    g.lineBetween(8, 9, 3, 8); g.lineBetween(8, 10, 3, 11);
+    g.lineBetween(20, 9, 25, 8); g.lineBetween(20, 10, 25, 11);
+    // 지느러미
+    g.fillStyle(0x607D8B, 1);
+    g.fillTriangle(3, 14, 6, 10, 6, 18);
+    g.fillTriangle(25, 14, 22, 10, 22, 18);
+    g.generateTexture('seal', 28, 28); g.clear();
+
+    // ── 늑대 (28x28) - 회색, 날카로운 ──
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(14, 26, 16, 4);
+    // 다리
+    px(g, 6, 20, 3, 6, 0x424242); px(g, 11, 20, 3, 6, 0x424242);
+    px(g, 14, 20, 3, 6, 0x424242); px(g, 19, 20, 3, 6, 0x424242);
+    // 몸통
+    g.fillStyle(0x616161, 1); g.fillEllipse(14, 16, 16, 8);
+    g.fillStyle(0x9E9E9E, 1); g.fillEllipse(14, 17, 10, 4); // 배
+    // 꼬리
+    g.fillStyle(0x757575, 1); g.fillTriangle(24, 12, 28, 8, 22, 14);
+    // 머리
+    g.fillStyle(0x616161, 1); g.fillCircle(14, 8, 6);
+    // 주둥이
+    g.fillStyle(0x757575, 1); g.fillEllipse(14, 12, 5, 3);
+    // 귀 (뾰족)
+    g.fillStyle(0x424242, 1);
+    g.fillTriangle(7, 1, 9, 7, 5, 7);
+    g.fillTriangle(21, 1, 19, 7, 23, 7);
+    // 눈 (노란 눈 - 사나운)
+    px(g, 10, 7, 3, 2, 0xFFEB3B); px(g, 16, 7, 3, 2, 0xFFEB3B);
+    px(g, 11, 7, 1, 2, 0x212121); px(g, 17, 7, 1, 2, 0x212121);
+    // 코
+    px(g, 13, 11, 2, 2, 0x212121);
+    // 이빨
+    px(g, 11, 13, 2, 1, 0xFFFFFF); px(g, 15, 13, 2, 1, 0xFFFFFF);
+    g.generateTexture('wolf', 28, 28); g.clear();
+
+    // ── 곰 (36x36) - 크고 갈색 ──
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(18, 34, 24, 5);
+    // 다리
+    px(g, 7, 26, 5, 8, 0x5D4037); px(g, 14, 26, 5, 8, 0x5D4037);
+    px(g, 17, 26, 5, 8, 0x5D4037); px(g, 24, 26, 5, 8, 0x5D4037);
+    // 몸통 (큰 덩치)
+    g.fillStyle(0x6D4C41, 1); g.fillEllipse(18, 20, 22, 14);
+    g.fillStyle(0x795548, 1); g.fillEllipse(18, 22, 14, 6); // 배
+    // 머리
+    g.fillStyle(0x6D4C41, 1); g.fillCircle(18, 9, 8);
+    // 귀 (둥근)
+    g.fillStyle(0x5D4037, 1); g.fillCircle(10, 3, 3); g.fillCircle(26, 3, 3);
+    g.fillStyle(0x8D6E63, 1); g.fillCircle(10, 3, 1.5); g.fillCircle(26, 3, 1.5);
+    // 주둥이
+    g.fillStyle(0x8D6E63, 1); g.fillEllipse(18, 12, 6, 4);
+    // 눈 (작고 사나움)
+    px(g, 13, 8, 3, 3, 0x212121); px(g, 21, 8, 3, 3, 0x212121);
+    g.fillStyle(0xFFFFFF, 0.7); g.fillCircle(14, 8, 0.8); g.fillCircle(22, 8, 0.8);
+    // 코
+    g.fillStyle(0x3E2723, 1); g.fillCircle(18, 11, 2);
+    // 발톱
+    px(g, 7, 33, 2, 2, 0xBCAAA4); px(g, 10, 33, 2, 2, 0xBCAAA4);
+    px(g, 24, 33, 2, 2, 0xBCAAA4); px(g, 27, 33, 2, 2, 0xBCAAA4);
+    g.generateTexture('bear', 36, 36); g.clear();
+
+    // ── NPC: 사냥꾼 (24x28) ──
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 26, 14, 4);
+    px(g, 8, 22, 3, 5, 0x5D4037); px(g, 13, 22, 3, 5, 0x5D4037);
+    g.fillStyle(0x6D4C41, 1); g.fillRoundedRect(7, 12, 10, 10, 2); // 갈색 옷
+    px(g, 4, 14, 3, 7, 0x6D4C41); // 왼팔
+    px(g, 17, 12, 3, 10, 0x6D4C41); // 오른팔
+    // 활
+    g.lineStyle(2, 0x795548, 1); g.beginPath(); g.arc(20, 14, 6, -1.2, 1.2); g.strokePath();
+    g.lineStyle(1, 0xBCAAA4, 1); g.lineBetween(20, 8, 20, 20);
+    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(9, 5, 6, 7, 2); // 머리
+    px(g, 10, 7, 2, 2, 0x3E2723); px(g, 13, 7, 2, 2, 0x3E2723);
+    g.fillStyle(0x4CAF50, 1); g.fillRect(8, 3, 8, 3); // 녹색 모자
+    g.generateTexture('npc_hunter', 24, 28); g.clear();
+
+    // ── NPC: 채집꾼 (24x28) ──
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 26, 14, 4);
+    px(g, 8, 22, 3, 5, 0x5D4037); px(g, 13, 22, 3, 5, 0x5D4037);
+    g.fillStyle(0x8BC34A, 1); g.fillRoundedRect(7, 12, 10, 10, 2); // 녹색 옷
+    px(g, 4, 14, 3, 7, 0x8BC34A);
+    px(g, 17, 14, 3, 7, 0x8BC34A);
+    // 바구니
+    g.fillStyle(0xA1887F, 1); g.fillRoundedRect(17, 16, 6, 6, 1);
+    g.lineStyle(1, 0x795548); g.strokeRoundedRect(17, 16, 6, 6, 1);
+    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(9, 5, 6, 7, 2);
+    px(g, 10, 7, 2, 2, 0x3E2723); px(g, 13, 7, 2, 2, 0x3E2723);
+    g.fillStyle(0xFDD835, 1); g.fillRect(8, 2, 8, 4); // 밀짚모자
+    g.fillRect(6, 5, 12, 2);
+    g.generateTexture('npc_gatherer', 24, 28); g.clear();
+
+    // ── NPC: 상인 (24x28) ──
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 26, 14, 4);
+    px(g, 8, 22, 3, 5, 0x5D4037); px(g, 13, 22, 3, 5, 0x5D4037);
+    g.fillStyle(0xFFEB3B, 1); g.fillRoundedRect(7, 12, 10, 10, 2); // 노란 옷
+    px(g, 7, 18, 10, 5, 0xF5F5F5); // 앞치마
+    px(g, 4, 14, 3, 7, 0xFFEB3B);
+    px(g, 17, 14, 3, 7, 0xFFEB3B);
+    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(9, 5, 6, 7, 2);
+    px(g, 10, 7, 2, 2, 0x3E2723); px(g, 13, 7, 2, 2, 0x3E2723);
+    // 수염
+    g.fillStyle(0x8D6E63, 0.5); g.fillRect(10, 10, 4, 2);
+    g.fillStyle(0x7B1FA2, 1); g.fillRect(8, 2, 8, 4); // 보라색 모자
+    g.generateTexture('npc_merchant', 24, 28); g.clear();
+
+    // ── NPC: 전사 (24x28) ──
+    g.fillStyle(0x000000, 0.15); g.fillEllipse(12, 26, 14, 4);
+    px(g, 8, 22, 3, 5, 0x455A64); px(g, 13, 22, 3, 5, 0x455A64);
+    g.fillStyle(0x1565C0, 1); g.fillRoundedRect(7, 12, 10, 10, 2); // 파란 갑옷
+    g.fillStyle(0x90A4AE, 1); g.fillRect(8, 13, 8, 3); // 갑옷 디테일
+    px(g, 4, 13, 3, 8, 0x1565C0); // 왼팔 + 방패
+    g.fillStyle(0x90A4AE, 1); g.fillCircle(4, 17, 4); // 방패
+    g.fillStyle(0xF44336, 1); g.fillCircle(4, 17, 2); // 방패 문양
+    px(g, 17, 13, 3, 8, 0x1565C0); // 오른팔
+    // 검
+    px(g, 19, 6, 2, 10, 0xBDBDBD); px(g, 18, 15, 4, 2, 0x795548);
+    g.fillStyle(0xFFCC80, 1); g.fillRoundedRect(9, 5, 6, 7, 2);
+    // 투구
+    g.fillStyle(0x78909C, 1); g.fillRoundedRect(8, 2, 8, 5, 2);
+    px(g, 11, 1, 2, 3, 0xF44336); // 투구 깃털
+    px(g, 10, 7, 2, 2, 0x212121); px(g, 13, 7, 2, 2, 0x212121);
+    g.generateTexture('npc_warrior', 24, 28); g.clear();
+
+    // ── 드롭 아이템들 (12x12) ──
+    // 고기
+    g.fillStyle(0xD32F2F, 1); g.fillEllipse(6, 7, 8, 6);
+    g.fillStyle(0xEF5350, 1); g.fillEllipse(6, 6, 5, 3);
+    px(g, 3, 2, 2, 5, 0xBCAAA4); // 뼈
+    g.generateTexture('meat_drop', 12, 12); g.clear();
+    // 나무
+    g.fillStyle(0x5D4037, 1); g.fillRoundedRect(1, 2, 10, 4, 1);
+    g.fillStyle(0x795548, 1); g.fillRoundedRect(2, 6, 8, 4, 1);
+    g.lineStyle(1, 0x4E342E); g.lineBetween(3, 4, 9, 4);
+    g.generateTexture('wood_drop', 12, 12); g.clear();
+    // 돌
+    g.fillStyle(0x757575, 1); g.fillRoundedRect(1, 3, 10, 7, 3);
+    g.fillStyle(0x9E9E9E, 1); g.fillRoundedRect(2, 4, 5, 4, 2);
+    g.generateTexture('stone_drop', 12, 12); g.clear();
+    // 가죽
+    g.fillStyle(0xA1887F, 1); g.fillRoundedRect(1, 2, 10, 8, 2);
+    g.fillStyle(0xBCAAA4, 1); g.fillRoundedRect(3, 3, 6, 6, 1);
+    g.lineStyle(1, 0x8D6E63); g.lineBetween(4, 5, 8, 5); g.lineBetween(4, 7, 8, 7);
+    g.generateTexture('leather_drop', 12, 12); g.clear();
+
+    // ── 나무 리소스 (32x48) - 큰 침엽수 ──
+    g.fillStyle(0x000000, 0.12); g.fillEllipse(16, 46, 20, 5);
+    // 줄기
+    g.fillStyle(0x5D4037, 1); g.fillRect(13, 32, 6, 14);
+    g.fillStyle(0x4E342E, 1); g.fillRect(15, 32, 2, 14);
+    // 나뭇잎 (3단 삼각형)
+    g.fillStyle(0x2E7D32, 1);
+    g.fillTriangle(16, 2, 4, 18, 28, 18);
+    g.fillTriangle(16, 10, 2, 28, 30, 28);
+    g.fillTriangle(16, 18, 0, 36, 32, 36);
+    // 하이라이트
+    g.fillStyle(0x4CAF50, 0.4);
+    g.fillTriangle(16, 4, 10, 14, 22, 14);
+    g.fillTriangle(16, 12, 8, 24, 24, 24);
+    // 눈 쌓임
+    g.fillStyle(0xFFFFFF, 0.7);
+    g.fillTriangle(16, 2, 12, 8, 20, 8);
+    g.fillEllipse(8, 18, 6, 3); g.fillEllipse(24, 18, 6, 3);
+    g.generateTexture('tree_node', 32, 48); g.clear();
+
+    // ── 바위 리소스 (28x24) ──
+    g.fillStyle(0x000000, 0.12); g.fillEllipse(14, 22, 20, 4);
+    // 큰 바위
+    g.fillStyle(0x616161, 1); g.fillRoundedRect(2, 6, 24, 16, 6);
+    // 디테일
+    g.fillStyle(0x757575, 1); g.fillRoundedRect(4, 4, 12, 10, 4);
+    g.fillStyle(0x9E9E9E, 1); g.fillRoundedRect(6, 6, 6, 5, 2);
+    // 균열
+    g.lineStyle(1, 0x424242, 0.5); g.lineBetween(14, 8, 20, 14); g.lineBetween(10, 12, 16, 18);
+    // 눈
+    g.fillStyle(0xFFFFFF, 0.5); g.fillEllipse(10, 5, 8, 3); g.fillEllipse(20, 7, 6, 2);
+    g.generateTexture('rock_node', 28, 24); g.clear();
+
+    // ── 기타 ──
+    // 눈송이
+    g.fillStyle(0xFFFFFF, 1); g.fillCircle(2, 2, 2);
+    g.generateTexture('snowflake', 4, 4); g.clear();
+    // 피격 파티클
+    g.fillStyle(0xFF0000, 1); g.fillCircle(3, 3, 3);
+    g.generateTexture('hit_particle', 6, 6); g.clear();
+    // 골드 파티클
+    g.fillStyle(0xFFD700, 1); g.fillCircle(4, 4, 4);
+    g.fillStyle(0xFFF176, 1); g.fillCircle(3, 3, 2);
+    g.generateTexture('gold_particle', 8, 8); g.clear();
+
+    g.destroy();
     this.scene.start('Game');
   }
 }
