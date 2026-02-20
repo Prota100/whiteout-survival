@@ -1,0 +1,27 @@
+{
+  "name": "whiteout-survival",
+  "version": "1.0.0",
+  "description": "",
+  "main": "game.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Prota100/whiteout-survival.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Prota100/whiteout-survival/issues"
+  },
+  "homepage": "https://github.com/Prota100/whiteout-survival#readme",
+  "dependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

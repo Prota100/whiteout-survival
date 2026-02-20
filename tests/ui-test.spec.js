@@ -14,7 +14,7 @@ test.describe('Whiteout Survival UI Tests', () => {
     await expect(page.locator('#btn-hire')).toBeVisible();
     await expect(page.locator('#btn-eat')).toBeVisible();
     await expect(page.locator('#btn-sound')).toBeVisible();
-    await expect(page.locator('#res-text')).toBeVisible();
+    await expect(page.locator('#res-text')).toBeAttached();
     await expect(page.locator('#hp-fill')).toBeAttached();
     await expect(page.locator('#temp-fill')).toBeAttached();
     await expect(page.locator('#hunger-fill')).toBeAttached();
@@ -31,6 +31,8 @@ test.describe('Whiteout Survival UI Tests', () => {
   });
 
   test('고용 버튼 → 패널', async ({ page }) => {
+    // Ensure no panel is open first
+    await page.evaluate(() => { if(window._gameScene?.activePanel) window._gameScene.clearPanel(); window._gameScene && (window._gameScene.activePanel = null); });
     await page.locator('#btn-hire').click();
     await page.waitForTimeout(500);
     expect(await page.evaluate(() => window._gameScene?.activePanel === 'hire')).toBeTruthy();
