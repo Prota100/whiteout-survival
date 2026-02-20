@@ -16,7 +16,7 @@ const ANIMALS = {
 
 // ── Building Definitions ──
 const BUILDINGS = {
-  campfire: { name: '화덕', cost: { wood: 5 }, warmth: 2, desc: '체온 회복 +2/s', icon: '🔥' },
+  campfire: { name: '화덕', cost: { wood: 4 }, warmth: 3, desc: '회복+골드+버프 존', icon: '🔥', campfireLevel: 1 },
   tent:     { name: '텐트', cost: { wood: 10, leather: 3 }, warmth: 5, desc: '체온 회복 +5/s', icon: '⛺' },
   storage:  { name: '창고', cost: { wood: 15, stone: 10 }, storageBonus: 50, desc: '보관량 +50', icon: '📦' },
   workshop: { name: '작업대', cost: { wood: 20, stone: 15 }, desc: '도구 제작 가능', icon: '🔨' },
@@ -1267,8 +1267,8 @@ class GameScene extends Phaser.Scene {
       g.fillStyle(0xFF6600, 0.9); g.fillCircle(wx, wy, 8);
       g.fillStyle(0xFFAA00, 0.8); g.fillCircle(wx, wy-2, 5);
       g.fillStyle(0xFFDD44, 0.6); g.fillCircle(wx, wy-3, 3);
-      // Warm area indicator
-      g.lineStyle(1, 0xFF8844, 0.15); g.strokeCircle(wx, wy, 80);
+      // Warm area indicator (150px radius)
+      g.lineStyle(1, 0xFF8844, 0.15); g.strokeCircle(wx, wy, 150);
     } else if (this.buildMode === 'tent') {
       // Tent with brown roof
       g.fillStyle(0x8B6914, 0.9); g.fillTriangle(wx, wy-22, wx-20, wy+10, wx+20, wy+10);
@@ -1341,23 +1341,85 @@ class GameScene extends Phaser.Scene {
     const tempLoss = 0.5 * this.warmthResist * dt;
     this.temperature = Math.max(0, this.temperature - tempLoss);
 
+    // Reset campfire buffs each frame
+    this._inCampfire = false;
+
     this.placedBuildings.forEach(b => {
       if (!b.def.warmth) return;
-      const warmthRadius = 120;
+      const isCampfire = b.type === 'campfire';
+      const warmthRadius = isCampfire ? 150 : 80;
+      const repelRadius = isCampfire ? 100 : 60;
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y);
+
       if (d < warmthRadius) {
         this.temperature = Math.min(this.maxTemp, this.temperature + b.def.warmth * dt);
-        this.playerHP = Math.min(this.playerMaxHP, this.playerHP + 3 * dt);
+        // Enhanced HP regen for campfire
+        const hpRegen = isCampfire ? 5 : 3;
+        this.playerHP = Math.min(this.playerMaxHP, this.playerHP + hpRegen * dt);
+
+        if (isCampfire) {
+          this._inCampfire = true;
+          // Gold auto-generation (+2/s)
+          if (!b._goldTimer) b._goldTimer = 0;
+          b._goldTimer += dt;
+          if (b._goldTimer >= 0.5) {
+            b._goldTimer -= 0.5;
+            this.res.gold = (this.res.gold || 0) + 1;
+            if (Math.random() < 0.3) {
+              const gt = this.add.text(b.x + Phaser.Math.Between(-15, 15), b.y - 20, '+1💰', {fontSize:'11px',fontFamily:'monospace',color:'#FFD700',stroke:'#000',strokeThickness:2}).setDepth(15).setOrigin(0.5);
+              this.tweens.add({targets:gt, y:gt.y-25, alpha:0, duration:600, onComplete:()=>gt.destroy()});
+            }
+          }
+        }
       }
-      // Scare animals away from fire
+
+      // Repel animals - hard push away
       this.animals.getChildren().forEach(a => {
         if (!a.active) return;
         const ad = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
-        if (ad < 80) {
+        if (ad < repelRadius) {
           const ang = Phaser.Math.Angle.Between(b.x, b.y, a.x, a.y);
-          a.body.setVelocity(Math.cos(ang) * a.def.speed * 1.5, Math.sin(ang) * a.def.speed * 1.5);
+          const pushStrength = isCampfire ? 2.0 : 1.5;
+          a.body.setVelocity(Math.cos(ang) * a.def.speed * pushStrength, Math.sin(ang) * a.def.speed * pushStrength);
         }
       });
+
+      // Campfire warmth zone visual (3-layer glow)
+      if (isCampfire && b.graphic) {
+        if (!b._warmGfx) {
+          b._warmGfx = this.add.graphics().setDepth(1);
+        }
+        const wg = b._warmGfx;
+        wg.clear();
+        if (!this._warmPulse) this._warmPulse = 0;
+        this._warmPulse += dt * 1.5;
+        const pulse = Math.sin(this._warmPulse) * 0.06 + 1.0;
+        const r = warmthRadius * pulse;
+        // Outer glow
+        wg.fillStyle(0xFF8C00, 0.10); wg.fillCircle(b.x, b.y, r);
+        // Middle zone
+        wg.fillStyle(0xFF6600, 0.18); wg.fillCircle(b.x, b.y, r * 0.65);
+        // Inner core
+        wg.fillStyle(0xFF4500, 0.30); wg.fillCircle(b.x, b.y, r * 0.35);
+        // Dashed border
+        wg.lineStyle(1.5, 0xFF8844, 0.3);
+        const segs = 24;
+        for (let i = 0; i < segs; i += 2) {
+          const a1 = (i / segs) * Math.PI * 2;
+          const a2 = ((i + 1) / segs) * Math.PI * 2;
+          wg.beginPath(); wg.arc(b.x, b.y, r, a1, a2); wg.strokePath();
+        }
+        // Fire particles
+        if (Math.random() < dt * 6) {
+          const px = b.x + Phaser.Math.Between(-8, 8);
+          const py = b.y - 5;
+          const p = this.add.image(px, py, 'hit_particle').setDepth(4).setTint(
+            Phaser.Utils.Array.GetRandom([0xFF4500, 0xFF6600, 0xFFCC00, 0xFFFF00])
+          ).setScale(Phaser.Math.FloatBetween(0.5, 1.0)).setAlpha(0.9);
+          this.tweens.add({targets:p, y:py-Phaser.Math.Between(25,50), x:px+Phaser.Math.Between(-12,12),
+            alpha:0, scale:0.1, duration:Phaser.Math.Between(400,800), onComplete:()=>p.destroy()});
+        }
+      }
     });
 
     this.hunger = Math.max(0, this.hunger - 0.3 * dt);
@@ -1723,6 +1785,16 @@ class GameScene extends Phaser.Scene {
       this.uiQuest.setText('📋 모든 퀘스트 완료! 🎉');
     }
 
+    // Campfire buff indicator
+    if (this._inCampfire) {
+      if (!this._buffLabel) {
+        this._buffLabel = this.add.text(170, 28, '', {fontSize:'11px',fontFamily:'monospace',color:'#FFB74D',stroke:'#000',strokeThickness:2}).setScrollFactor(0).setDepth(101);
+      }
+      this._buffLabel.setText('🔥 화덕 버프: ⚔️+30% 🏃+20% ❤️+5/s 💰+2/s').setVisible(true);
+    } else if (this._buffLabel) {
+      this._buffLabel.setVisible(false);
+    }
+
     // NPC labels
     this.npcLabels.forEach(l => l.destroy());
     this.npcLabels = [];
@@ -1766,7 +1838,8 @@ class GameScene extends Phaser.Scene {
     if (this.gameOver) return;
     const dt = deltaMs / 1000;
 
-    this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    const atkSpeedMul = this._inCampfire ? 1.3 : 1.0;
+    this.attackCooldown = Math.max(0, this.attackCooldown - dt * atkSpeedMul);
 
     // Mobile auto-attack: animals AND resource nodes within 50px
     if (this.isMobile && this.attackCooldown <= 0) {
@@ -1811,7 +1884,8 @@ class GameScene extends Phaser.Scene {
       if(mx||my){const l=Math.sqrt(mx*mx+my*my);this.moveDir.x=mx/l;this.moveDir.y=my/l;}
       else if(!this.joystickActive){this.moveDir.x=0;this.moveDir.y=0;}
     }
-    this.player.body.setVelocity(this.moveDir.x*this.playerSpeed, this.moveDir.y*this.playerSpeed);
+    const speedMul = this._inCampfire ? 1.2 : 1.0;
+    this.player.body.setVelocity(this.moveDir.x*this.playerSpeed*speedMul, this.moveDir.y*this.playerSpeed*speedMul);
     
     // Player flip
     if (this.moveDir.x > 0.1) { this.player.setFlipX(false); this.facingRight = true; }
