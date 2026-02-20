@@ -1307,6 +1307,8 @@ class GameScene extends Phaser.Scene {
     });
 
     this.createVirtualJoystick();
+    // ═══ WASD + Arrow Key Support ═══
+    this.wasd = this.input.keyboard.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT');
     this.createUI();
     window._gameScene = this;
     this.physics.add.overlap(this.player, this.drops, (_, d) => this.collectDrop(d));
@@ -1330,6 +1332,42 @@ class GameScene extends Phaser.Scene {
     // ── Tutorial Overlay (새 게임 시작 시 3초 표시) ──
     if (!loadSave) {
       this._showTutorialOverlay();
+
+      // ═══ FTUE: Spawn 2 rabbits near player for early kill ═══
+      for (let i = 0; i < 2; i++) {
+        const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const dist = Phaser.Math.Between(80, 120);
+        const rx = this.player.x + Math.cos(ang) * dist;
+        const ry = this.player.y + Math.sin(ang) * dist;
+        const def = ANIMALS['rabbit'], type = 'rabbit';
+        const a = this.physics.add.sprite(
+          Phaser.Math.Clamp(rx, 60, WORLD_W-60),
+          Phaser.Math.Clamp(ry, 60, WORLD_H-60),
+          type
+        ).setCollideWorldBounds(true).setDepth(5);
+        a.animalType = type; a.def = def; a.hp = def.hp; a.maxHP = def.hp;
+        a.wanderTimer = 0; a.wanderDir = {x:0,y:0}; a.hitFlash = 0; a.atkCD = 0; a.fleeTimer = 0;
+        const lc = '#AADDFF';
+        a.nameLabel = this.add.text(a.x, a.y - def.size - 10, def.name, {
+          fontSize: '11px', fontFamily: 'monospace', color: lc, stroke: '#000', strokeThickness: 3
+        }).setDepth(6).setOrigin(0.5);
+        this.animals.add(a);
+      }
+
+      // ═══ FTUE: Hint text (disappears after 10s or first level-up) ═══
+      this._ftueHint = this.add.text(
+        this.cameras.main.width / 2,
+        this.cameras.main.height - 80,
+        '적을 처치하면 경험치를 얻습니다',
+        { fontSize: '16px', fontFamily: 'monospace', color: '#FFFFFF',
+          stroke: '#000', strokeThickness: 4, fontStyle: 'bold' }
+      ).setOrigin(0.5).setDepth(100).setScrollFactor(0).setAlpha(0.9);
+      this.time.delayedCall(10000, () => {
+        if (this._ftueHint && this._ftueHint.active) {
+          this.tweens.add({ targets: this._ftueHint, alpha: 0, duration: 500,
+            onComplete: () => { if(this._ftueHint) this._ftueHint.destroy(); this._ftueHint = null; } });
+        }
+      });
     }
 
     // ── Auto-Save Timer (60초) ──
@@ -1634,11 +1672,13 @@ class GameScene extends Phaser.Scene {
     // Critical hit check
     if (this.upgradeManager.critChance > 0 && Math.random() < this.upgradeManager.critChance) {
       dmg = Math.ceil(dmg * 2);
+      a._lastHitCrit = true;
       this.showFloatingText(a.x + 15, a.y - 30, '💥CRIT!', '#FF2222');
     }
+    const isCrit = a._lastHitCrit || false; a._lastHitCrit = false;
     a.hp -= dmg; a.hitFlash = 0.2; a.setTint(0xFF4444); playHit();
-    const fs = dmg >= 3 ? '24px' : dmg >= 2 ? '20px' : '16px';
-    const c = dmg >= 3 ? '#FF2222' : '#FF6644';
+    const fs = isCrit ? '28px' : dmg >= 3 ? '20px' : '16px';
+    const c = isCrit ? '#FF2222' : '#FFFFFF';
     const t = this.add.text(a.x + Phaser.Math.Between(-10, 10), a.y - 20, '-'+dmg, {
       fontSize: fs, fontFamily: 'monospace', color: c, stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
     }).setDepth(15).setOrigin(0.5);
@@ -1656,6 +1696,18 @@ class GameScene extends Phaser.Scene {
   }
 
   killAnimal(a) { playKill();
+    // ═══ Death particle effect (circles spreading) ═══
+    for (let i = 0; i < 10; i++) {
+      const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const dist = Phaser.Math.Between(30, 70);
+      const colors = [0xFFFFFF, 0xCCDDFF, 0xFF8888, 0xFFCC44];
+      const p = this.add.circle(a.x, a.y, Phaser.Math.Between(2, 5), Phaser.Utils.Array.GetRandom(colors))
+        .setDepth(15).setAlpha(1);
+      this.tweens.add({ targets: p,
+        x: a.x + Math.cos(ang) * dist, y: a.y + Math.sin(ang) * dist,
+        alpha: 0, scale: { from: 1.2, to: 0 }, duration: Phaser.Math.Between(400, 800),
+        ease: 'Quad.Out', onComplete: () => p.destroy() });
+    }
     // Boss death special effects
     if (a.isBoss) {
       this.cameras.main.shake(800, 0.03);
@@ -1709,7 +1761,7 @@ class GameScene extends Phaser.Scene {
       _comboGoldBonus = 1; // gold +50% handled in drop
     }
     this.gainXP(_xpAmt);
-    this.showFloatingText(a.x + 15, a.y - 30, '+' + _xpAmt + ' XP' + (this.killCombo >= 10 ? ' 🔥x2' : ''), '#FFDD44');
+    this.showFloatingText(a.x + 15, a.y - 30, '+' + _xpAmt + ' XP' + (this.killCombo >= 10 ? ' 🔥x2' : ''), '#44AAFF');
 
     // Combo gold bonus drops
     if (this.killCombo >= 5) {
@@ -1908,6 +1960,10 @@ class GameScene extends Phaser.Scene {
   }
 
   triggerLevelUp() {
+    // Remove FTUE hint on first level-up
+    if (this._ftueHint && this._ftueHint.active) {
+      this._ftueHint.destroy(); this._ftueHint = null;
+    }
     // Level up sound
     playLevelUp();
 
@@ -3570,9 +3626,25 @@ class GameScene extends Phaser.Scene {
       this.moveDir.x = 0;
       this.moveDir.y = 0;
     }
-    this.player.body.setVelocity(this.moveDir.x*this.playerSpeed, this.moveDir.y*this.playerSpeed);
-    if (this.moveDir.x > 0.1) { this.player.setFlipX(false); this.facingRight = true; }
-    else if (this.moveDir.x < -0.1) { this.player.setFlipX(true); this.facingRight = false; }
+    // ═══ WASD + Arrow Key merge ═══
+    const wasd = this.wasd;
+    const kx = (wasd.D.isDown||wasd.RIGHT.isDown ? 1 : 0) - (wasd.A.isDown||wasd.LEFT.isDown ? 1 : 0);
+    const ky = (wasd.S.isDown||wasd.DOWN.isDown ? 1 : 0) - (wasd.W.isDown||wasd.UP.isDown ? 1 : 0);
+    let finalMX = this.moveDir.x, finalMY = this.moveDir.y;
+    if (kx !== 0 || ky !== 0) {
+      finalMX = kx; finalMY = ky;
+      // If joystick also active, sum them
+      if (this.moveDir.x !== 0 || this.moveDir.y !== 0) {
+        finalMX = this.moveDir.x + kx;
+        finalMY = this.moveDir.y + ky;
+      }
+      // Normalize
+      const mag = Math.sqrt(finalMX*finalMX + finalMY*finalMY);
+      if (mag > 1) { finalMX /= mag; finalMY /= mag; }
+    }
+    this.player.body.setVelocity(finalMX*this.playerSpeed, finalMY*this.playerSpeed);
+    if (finalMX > 0.1) { this.player.setFlipX(false); this.facingRight = true; }
+    else if (finalMX < -0.1) { this.player.setFlipX(true); this.facingRight = false; }
 
     // Upgrade: passive regen
     if (this.upgradeManager.regenPerSec > 0) {
