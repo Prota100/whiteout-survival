@@ -1253,6 +1253,8 @@ class GameScene extends Phaser.Scene {
     this.gameWon = false;
     this.questIndex = 0;
     this.questCompleted = [];
+    this.currentZone = 'safe';
+    this.questSpawnTimer = 0;
 
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
     this.drawBackground();
@@ -1507,23 +1509,59 @@ class GameScene extends Phaser.Scene {
 
   drawBackground() {
     const bg = this.add.graphics();
-    bg.fillStyle(0xE8ECF2, 1);
-    bg.fillRect(0, 0, WORLD_W, WORLD_H);
-    for (let i = 0; i < 120; i++) {
-      const colors = [0xDDE2EA, 0xD5DAE2, 0xE0E4EC];
-      bg.fillStyle(colors[Phaser.Math.Between(0, 2)], 0.3);
-      bg.fillEllipse(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(0, WORLD_H),
-        Phaser.Math.Between(40, 200), Phaser.Math.Between(20, 60));
+    // Zone colors: safe=#E8E8F0, normal=#B0C4DE, danger=#6A7A8A, extreme=#2D2D3A
+    const zoneColors = [
+      { r: 0xE8, g: 0xE8, b: 0xF0 }, // safe
+      { r: 0xB0, g: 0xC4, b: 0xDE }, // normal
+      { r: 0x6A, g: 0x7A, b: 0x8A }, // danger
+      { r: 0x2D, g: 0x2D, b: 0x3A }, // extreme
+    ];
+    const zoneRadii = [ZONE_RADII.safe, ZONE_RADII.normal, ZONE_RADII.danger, Math.hypot(WORLD_W, WORLD_H)];
+    const cx = MAP_CENTER.x, cy = MAP_CENTER.y;
+    const tileSize = 40;
+    const gradientWidth = 80; // gradient transition width in px
+
+    for (let tx = 0; tx < WORLD_W; tx += tileSize) {
+      for (let ty = 0; ty < WORLD_H; ty += tileSize) {
+        const dist = Math.hypot(tx + tileSize/2 - cx, ty + tileSize/2 - cy);
+        // Determine zone index with gradient blending
+        let zoneIdx = 3;
+        for (let z = 0; z < zoneRadii.length; z++) {
+          if (dist <= zoneRadii[z]) { zoneIdx = z; break; }
+        }
+        // Blend between current zone and next zone at boundary
+        let c = zoneColors[zoneIdx];
+        if (zoneIdx < 3) {
+          const edge = zoneRadii[zoneIdx];
+          const distToEdge = edge - dist;
+          if (distToEdge < gradientWidth && distToEdge >= 0) {
+            const t = 1 - distToEdge / gradientWidth; // 0 at zone center, 1 at boundary
+            const nc = zoneColors[zoneIdx + 1];
+            c = {
+              r: Math.round(c.r + (nc.r - c.r) * t),
+              g: Math.round(c.g + (nc.g - c.g) * t),
+              b: Math.round(c.b + (nc.b - c.b) * t),
+            };
+          }
+        }
+        // Slight tile variation for texture
+        const variation = Phaser.Math.Between(-8, 8);
+        const cr = Phaser.Math.Clamp(c.r + variation, 0, 255);
+        const cg = Phaser.Math.Clamp(c.g + variation, 0, 255);
+        const cb = Phaser.Math.Clamp(c.b + variation, 0, 255);
+        const color = (cr << 16) | (cg << 8) | cb;
+        bg.fillStyle(color, 1);
+        bg.fillRect(tx, ty, tileSize, tileSize);
+        // Subtle grid lines
+        bg.lineStyle(1, 0x000000, 0.05);
+        bg.strokeRect(tx, ty, tileSize, tileSize);
+      }
     }
-    for (let i = 0; i < 60; i++) {
-      bg.fillStyle(0xF5F7FA, 0.4);
+    // Snow spots overlay for texture
+    for (let i = 0; i < 80; i++) {
+      bg.fillStyle(0xFFFFFF, Phaser.Math.FloatBetween(0.03, 0.15));
       bg.fillEllipse(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(0, WORLD_H),
-        Phaser.Math.Between(30, 80), Phaser.Math.Between(10, 30));
-    }
-    for (let i = 0; i < 20; i++) {
-      bg.fillStyle(0xCCDDEE, 0.2);
-      bg.fillEllipse(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(0, WORLD_H),
-        Phaser.Math.Between(60, 150), Phaser.Math.Between(40, 100));
+        Phaser.Math.Between(20, 100), Phaser.Math.Between(10, 40));
     }
   }
 
@@ -1567,7 +1605,7 @@ class GameScene extends Phaser.Scene {
 
   spawnWave() {
     [{ type: 'rabbit', count: 8 }, { type: 'deer', count: 4 }, { type: 'penguin', count: 4 },
-     { type: 'seal', count: 2 }]
+     { type: 'seal', count: 2 }, { type: 'wolf', count: 2 }]
     .forEach(e => { for (let i = 0; i < e.count; i++) this.spawnAnimal(e.type); });
   }
 
@@ -3194,12 +3232,12 @@ class GameScene extends Phaser.Scene {
     const min = this.gameElapsed / 60;
     let weights, maxCount, spawnInterval;
     if (min < 5) {
-      // 초반: 순한 동물 위주
-      weights = { rabbit: 5, deer: 3, penguin: 2 }; maxCount = 12; spawnInterval = 10000;
+      // 초반: 순한 동물 위주 + 늑대 소량
+      weights = { rabbit: 5, deer: 3, penguin: 2, wolf: 1 }; maxCount = 14; spawnInterval = 9000;
     } else if (min < 10) {
-      weights = { rabbit: 4, deer: 3, penguin: 2, wolf: 1 }; maxCount = 16; spawnInterval = 9000;
+      weights = { rabbit: 4, deer: 3, penguin: 2, wolf: 2, bear: 1 }; maxCount = 18; spawnInterval = 8000;
     } else if (min < 18) {
-      weights = { rabbit: 3, deer: 2, penguin: 2, wolf: 2, bear: 1 }; maxCount = 22; spawnInterval = 8000;
+      weights = { rabbit: 3, deer: 2, penguin: 2, wolf: 3, bear: 2 }; maxCount = 24; spawnInterval = 7000;
     } else if (min < 28) {
       // 중반: 적대 동물 증가
       weights = { rabbit: 2, deer: 2, penguin: 1, wolf: 3, bear: 2 }; maxCount = 28; spawnInterval = 7000;
@@ -3712,8 +3750,76 @@ class GameScene extends Phaser.Scene {
       }
     });
 
+    // ═══ Zone Alert System ═══
+    const newZone = this.getPlayerZone();
+    if (newZone !== this.currentZone) {
+      const oldZone = this.currentZone;
+      this.currentZone = newZone;
+      const zoneAlerts = {
+        normal: '주의 구역 진입',
+        danger: '⚠️ 위험 구역 진입',
+        extreme: '☠️ 극위험 구역 — 즉시 대피 권고',
+      };
+      if (zoneAlerts[newZone]) {
+        this.showZoneAlert(zoneAlerts[newZone]);
+      }
+    }
+
+    // ═══ Quest-based Wolf/Bear Spawn Guarantee ═══
+    this.questSpawnTimer += dt;
+    if (this.questIndex < QUESTS.length) {
+      const q = QUESTS[this.questIndex];
+      const needsWolf = q.id === 'q5';
+      const needsBear = q.id === 'q7';
+      if (needsWolf || needsBear) {
+        const targetType = needsWolf ? 'wolf' : 'bear';
+        const nearbyCount = this.animals.getChildren().filter(a =>
+          a.active && a.animalType === targetType &&
+          Phaser.Math.Distance.Between(a.x, a.y, this.player.x, this.player.y) < 500
+        ).length;
+        // Every 15s, ensure at least 2 nearby
+        if (this.questSpawnTimer >= 15 && nearbyCount < 2) {
+          this.questSpawnTimer = 0;
+          const toSpawn = 2 - nearbyCount;
+          for (let i = 0; i < toSpawn; i++) {
+            this.spawnAnimalNearPlayer(targetType, 300, 500);
+          }
+        }
+      }
+    }
+
     this.checkQuests();
     this.updateUI();
+  }
+
+  showZoneAlert(text) {
+    const cam = this.cameras.main;
+    const alert = this.add.text(cam.width / 2, cam.height / 2 - 50, text, {
+      fontSize: '28px', fontFamily: 'monospace', color: '#FF3333',
+      stroke: '#000000', strokeThickness: 4, align: 'center',
+    }).setScrollFactor(0).setDepth(200).setOrigin(0.5).setAlpha(1);
+    this.tweens.add({
+      targets: alert, alpha: 0, duration: 2000, delay: 500,
+      onComplete: () => alert.destroy(),
+    });
+  }
+
+  spawnAnimalNearPlayer(type, minDist, maxDist) {
+    const def = ANIMALS[type];
+    if (!def || !this.player) return;
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Phaser.Math.Between(minDist, maxDist);
+    const x = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 60, WORLD_W - 60);
+    const y = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 60, WORLD_H - 60);
+    const a = this.physics.add.sprite(x, y, type).setCollideWorldBounds(true).setDepth(5);
+    a.animalType = type; a.def = def; a.hp = def.hp; a.maxHP = def.hp;
+    a.wanderTimer = 0; a.wanderDir = {x:0,y:0}; a.hitFlash = 0; a.atkCD = 0; a.fleeTimer = 0;
+    if (def.hp > 2) a.hpBar = this.add.graphics().setDepth(6);
+    const lc = def.behavior === 'chase' ? '#FF4444' : def.behavior === 'flee' ? '#88DDFF' : '#AADDFF';
+    a.nameLabel = this.add.text(x, y - def.size - 10, def.name, {
+      fontSize: '11px', fontFamily: 'monospace', color: lc, stroke: '#000', strokeThickness: 3
+    }).setDepth(6).setOrigin(0.5);
+    this.animals.add(a);
   }
 }
 
