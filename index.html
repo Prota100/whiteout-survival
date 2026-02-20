@@ -93,6 +93,7 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
       <button id="btn-build" ontouchstart="">🔥건설</button>
       <button id="btn-craft" ontouchstart="">🔨제작</button>
       <button id="btn-hire" ontouchstart="">👥고용</button>
+      <button id="btn-inv" ontouchstart="">🎒인벤</button>
       <button id="btn-eat" ontouchstart="">🥩먹기</button>
       <button id="btn-sound" ontouchstart="">🔊</button>
     </div>
@@ -104,6 +105,6 @@ var GV="ultimate-014-phase4-upgrades";if(localStorage.getItem('gv')!==GV){localS
 if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(g){g.unregister();});});
 if('caches' in window)caches.keys().then(function(n){n.forEach(function(k){caches.delete(k);});});
 </script>
-<script src="game.js?v=20250220-crash-fix-016"></script>
+<script src="game.js?v=20250220-inventory-shop-017"></script>
 </body>
 </html>

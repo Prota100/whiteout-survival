@@ -1982,8 +1982,18 @@ class GameScene extends Phaser.Scene {
 
   createUI() {
     // HUD is now fully DOM-based (see index.html #dom-hud)
+    // Create inventory capacity element dynamically
+    const resEl = document.getElementById('res-text');
+    let invCapEl = document.getElementById('inv-cap');
+    if (!invCapEl && resEl && resEl.parentNode) {
+      invCapEl = document.createElement('div');
+      invCapEl.id = 'inv-cap';
+      invCapEl.style.cssText = 'font-size:11px;color:#AABBCC;margin-top:2px;';
+      resEl.parentNode.insertBefore(invCapEl, resEl.nextSibling);
+    }
     this._dom = {
-      res: document.getElementById('res-text'),
+      res: resEl,
+      invCap: invCapEl,
       hpFill: document.getElementById('hp-fill'),
       hpText: document.getElementById('hp-text'),
       tempFill: document.getElementById('temp-fill'),
@@ -2004,6 +2014,7 @@ class GameScene extends Phaser.Scene {
     bind('btn-build', () => scene.toggleBuildMenu());
     bind('btn-craft', () => scene.toggleCraftMenu());
     bind('btn-hire', () => scene.toggleHireMenu());
+    bind('btn-inv', () => scene.toggleInventoryMenu());
     bind('btn-eat', () => scene.interactNearest());
     bind('btn-sound', () => {
       soundEnabled = !soundEnabled;
@@ -2032,6 +2043,7 @@ class GameScene extends Phaser.Scene {
   toggleBuildMenu() { this.showPanel('build'); }
   toggleCraftMenu() { this.showPanel('craft'); }
   toggleHireMenu() { this.showPanel('hire'); }
+  toggleInventoryMenu() { this.showPanel('inventory'); }
 
   showPanel(type) {
     this.clearPanel();
@@ -2056,12 +2068,38 @@ class GameScene extends Phaser.Scene {
         key:d.type, label:d.name, sub:Object.entries(d.cost).map(([r,a])=>r+':'+a).join(' '),
         desc:d.desc, action:()=>{this.hireNPC(i);}
       }));
+    } else if (type === 'inventory') {
+      // Show current resources with drop option
+      const icons = {meat:'🥩',wood:'🪵',stone:'🪨',leather:'🧶',gold:'💰'};
+      const dropAmounts = {meat:5, wood:10, stone:10, leather:5, gold:10};
+      items = Object.entries(this.res)
+        .filter(([k,v]) => k !== 'gold' && v > 0)
+        .map(([k,v]) => ({
+          key:k, label:icons[k]+' '+k+': '+Math.floor(v),
+          sub:'버리기 -'+dropAmounts[k]+'개 | 보유: '+Math.floor(v),
+          desc:'터치하면 '+dropAmounts[k]+'개 버림 (총량 확보)',
+          action:() => {
+            const amt = Math.min(dropAmounts[k]||5, this.res[k]||0);
+            if (amt <= 0) return;
+            this.res[k] = Math.max(0, (this.res[k]||0) - amt);
+            this.showFloatingText(this.player.x, this.player.y-20, '🗑️ '+icons[k]+'×'+amt+' 버림', '#FF9988');
+            this.clearPanel(); this.showPanel('inventory');
+          }
+        }));
+      // Shop tab: buy with gold
+      const shopItems = [
+        {key:'buy_meat', label:'💰→🥩 고기 구매', sub:'금화 5개 → 고기 10개', desc:'상인에게 구매', action:()=>{ if((this.res.gold||0)<5){this.showFloatingText(this.player.x,this.player.y-20,'❌ 금화 부족',  '#FF6666');return;} this.res.gold-=5;this.res.meat=(this.res.meat||0)+10;playCoin();this.showFloatingText(this.player.x,this.player.y-20,'🥩+10 구매완료','#FFDD44');}},
+        {key:'buy_wood', label:'💰→🪵 나무 구매', sub:'금화 5개 → 나무 10개', desc:'상인에게 구매', action:()=>{ if((this.res.gold||0)<5){this.showFloatingText(this.player.x,this.player.y-20,'❌ 금화 부족',  '#FF6666');return;} this.res.gold-=5;this.res.wood=(this.res.wood||0)+10;playCoin();this.showFloatingText(this.player.x,this.player.y-20,'🪵+10 구매완료','#FFDD44');}},
+        {key:'buy_stone', label:'💰→🪨 돌 구매',  sub:'금화 5개 → 돌 10개',  desc:'상인에게 구매', action:()=>{ if((this.res.gold||0)<5){this.showFloatingText(this.player.x,this.player.y-20,'❌ 금화 부족',  '#FF6666');return;} this.res.gold-=5;this.res.stone=(this.res.stone||0)+10;playCoin();this.showFloatingText(this.player.x,this.player.y-20,'🪨+10 구매완료','#FFDD44');}},
+        {key:'buy_hp',   label:'💰→❤️ 체력 회복', sub:'금화 10개 → HP+50',   desc:'포션 구매',   action:()=>{ if((this.res.gold||0)<10){this.showFloatingText(this.player.x,this.player.y-20,'❌ 금화 부족', '#FF6666');return;} this.res.gold-=10;this.playerHP=Math.min(this.playerHP+50,this.playerMaxHP);playCoin();this.showFloatingText(this.player.x,this.player.y-20,'❤️+50 회복!','#FF6688');}},
+      ];
+      items = [...items, ...shopItems];
     }
     const panelH = Math.min(items.length * 60 + 20, h - 140);
     this.panelBg.setVisible(true).clear();
     this.panelBg.fillStyle(0x0a0a1e, 0.93); this.panelBg.fillRoundedRect(px, py, pw, panelH, 10);
     this.panelBg.lineStyle(2, 0x4466aa, 0.6); this.panelBg.strokeRoundedRect(px, py, pw, panelH, 10);
-    const titles = { build:'🔥 건설', craft:'🔨 제작', hire:'👥 고용' };
+    const titles = { build:'🔥 건설', craft:'🔨 제작', hire:'👥 고용', inventory:'🎒 인벤/상점' };
     const titleText = this.add.text(px + pw/2, py + 4, titles[type], {
       fontSize:'15px',fontFamily:'monospace',color:'#AACCFF',stroke:'#000',strokeThickness:2
     }).setScrollFactor(0).setDepth(111).setOrigin(0.5, 0);
@@ -2096,7 +2134,12 @@ class GameScene extends Phaser.Scene {
     const d = this._dom;
     if (!d) return;
     const icons = {meat:'🥩',wood:'🪵',stone:'🪨',leather:'🧶',gold:'💰'};
+    const total = Object.entries(this.res).filter(([k])=>k!=='gold').reduce((a,[_,v])=>a+(v||0),0);
+    const isFull = total >= this.storageCapacity;
     d.res.textContent = Object.entries(this.res).filter(([_,v])=>v>0).map(([k,v])=>icons[k]+Math.floor(v)).join(' ');
+    // Show inventory capacity
+    d.res.style.color = isFull ? '#FF6666' : '#FFFFFF';
+    if (d.invCap) d.invCap.textContent = `📦 ${Math.floor(total)}/${this.storageCapacity}`;
     
     const hpR = Math.max(0, Math.min(1, this.playerHP/this.playerMaxHP));
     d.hpFill.style.width = (hpR*100)+'%';
