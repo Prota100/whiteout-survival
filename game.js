@@ -101,6 +101,8 @@ function playBossSpawn(){
   sub.start();sub.stop(audioCtx.currentTime+2);
 }
 
+function playWinSound(){if(!audioCtx||!soundEnabled)return;const o=audioCtx.createOscillator();const g=audioCtx.createGain();o.type='triangle';o.frequency.setValueAtTime(440,audioCtx.currentTime);g.gain.setValueAtTime(0.5,audioCtx.currentTime);o.connect(g);g.connect(audioCtx.destination);o.start();g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+1);o.stop(audioCtx.currentTime+1)}
+
 function playGameOverSound(){
   if(!audioCtx||!soundEnabled)return;
   // Sad descending melody
@@ -1247,7 +1249,8 @@ class GameScene extends Phaser.Scene {
       this.safeBottom = 34;
     }
 
-    this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0 };
+    this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0, maxCombo: 0 };
+    this.gameWon = false;
     this.questIndex = 0;
     this.questCompleted = [];
 
@@ -1692,6 +1695,7 @@ class GameScene extends Phaser.Scene {
     // ═══ Kill Combo ═══
     this.killCombo++;
     this.killComboTimer = 3; // 3 seconds to maintain combo
+    if (this.killCombo > (this.stats.maxCombo || 0)) this.stats.maxCombo = this.killCombo;
     this._updateComboDisplay();
 
     // XP gain on kill with combo bonus
@@ -3400,6 +3404,41 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  showVictory() {
+    if (this.gameOver) return;
+    this.gameOver = true; // Prevents further game updates
+    playWinSound(); // Assumes a win sound exists or will be added
+
+    const cam = this.cameras.main;
+    cam.flash(1000, 200, 255, 200); // Greenish flash for victory
+    cam.shake(500, 0.01);
+
+    const ov = this.add.graphics().setScrollFactor(0).setDepth(200);
+    ov.fillStyle(0x000000, 0).fillRect(0, 0, cam.width, cam.height);
+    this.tweens.add({ targets: ov, alpha: 0.75, duration: 800 });
+
+    const msg = this.add.text(cam.width/2, cam.height/2 - 50, '🎉 생존 성공! 🎉', {
+      fontSize:'48px', fontFamily:'monospace', color:'#AAFFDD', stroke:'#000', strokeThickness:6, align:'center'
+    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
+
+    const statsText = this.add.text(cam.width/2, cam.height/2 + 30, 
+      `⏱️ 1시간 생존! | ⚔️ 처치: ${Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0)} | ⭐ Lv.${this.playerLevel} | 🔥 최고 콤보: ${this.stats.maxCombo || 0}`, {
+      fontSize:'18px', fontFamily:'monospace', color:'#DDFFEE', stroke:'#000', strokeThickness:4, align:'center'
+    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
+
+    const restartMsg = this.add.text(cam.width/2, cam.height/2 + 100, '다시 시작하려면 탭하세요!', {
+      fontSize:'20px', fontFamily:'monospace', color:'#99AAFF', stroke:'#000', strokeThickness:3
+    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
+
+    this.tweens.add({ targets: msg, alpha: 1, y: msg.y + 20, duration: 600, ease: 'Back.Out', delay: 200 });
+    this.tweens.add({ targets: statsText, alpha: 1, y: statsText.y + 10, duration: 600, ease: 'Back.Out', delay: 600 });
+    this.tweens.add({ targets: restartMsg, alpha: 1, duration: 500, delay: 1200, yoyo: true, repeat: -1 });
+
+    this.input.once('pointerdown', () => {
+      this.scene.start('Title');
+    });
+  }
+
   endGame() {
     // GDD: HP 0 → 마을로 리스폰 3초 (통계 표시)
     if (this.gameOver || this.isRespawning) return;
@@ -3424,7 +3463,7 @@ class GameScene extends Phaser.Scene {
     }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
 
     const statsText = this.add.text(cam.width/2, cam.height/2 + 30, 
-      `⏱️ 생존: ${survMin}분 ${survSec}초  |  ⚔️ 처치: ${totalKills}  |  ⭐ Lv.${this.playerLevel}`, {
+      `⏱️ 생존: ${survMin}분 ${survSec}초  |  ⚔️ 처치: ${totalKills}  |  ⭐ Lv.${this.playerLevel} | 🔥 최고 콤보: ${this.stats.maxCombo || 0}`, {
       fontSize:'16px', fontFamily:'monospace', color:'#AABBCC', stroke:'#000', strokeThickness:3, align:'center'
     }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
 
@@ -3582,6 +3621,12 @@ class GameScene extends Phaser.Scene {
     if (!this.boss2Spawned && this.gameElapsed >= 55 * 60) { // 55분
       this.boss2Spawned = true;
       this.spawnBoss('final');
+    }
+
+    // ═══ Victory Condition: 60분 생존 ═══
+    if (!this.gameWon && this.gameElapsed >= 60 * 60) {
+      this.gameWon = true;
+      this.showVictory();
     }
 
     // ═══ Phase 2: Rhythm System ═══
