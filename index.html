@@ -97,7 +97,6 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
     </div>
 
     <div id="bottom-buttons">
-      <button id="btn-attack" ontouchstart="">⚔️공격</button>
       <button id="btn-build" ontouchstart="">🔥건설</button>
       <button id="btn-craft" ontouchstart="">🔨제작</button>
       <button id="btn-hire" ontouchstart="">👥고용</button>
@@ -108,10 +107,10 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
 </div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 <script>
-var GV="ultimate-010-fix";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
+var GV="ultimate-011-vjoystick";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
 if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(g){g.unregister();});});
 if('caches' in window)caches.keys().then(function(n){n.forEach(function(k){caches.delete(k);});});
 </script>
-<script src="game.js?v=20250220-ultimate-010"></script>
+<script src="game.js?v=20250220-ultimate-011"></script>
 </body>
 </html>

@@ -568,12 +568,12 @@ class GameScene extends Phaser.Scene {
       resumeAudio();
       if (this.gameOver) return;
       if (this.isUIArea(p)) return;
-      if (this.isMobile && this.isJoystickArea(p)) return;
       if (this.buildMode) { this.placeBuilding(p); return; }
-      this.performAttack(p);
+      // Desktop only: click to attack (mobile uses auto-attack)
+      if (!this.isMobile) this.performAttack(p);
     });
 
-    if (this.isMobile) this.createDOMJoystick();
+    if (this.isMobile) this.createVirtualJoystick();
     this.createUI();
     window._gameScene = this;
     this.physics.add.overlap(this.player, this.drops, (_, d) => this.collectDrop(d));
@@ -1168,56 +1168,127 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 
-  createDOMJoystick() {
-    const zone = document.getElementById('joystick-zone');
-    const joy = document.getElementById('joystick');
-    const knob = document.getElementById('joystick-knob');
-    if (!zone) return;
-    zone.style.display = 'block';
+  createVirtualJoystick() {
+    // Hide old joystick zone
+    const oldZone = document.getElementById('joystick-zone');
+    if (oldZone) oldZone.style.display = 'none';
+
     this.joystickActive = false;
-    let origin = {x:0, y:0};
+    this._vjoy = null; // virtual joystick state
+    this._smoothMove = { x: 0, y: 0 }; // for lerp smoothing
     const self = this;
 
-    const onStart = (e) => {
-      e.preventDefault();
-      if (self.gameOver) return;
-      const t = e.touches ? e.touches[0] : e;
-      origin = {x: t.clientX, y: t.clientY};
-      self.joystickActive = true;
-      joy.style.display = 'block';
-      joy.style.left = (t.clientX - 55) + 'px';
-      joy.style.top = (t.clientY - zone.getBoundingClientRect().top - 55) + 'px';
-      knob.style.transform = 'translate(-50%, -50%)';
-    };
-    const onMove = (e) => {
-      if (!self.joystickActive) return;
-      e.preventDefault();
-      const t = e.touches ? e.touches[0] : e;
-      const dx = t.clientX - origin.x, dy = t.clientY - origin.y;
-      const dist = Math.sqrt(dx*dx+dy*dy), max=55, clamp=Math.min(dist,max), ang=Math.atan2(dy,dx);
-      const kx = Math.cos(ang)*clamp, ky = Math.sin(ang)*clamp;
-      knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
-      if(dist>8){self.moveDir.x=Math.cos(ang);self.moveDir.y=Math.sin(ang);}
-      else{self.moveDir.x=0;self.moveDir.y=0;}
-    };
-    const onEnd = () => {
-      self.joystickActive = false;
-      joy.style.display = 'none';
-      knob.style.transform = 'translate(-50%, -50%)';
-      self.moveDir.x=0; self.moveDir.y=0;
-    };
-    zone.addEventListener('touchstart', onStart, {passive:false});
-    document.addEventListener('touchmove', onMove, {passive:false});
-    document.addEventListener('touchend', onEnd);
-    zone.addEventListener('mousedown', onStart);
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onEnd);
-  }
+    // Create joystick container (hidden by default)
+    const base = document.createElement('div');
+    base.id = 'vjoystick-base';
+    base.style.cssText = `
+      display:none; position:fixed; width:120px; height:120px;
+      border-radius:50%; border:2.5px solid rgba(255,255,255,0.35);
+      background:radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%);
+      pointer-events:none; z-index:2000;
+      transition: opacity 0.15s ease;
+    `;
+    const knob = document.createElement('div');
+    knob.id = 'vjoystick-knob';
+    knob.style.cssText = `
+      position:absolute; width:48px; height:48px; border-radius:50%;
+      background:radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.25) 100%);
+      border:2px solid rgba(255,255,255,0.6);
+      top:50%; left:50%; transform:translate(-50%,-50%);
+      pointer-events:none;
+      transition: none;
+    `;
+    base.appendChild(knob);
+    document.body.appendChild(base);
 
-  isJoystickArea(p) {
-    const h = this.cameras.main.height;
-    // Full width, above bottom buttons area
-    return p.y > h * 0.15 && p.y < h - this.safeBottom - 60;
+    const isUITouch = (cx, cy) => {
+      // Bottom buttons area
+      const h = window.innerHeight;
+      const safeB = self.safeBottom || 0;
+      if (cy > h - 55 - safeB) return true;
+      // Top HUD
+      if (cy < 120 && cx < 260) return true;
+      // Active panel (right side)
+      if (self.activePanel && cx > window.innerWidth - 240 && cy > 60) return true;
+      return false;
+    };
+
+    // Track which touch ID is the joystick
+    let activeTouchId = null;
+
+    const onStart = (e) => {
+      if (self.gameOver) return;
+      // Find the first new touch that's not on UI
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (activeTouchId !== null) break; // already have a joystick touch
+        if (isUITouch(t.clientX, t.clientY)) continue;
+        // Check if touching a DOM button
+        const el = document.elementFromPoint(t.clientX, t.clientY);
+        if (el && (el.tagName === 'BUTTON' || el.closest('#bottom-buttons') || el.closest('#dom-hud'))) continue;
+
+        e.preventDefault();
+        activeTouchId = t.identifier;
+        self.joystickActive = true;
+        self._vjoy = { cx: t.clientX, cy: t.clientY };
+
+        base.style.display = 'block';
+        base.style.left = (t.clientX - 60) + 'px';
+        base.style.top = (t.clientY - 60) + 'px';
+        base.style.opacity = '1';
+        knob.style.transform = 'translate(-50%, -50%)';
+        break;
+      }
+    };
+
+    const onMove = (e) => {
+      if (activeTouchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier !== activeTouchId) continue;
+        e.preventDefault();
+        const dx = t.clientX - self._vjoy.cx;
+        const dy = t.clientY - self._vjoy.cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const maxR = 50;
+        const clamp = Math.min(dist, maxR);
+        const ang = Math.atan2(dy, dx);
+        const kx = Math.cos(ang) * clamp;
+        const ky = Math.sin(ang) * clamp;
+        knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
+
+        // Analog input: normalize by maxR for smooth 0~1 range
+        if (dist > 8) {
+          const strength = Math.min(1, dist / maxR);
+          self._smoothMove.x = Math.cos(ang) * strength;
+          self._smoothMove.y = Math.sin(ang) * strength;
+        } else {
+          self._smoothMove.x = 0;
+          self._smoothMove.y = 0;
+        }
+        break;
+      }
+    };
+
+    const onEnd = (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === activeTouchId) {
+          activeTouchId = null;
+          self.joystickActive = false;
+          self._smoothMove.x = 0;
+          self._smoothMove.y = 0;
+          base.style.opacity = '0';
+          setTimeout(() => { base.style.display = 'none'; }, 150);
+          knob.style.transform = 'translate(-50%, -50%)';
+          break;
+        }
+      }
+    };
+
+    document.addEventListener('touchstart', onStart, { passive: false });
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd, { passive: false });
+    document.addEventListener('touchcancel', onEnd, { passive: false });
   }
 
   createUI() {
@@ -1428,15 +1499,23 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Player movement
-    if (!this.isMobile || !this.joystickActive) {
+    // Player movement with smooth lerp
+    if (this.isMobile && this._smoothMove) {
+      // Smooth lerp for mobile virtual joystick
+      const lerpSpeed = 8 * dt; // smooth interpolation
+      this.moveDir.x += (this._smoothMove.x - this.moveDir.x) * Math.min(1, lerpSpeed);
+      this.moveDir.y += (this._smoothMove.y - this.moveDir.y) * Math.min(1, lerpSpeed);
+      // Dead zone cleanup
+      if (Math.abs(this.moveDir.x) < 0.01) this.moveDir.x = 0;
+      if (Math.abs(this.moveDir.y) < 0.01) this.moveDir.y = 0;
+    } else {
       let mx=0, my=0;
       if(this.wasd.A.isDown||this.cursors.left.isDown) mx=-1;
       if(this.wasd.D.isDown||this.cursors.right.isDown) mx=1;
       if(this.wasd.W.isDown||this.cursors.up.isDown) my=-1;
       if(this.wasd.S.isDown||this.cursors.down.isDown) my=1;
       if(mx||my){const l=Math.sqrt(mx*mx+my*my);this.moveDir.x=mx/l;this.moveDir.y=my/l;}
-      else if(!this.joystickActive){this.moveDir.x=0;this.moveDir.y=0;}
+      else{this.moveDir.x=0;this.moveDir.y=0;}
     }
     this.player.body.setVelocity(this.moveDir.x*this.playerSpeed, this.moveDir.y*this.playerSpeed);
     if (this.moveDir.x > 0.1) { this.player.setFlipX(false); this.facingRight = true; }
