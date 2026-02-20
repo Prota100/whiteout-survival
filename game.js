@@ -872,7 +872,14 @@ class GameScene extends Phaser.Scene {
     }
 
     const label = this.add.text(wx, wy-25, def.icon, {fontSize:'16px'}).setDepth(3).setOrigin(0.5);
-    const bld = { type: this.buildMode, x: wx, y: wy, graphic: g, label, def };
+
+    // Warmth radius visualization for campfire/tent
+    let warmthGfx = null;
+    if (def.warmth) {
+      warmthGfx = this.add.graphics().setDepth(1);
+    }
+
+    const bld = { type: this.buildMode, x: wx, y: wy, graphic: g, label, def, warmthGfx };
     this.placedBuildings.push(bld);
 
     if (!this.stats.built[this.buildMode]) this.stats.built[this.buildMode] = 0;
@@ -1183,6 +1190,83 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  updateWarmthVisuals(dt) {
+    // Animate warmth pulse
+    if (!this._warmthPulse) this._warmthPulse = 0;
+    this._warmthPulse += dt * 1.5;
+    const pulse = Math.sin(this._warmthPulse) * 0.06 + 1.0; // gentle 0.94~1.06 pulse
+
+    const WARMTH_RADIUS = 80; // matches the overlap distance in updateSurvival
+    const playerInWarmth = { near: false };
+
+    this.placedBuildings.forEach(b => {
+      if (!b.def.warmth || !b.warmthGfx) return;
+      const g = b.warmthGfx;
+      g.clear();
+
+      const r = WARMTH_RADIUS * pulse;
+      const innerR = r * 0.5;
+
+      // Outer warmth zone - soft orange glow
+      g.fillStyle(0xFF8C00, 0.08);
+      g.fillCircle(b.x, b.y, r);
+
+      // Middle warmth zone
+      g.fillStyle(0xFF6600, 0.12);
+      g.fillCircle(b.x, b.y, r * 0.7);
+
+      // Inner strong warmth - warm core
+      g.fillStyle(0xFF4500, 0.18);
+      g.fillCircle(b.x, b.y, innerR);
+
+      // Dashed border ring
+      const segments = 32;
+      g.lineStyle(1.5, 0xFF8C00, 0.35);
+      for (let i = 0; i < segments; i += 2) {
+        const a1 = (i / segments) * Math.PI * 2;
+        const a2 = ((i + 1) / segments) * Math.PI * 2;
+        g.beginPath();
+        g.arc(b.x, b.y, r, a1, a2);
+        g.strokePath();
+      }
+
+      // Check if player is in range
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y);
+      if (dist < WARMTH_RADIUS) playerInWarmth.near = true;
+    });
+
+    // Show/hide warmth indicator on HUD
+    if (playerInWarmth.near && !this._warmthLabel) {
+      this._warmthLabel = this.add.text(160, 44, '🔥 따뜻함', {
+        fontSize: '12px', fontFamily: 'monospace', color: '#FF9800', stroke: '#000', strokeThickness: 2
+      }).setScrollFactor(0).setDepth(101);
+    } else if (!playerInWarmth.near && this._warmthLabel) {
+      this._warmthLabel.destroy();
+      this._warmthLabel = null;
+    }
+
+    // Fire particles for campfire/tent buildings (spawn occasionally)
+    this.placedBuildings.forEach(b => {
+      if (!b.def.warmth) return;
+      if (Math.random() < dt * 3) { // ~3 particles per second
+        const px = b.x + Phaser.Math.Between(-6, 6);
+        const py = b.y - 5;
+        const p = this.add.image(px, py, 'hit_particle').setDepth(4).setTint(
+          Phaser.Utils.Array.GetRandom([0xFF4500, 0xFF6600, 0xFFCC00, 0xFF0000])
+        ).setScale(Phaser.Math.FloatBetween(0.4, 0.8)).setAlpha(0.8);
+        this.tweens.add({
+          targets: p,
+          y: py - Phaser.Math.Between(20, 40),
+          x: px + Phaser.Math.Between(-10, 10),
+          alpha: 0,
+          scale: 0.1,
+          duration: Phaser.Math.Between(500, 900),
+          onComplete: () => p.destroy()
+        });
+      }
+    });
+  }
+
   endGame() {
     if (this.gameOver) return;
     this.gameOver = true;
@@ -1282,6 +1366,9 @@ class GameScene extends Phaser.Scene {
 
     // Quests
     this.checkQuests();
+
+    // Warmth area visualization
+    this.updateWarmthVisuals(dt);
 
     // UI
     this.updateUI();
