@@ -6,7 +6,7 @@ const WORLD_H = 2400;
 
 // ── Animal Definitions (BALANCED) ──
 const ANIMALS = {
-  rabbit:  { hp: 2,  speed: 30,  damage: 0, drops: { meat: 1 }, size: 12, behavior: 'flee', name: '토끼', aggroRange: 80, fleeRange: 60, fleeDistance: 80 },
+  rabbit:  { hp: 1,  speed: 25,  damage: 0, drops: { meat: 1 }, size: 12, behavior: 'flee', name: '토끼', aggroRange: 60, fleeRange: 40, fleeDistance: 60 },
   deer:    { hp: 4,  speed: 35,  damage: 0, drops: { meat: 2, leather: 1 }, size: 14, behavior: 'flee', name: '사슴', aggroRange: 120, fleeRange: 90, fleeDistance: 100 },
   penguin: { hp: 3,  speed: 20,  damage: 0, drops: { meat: 1 }, size: 12, behavior: 'wander', name: '펭귄', aggroRange: 0, fleeRange: 0, fleeDistance: 0 },
   seal:    { hp: 5,  speed: 15,  damage: 0, drops: { meat: 2, leather: 2 }, size: 16, behavior: 'wander', name: '물개', aggroRange: 0, fleeRange: 0, fleeDistance: 0 },
@@ -625,8 +625,8 @@ class GameScene extends Phaser.Scene {
   create() {
     // ── State ──
     this.res = { meat: 0, wood: 0, stone: 0, leather: 0, gold: 0 };
-    this.playerHP = 15; this.playerMaxHP = 15;
-    this.playerDamage = 1; this.playerSpeed = 150;
+    this.playerHP = 20; this.playerMaxHP = 20;
+    this.playerDamage = 1; this.playerSpeed = 160;
     this.warmthResist = 1;
     this.woodBonus = 0; this.stoneBonus = 0;
     this.temperature = 100; this.maxTemp = 100;
@@ -1332,18 +1332,29 @@ class GameScene extends Phaser.Scene {
 
   // ── Survival ──
   updateSurvival(dt) {
-    const tempLoss = 1.5 * this.warmthResist * dt;
+    const tempLoss = 0.5 * this.warmthResist * dt;
     this.temperature = Math.max(0, this.temperature - tempLoss);
 
     this.placedBuildings.forEach(b => {
       if (!b.def.warmth) return;
+      const warmthRadius = 120;
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y);
-      if (d < 80) {
+      if (d < warmthRadius) {
         this.temperature = Math.min(this.maxTemp, this.temperature + b.def.warmth * dt);
+        this.playerHP = Math.min(this.playerMaxHP, this.playerHP + 3 * dt);
       }
+      // Scare animals away from fire
+      this.animals.getChildren().forEach(a => {
+        if (!a.active) return;
+        const ad = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
+        if (ad < 80) {
+          const ang = Phaser.Math.Angle.Between(b.x, b.y, a.x, a.y);
+          a.body.setVelocity(Math.cos(ang) * a.def.speed * 1.5, Math.sin(ang) * a.def.speed * 1.5);
+        }
+      });
     });
 
-    this.hunger = Math.max(0, this.hunger - 0.8 * dt);
+    this.hunger = Math.max(0, this.hunger - 0.3 * dt);
 
     if (this.temperature <= 0) {
       this.playerHP -= 2 * dt;
