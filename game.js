@@ -641,6 +641,12 @@ class GameScene extends Phaser.Scene {
     this.isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || ('ontouchstart' in window);
     this.facingRight = true;
 
+    // Safe area insets (cached, updated on resize)
+    this.safeBottom = getSafeBottom();
+    this.safeTop = getSafeTop();
+    this.uiBottomMargin = Math.max(this.safeBottom + 8, 20); // minimum 20px from bottom edge
+    this.uiTopMargin = Math.max(this.safeTop + 4, 8);
+
     this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0 };
     this.questIndex = 0;
     this.questCompleted = [];
@@ -1418,7 +1424,9 @@ class GameScene extends Phaser.Scene {
 
     this.input.on('pointerdown', p => {
       if (this.gameOver || this.isUIArea(p)) return;
-      if (p.x < this.cameras.main.width * 0.45 && p.y > this.cameras.main.height * 0.35) {
+      const h = this.cameras.main.height;
+      const maxY = h - this.uiBottomMargin - 40; // don't go below buttons
+      if (p.x < this.cameras.main.width * 0.45 && p.y > this.cameras.main.height * 0.3 && p.y < maxY) {
         this.joystickActive = true; this.joystickPID = p.id;
         this.joyOrigin = {x:p.x, y:p.y};
         // Draw base
@@ -1454,27 +1462,30 @@ class GameScene extends Phaser.Scene {
   }
 
   isJoystickArea(p) {
-    return p.x < this.cameras.main.width * 0.45 && p.y > this.cameras.main.height * 0.35;
+    const h = this.cameras.main.height;
+    const maxY = h - this.uiBottomMargin - 40;
+    return p.x < this.cameras.main.width * 0.45 && p.y > this.cameras.main.height * 0.3 && p.y < maxY;
   }
 
   // ── UI ──
   createUI() {
     const s = {fontSize:'13px', fontFamily:'monospace', color:'#fff', stroke:'#000', strokeThickness:3};
 
-    // Resource bar (top)
+    // Resource bar (top) - positions set by positionUI()
+    const topY = this.uiTopMargin;
     this.uiResBg = this.add.graphics().setScrollFactor(0).setDepth(99);
-    this.uiRes = this.add.text(10, 8, '', s).setScrollFactor(0).setDepth(100);
+    this.uiRes = this.add.text(10, topY, '', s).setScrollFactor(0).setDepth(100);
     
     // Status bars
     this.uiHP = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.uiHPText = this.add.text(10, 28, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
+    this.uiHPText = this.add.text(10, topY + 20, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
     this.uiTemp = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.uiTempText = this.add.text(10, 44, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
+    this.uiTempText = this.add.text(10, topY + 36, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
     this.uiHunger = this.add.graphics().setScrollFactor(0).setDepth(100);
-    this.uiHungerText = this.add.text(10, 60, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
+    this.uiHungerText = this.add.text(10, topY + 52, '', {...s, fontSize:'11px'}).setScrollFactor(0).setDepth(101);
 
     // Quest
-    this.uiQuest = this.add.text(10, 82, '', {...s, fontSize:'11px', color:'#FFD700', wordWrap:{width:220}}).setScrollFactor(0).setDepth(100);
+    this.uiQuest = this.add.text(10, topY + 74, '', {...s, fontSize:'11px', color:'#FFD700', wordWrap:{width:220}}).setScrollFactor(0).setDepth(100);
 
     // Bottom buttons
     this.uiBtns = [];
@@ -1504,27 +1515,72 @@ class GameScene extends Phaser.Scene {
 
     this.npcLabels = [];
     this.positionUI();
-    this.scale.on('resize', () => this.positionUI());
+    this.scale.on('resize', () => {
+      this.positionUI();
+      // Close any open panel on resize to avoid layout issues
+      if (this.activePanel) { this.clearPanel(); this.activePanel = null; }
+    });
+
+    // Also handle orientation change
+    window.addEventListener('orientationchange', () => {
+      this.time.delayedCall(300, () => this.positionUI());
+    });
   }
 
   positionUI() {
+    // Recalculate safe areas on resize
+    this.safeBottom = getSafeBottom();
+    this.safeTop = getSafeTop();
+    this.uiBottomMargin = Math.max(this.safeBottom + 8, 20);
+    this.uiTopMargin = Math.max(this.safeTop + 4, 8);
+
     const w = this.cameras.main.width, h = this.cameras.main.height;
-    const totalBtns = this.uiBtns.length;
+    const btnY = h - this.uiBottomMargin - 34; // buttons above safe area
     const gap = 4;
+
+    // On small screens, use smaller font
+    const isSmall = w < 400;
+    const fontSize = isSmall ? '12px' : '14px';
+    const padX = isSmall ? 5 : 8;
+    const padY = isSmall ? 4 : 6;
+    this.uiBtns.forEach(btn => {
+      btn.setStyle({ fontSize, padding: { x: padX, y: padY }});
+    });
+
     // Calculate button widths and center them
     let totalW = 0;
     this.uiBtns.forEach(btn => { totalW += btn.width + gap; });
-    let startX = (w - totalW) / 2;
+    
+    // If too wide, wrap or shrink
+    if (totalW > w - 20) {
+      // Use even smaller font
+      this.uiBtns.forEach(btn => {
+        btn.setStyle({ fontSize: '11px', padding: { x: 3, y: 3 }});
+      });
+      totalW = 0;
+      this.uiBtns.forEach(btn => { totalW += btn.width + gap; });
+    }
+
+    let startX = Math.max(4, (w - totalW) / 2);
     this.uiBtns.forEach((btn) => {
-      btn.setPosition(startX, h - 40);
+      btn.setPosition(startX, btnY);
       startX += btn.width + gap;
     });
+
+    // Reposition top UI elements with safe top margin
+    const topY = this.uiTopMargin;
+    this.uiRes.setPosition(10, topY);
+    this.uiHPText.setPosition(10, topY + 20);
+    this.uiTempText.setPosition(10, topY + 36);
+    this.uiHungerText.setPosition(10, topY + 52);
+    this.uiQuest.setPosition(10, topY + 74);
   }
 
   isUIArea(p) {
     const h = this.cameras.main.height, w = this.cameras.main.width;
-    if (p.y > h - 50) return true;
-    if (p.y < 100 && p.x < 250) return true;
+    const btnZone = this.uiBottomMargin + 44;
+    if (p.y > h - btnZone) return true; // bottom buttons + safe area
+    if (p.y < this.uiTopMargin + 96 && p.x < 250) return true; // top status area
     if (this.activePanel && p.x > w - 230 && p.y > 60 && p.y < h - 60) return true;
     return false;
   }
@@ -1634,10 +1690,12 @@ class GameScene extends Phaser.Scene {
   updateUI() {
     const icons = {meat:'🥩',wood:'🪵',stone:'🪨',leather:'🧶',gold:'💰'};
     
+    const topY = this.uiTopMargin;
+
     // Resource background
     this.uiResBg.clear();
     this.uiResBg.fillStyle(0x0a0a1e, 0.7);
-    this.uiResBg.fillRoundedRect(4, 4, 240, 96, 8);
+    this.uiResBg.fillRoundedRect(4, topY - 4, 240, 100, 8);
     
     this.uiRes.setText(Object.entries(this.res).filter(([_,v])=>v>0).map(([k,v])=>`${icons[k]||k}${v}`).join(' '));
 
@@ -1646,15 +1704,15 @@ class GameScene extends Phaser.Scene {
     const hpR = this.playerHP/this.playerMaxHP;
     const hpCol = hpR > 0.6 ? 0x4CAF50 : hpR > 0.3 ? 0xFFCC00 : 0xF44336;
     const hpCol2 = hpR > 0.6 ? 0x66DD66 : hpR > 0.3 ? 0xFFEE44 : 0xFF6666;
-    this.drawBar(this.uiHP, 10, 28, 150, 13, hpR, hpCol, hpCol2);
+    this.drawBar(this.uiHP, 10, topY + 20, 150, 13, hpR, hpCol, hpCol2);
     this.uiHPText.setText(`❤️ ${Math.ceil(Math.max(0,this.playerHP))}/${this.playerMaxHP}`);
 
     this.uiTemp.clear();
-    this.drawBar(this.uiTemp, 10, 44, 150, 13, this.temperature/this.maxTemp, 0x42A5F5, 0x66CCFF);
+    this.drawBar(this.uiTemp, 10, topY + 36, 150, 13, this.temperature/this.maxTemp, 0x42A5F5, 0x66CCFF);
     this.uiTempText.setText(`🌡️ ${Math.ceil(this.temperature)}%`);
 
     this.uiHunger.clear();
-    this.drawBar(this.uiHunger, 10, 60, 150, 13, this.hunger/this.maxHunger, 0xFF9800, 0xFFBB44);
+    this.drawBar(this.uiHunger, 10, topY + 52, 150, 13, this.hunger/this.maxHunger, 0xFF9800, 0xFFBB44);
     this.uiHungerText.setText(`🍖 ${Math.ceil(this.hunger)}%`);
 
     // Quest
@@ -1805,11 +1863,32 @@ class GameScene extends Phaser.Scene {
   }
 }
 
+// ── Safe Area & Viewport Helpers ──
+function getSafeBottom() {
+  if (window.getSafeAreaInsets) {
+    try { return Math.max(window.getSafeAreaInsets().bottom, 0); } catch(e) {}
+  }
+  // Fallback: detect iOS notch-era devices
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  if (isIOS && window.screen.height >= 812) return 34;
+  return 0;
+}
+function getSafeTop() {
+  if (window.getSafeAreaInsets) {
+    try { return Math.max(window.getSafeAreaInsets().top, 0); } catch(e) {}
+  }
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  if (isIOS && window.screen.height >= 812) return 47;
+  return 0;
+}
+function getVW() { return window.getGameWidth ? window.getGameWidth() : window.innerWidth; }
+function getVH() { return window.getGameHeight ? window.getGameHeight() : window.innerHeight; }
+
 const config = {
   type: Phaser.AUTO,
   parent: 'game-container',
-  width: window.innerWidth,
-  height: window.innerHeight,
+  width: getVW(),
+  height: getVH(),
   backgroundColor: '#1a1a2e',
   physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
   scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
@@ -1817,4 +1896,11 @@ const config = {
   input: { activePointers: 3 },
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+// Listen to visualViewport resize (iOS Safari toolbar show/hide)
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    game.scale.resize(getVW(), getVH());
+  });
+}
