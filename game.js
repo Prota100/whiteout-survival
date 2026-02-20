@@ -1435,7 +1435,7 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: d, x: tx, y: ty, duration: 400, ease: 'Bounce.Out' });
     this.tweens.add({ targets: d, scale: { from: 0.3, to: 1 }, duration: 300, ease: 'Back.Out' });
     this.tweens.add({ targets: d, alpha: { from: 1, to: 0.6 }, yoyo: true, repeat: -1, duration: 800 });
-    this.physics.add.overlap(this.player, d, (_, drop) => this.collectDrop(drop));
+    // Note: group-level overlap in create() handles collection; no per-drop overlap needed
   }
 
   collectDrop(drop) {
@@ -2193,6 +2193,14 @@ class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const W = cam.width, H = cam.height;
 
+    // Clean up any previous upgrade UI elements to prevent text overlap
+    if (this._upgradeUIElements) {
+      this._upgradeUIElements.forEach(el => {
+        if (el && el.destroy) { try { el.destroy(); } catch(e) {} }
+      });
+      this._upgradeUIElements = null;
+    }
+
     // Container for all UI elements
     const uiElements = [];
 
@@ -2412,10 +2420,11 @@ class GameScene extends Phaser.Scene {
     // Close UI after brief delay
     this.time.delayedCall(300, () => {
       uiElements.forEach(el => {
-        if (el && el.destroy) {
-          this.tweens.add({ targets: el, alpha: 0, duration: 200, onComplete: () => el.destroy() });
+        if (el && el.active !== false && el.destroy) {
+          this.tweens.add({ targets: el, alpha: 0, duration: 200, onComplete: () => { try { el.destroy(); } catch(e) {} } });
         }
       });
+      this._upgradeUIElements = null;
       this.time.delayedCall(250, () => {
         this.upgradeUIActive = false;
         this.physics.resume();
