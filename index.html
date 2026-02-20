@@ -38,7 +38,10 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
   display: flex; justify-content: center; gap: 5px;
   padding: 0 8px;
   pointer-events: none;
+  z-index: 20;
 }
+#dom-hud { z-index: 20; }
+#joystick-zone { z-index: 5; }
 #bottom-buttons button {
   pointer-events: auto;
   background: rgba(20, 20, 50, 0.88);
@@ -87,7 +90,7 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
     </div>
 
     <!-- 조이스틱 영역 (모바일) -->
-    <div id="joystick-zone" style="display:none;position:absolute;left:0;top:25%;width:45%;bottom:calc(60px + env(safe-area-inset-bottom,0px));pointer-events:auto;touch-action:none;">
+    <div id="joystick-zone" style="display:none;position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:auto;touch-action:none;">
       <div id="joystick" style="display:none;position:absolute;width:110px;height:110px;border-radius:50%;border:3px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);">
         <div id="joystick-knob" style="position:absolute;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.35);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;"></div>
       </div>
@@ -105,10 +108,10 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
 </div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 <script>
-var GV="ultimate-008-dom";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
+var GV="ultimate-009-joy";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
 if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(g){g.unregister();});});
 if('caches' in window)caches.keys().then(function(n){n.forEach(function(k){caches.delete(k);});});
 </script>
-<script src="game.js?v=20250220-ultimate-008"></script>
+<script src="game.js?v=20250220-ultimate-009"></script>
 </body>
 </html>
