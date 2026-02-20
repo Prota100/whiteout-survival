@@ -23,12 +23,20 @@ function resumeAudio(){
   if(!_bgmStarted&&soundEnabled){_bgmStarted=true;startBGM();}
 }
 
-function _playSFX(name,vol=0.5){
+function _playSFX(name,vol=0.5,distance=0,maxDistance=0){
   if(!audioCtx||!soundEnabled||!_sfxCache[name])return;
   const src=audioCtx.createBufferSource();
   const gain=audioCtx.createGain();
   src.buffer=_sfxCache[name];
-  gain.gain.value=vol;
+  // 거리 기반 볼륨 감쇠 (maxDistance 내에서 선형 감쇠)
+  let finalVol = vol;
+  if(maxDistance > 0 && distance > 0) {
+    const attenuation = Math.max(0.1, 1 - (distance / maxDistance));
+    finalVol = vol * attenuation;
+  }
+  // 전체 볼륨 제한 (0.3~0.5 범위)
+  finalVol = Math.min(0.5, Math.max(0.3, finalVol));
+  gain.gain.value=finalVol;
   src.connect(gain).connect(audioCtx.destination);
   src.start(0);
   return src;
@@ -49,19 +57,19 @@ function startBGM(){
 function stopBGM(){if(_bgm){try{_bgm.src.stop();}catch(e){}_bgm=null;}}
 
 // Legacy-compatible sound functions using ElevenLabs SFX
-function playSlash(){_playSFX('slash',0.4)}
-function playHit(){_playSFX('hit',0.5)}
-function playKill(){_playSFX('kill',0.5)}
-function playCoin(){_playSFX('coin',0.35)}
-function playChop(){_playSFX('chop',0.4)}
-function playBuild(){_playSFX('build',0.5)}
-function playCraft(){_playSFX('craft',0.45)}
-function playHire(){_playSFX('hire',0.5)}
-function playHurt(){_playSFX('hurt',0.6)}
-function playEat(){_playSFX('eat',0.4)}
-function playQuest(){_playSFX('quest',0.5)}
-function playDeath(){_playSFX('death',0.6)}
-function playWhiff(){_playSFX('slash',0.1)}
+function playSlash(){_playSFX('slash',0.35)}
+function playHit(){_playSFX('hit',0.4)}
+function playKill(){_playSFX('kill',0.4)}
+function playCoin(){_playSFX('coin',0.3)}
+function playChop(){_playSFX('chop',0.35)}
+function playBuild(){_playSFX('build',0.4)}
+function playCraft(){_playSFX('craft',0.35)}
+function playHire(){_playSFX('hire',0.4)}
+function playHurt(){_playSFX('hurt',0.45)}
+function playEat(){_playSFX('eat',0.3)}
+function playQuest(){_playSFX('quest',0.4)}
+function playDeath(){_playSFX('death',0.45)}
+function playWhiff(){_playSFX('slash',0.08)}
 function playLevelUp(){
   if(!audioCtx||!soundEnabled)return;
   // Triumphant ascending arpeggio
@@ -1510,16 +1518,17 @@ class GameScene extends Phaser.Scene {
   drawBackground() {
     const bg = this.add.graphics();
     // Zone colors: safe=#E8E8F0, normal=#B0C4DE, danger=#6A7A8A, extreme=#2D2D3A
+    // 더 부드러운 눈밭 색상으로 개선
     const zoneColors = [
-      { r: 0xE8, g: 0xE8, b: 0xF0 }, // safe
-      { r: 0xB0, g: 0xC4, b: 0xDE }, // normal
-      { r: 0x6A, g: 0x7A, b: 0x8A }, // danger
-      { r: 0x2D, g: 0x2D, b: 0x3A }, // extreme
+      { r: 0xEE, g: 0xEE, b: 0xF5 }, // safe - 밝은 눈색
+      { r: 0xC8, g: 0xD4, b: 0xE0 }, // normal - 연한 파랑
+      { r: 0x7A, g: 0x88, b: 0x96 }, // danger - 중간 회색
+      { r: 0x35, g: 0x3D, b: 0x45 }, // extreme - 어두운 회색
     ];
     const zoneRadii = [ZONE_RADII.safe, ZONE_RADII.normal, ZONE_RADII.danger, Math.hypot(WORLD_W, WORLD_H)];
     const cx = MAP_CENTER.x, cy = MAP_CENTER.y;
-    const tileSize = 40;
-    const gradientWidth = 80; // gradient transition width in px
+    const tileSize = 32; // 더 작은 타일로 부드러운 전환
+    const gradientWidth = 120; // 그라데이션 폭 증가
 
     for (let tx = 0; tx < WORLD_W; tx += tileSize) {
       for (let ty = 0; ty < WORLD_H; ty += tileSize) {
@@ -1529,39 +1538,53 @@ class GameScene extends Phaser.Scene {
         for (let z = 0; z < zoneRadii.length; z++) {
           if (dist <= zoneRadii[z]) { zoneIdx = z; break; }
         }
-        // Blend between current zone and next zone at boundary
+        // Blend between current zone and next zone at boundary (더 부드러운 전환)
         let c = zoneColors[zoneIdx];
         if (zoneIdx < 3) {
           const edge = zoneRadii[zoneIdx];
           const distToEdge = edge - dist;
           if (distToEdge < gradientWidth && distToEdge >= 0) {
-            const t = 1 - distToEdge / gradientWidth; // 0 at zone center, 1 at boundary
+            // smoothstep 함수로 더 자연스러운 전환
+            const t = 1 - distToEdge / gradientWidth;
+            const smoothT = t * t * (3 - 2 * t);
             const nc = zoneColors[zoneIdx + 1];
             c = {
-              r: Math.round(c.r + (nc.r - c.r) * t),
-              g: Math.round(c.g + (nc.g - c.g) * t),
-              b: Math.round(c.b + (nc.b - c.b) * t),
+              r: Math.round(c.r + (nc.r - c.r) * smoothT),
+              g: Math.round(c.g + (nc.g - c.g) * smoothT),
+              b: Math.round(c.b + (nc.b - c.b) * smoothT),
             };
           }
         }
-        // Slight tile variation for texture
-        const variation = Phaser.Math.Between(-8, 8);
+        // 노이즈 기반 타일 변화 (Perlin-like)
+        const noiseX = Math.floor(tx / tileSize);
+        const noiseY = Math.floor(ty / tileSize);
+        const noiseVal = Math.sin(noiseX * 0.5) * Math.cos(noiseY * 0.5) * 0.5 + 0.5;
+        const variation = (noiseVal - 0.5) * 16; // -8 ~ 8 범위
         const cr = Phaser.Math.Clamp(c.r + variation, 0, 255);
         const cg = Phaser.Math.Clamp(c.g + variation, 0, 255);
         const cb = Phaser.Math.Clamp(c.b + variation, 0, 255);
         const color = (cr << 16) | (cg << 8) | cb;
         bg.fillStyle(color, 1);
         bg.fillRect(tx, ty, tileSize, tileSize);
-        // Subtle grid lines
-        bg.lineStyle(1, 0x000000, 0.05);
-        bg.strokeRect(tx, ty, tileSize, tileSize);
       }
     }
-    // Snow spots overlay for texture
-    for (let i = 0; i < 80; i++) {
-      bg.fillStyle(0xFFFFFF, Phaser.Math.FloatBetween(0.03, 0.15));
-      bg.fillEllipse(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(0, WORLD_H),
-        Phaser.Math.Between(20, 100), Phaser.Math.Between(10, 40));
+    // 자연스러운 눈 패턴 오버레이
+    for (let i = 0; i < 150; i++) {
+      const x = Phaser.Math.Between(0, WORLD_W);
+      const y = Phaser.Math.Between(0, WORLD_H);
+      const w = Phaser.Math.Between(30, 150);
+      const h = Phaser.Math.Between(15, 60);
+      const alpha = Phaser.Math.FloatBetween(0.02, 0.12);
+      bg.fillStyle(0xFFFFFF, alpha);
+      bg.fillEllipse(x, y, w, h);
+    }
+    // 작은 눈 결정 패턴
+    for (let i = 0; i < 300; i++) {
+      const x = Phaser.Math.Between(0, WORLD_W);
+      const y = Phaser.Math.Between(0, WORLD_H);
+      const size = Phaser.Math.Between(2, 8);
+      bg.fillStyle(0xFFFFFF, Phaser.Math.FloatBetween(0.05, 0.15));
+      bg.fillCircle(x, y, size);
     }
   }
 
@@ -2188,6 +2211,9 @@ class GameScene extends Phaser.Scene {
             if (bestD < 40 && npc.actionTimer <= 0) {
               this.damageAnimal(best, dmg);
               npc.actionTimer = npc.npcType === 'warrior' ? 0.5 : 0.8;
+              // 사냥꾼/전사 타격 사운드 - 거리 기반 감쇠 적용
+              const distToPlayer = Phaser.Math.Distance.Between(npc.x, npc.y, this.player.x, this.player.y);
+              _playSFX('hit', 0.35, distToPlayer, 400);
             }
           } else this.followPlayer(npc, followDist);
           break;
@@ -3661,8 +3687,28 @@ class GameScene extends Phaser.Scene {
       if (mag > 1) { finalMX /= mag; finalMY /= mag; }
     }
     this.player.body.setVelocity(finalMX*this.playerSpeed, finalMY*this.playerSpeed);
-    if (finalMX > 0.1) { this.player.setFlipX(false); this.facingRight = true; }
-    else if (finalMX < -0.1) { this.player.setFlipX(true); this.facingRight = false; }
+    // 4방향 스프라이트 전환 (상하좌우)
+    const absX = Math.abs(finalMX);
+    const absY = Math.abs(finalMY);
+    if (absX > absY) {
+      // 좌우 이동
+      if (finalMX > 0.1) { 
+        this.player.setFlipX(false); 
+        this.facingRight = true; 
+        this.playerFacing = 'right';
+      } else if (finalMX < -0.1) { 
+        this.player.setFlipX(true); 
+        this.facingRight = false; 
+        this.playerFacing = 'left';
+      }
+    } else if (absY > 0.1) {
+      // 상하 이동
+      if (finalMY < -0.1) {
+        this.playerFacing = 'up';
+      } else if (finalMY > 0.1) {
+        this.playerFacing = 'down';
+      }
+    }
 
     // Upgrade: passive regen
     if (this.upgradeManager.regenPerSec > 0) {
