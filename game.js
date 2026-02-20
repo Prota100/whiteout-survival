@@ -3654,13 +3654,139 @@ class GameScene extends Phaser.Scene {
   }
 
   updateBlizzardVisuals(dt) {
-    if (this.blizzardActive) {
-      const cam = this.cameras.main;
-      const pulse = 0.15 + Math.sin(this.time.now / 500) * 0.05;
-      this.coldWaveOverlay.clear();
+    const cam = this.cameras.main;
+    const W = cam.width, H = cam.height;
+
+    // ═══ 블리자드 화면 효과 (한파 강도 연동) ═══
+    const coldLevel = this.blizzardActive ? this.blizzardIndex : 0;
+    this.coldWaveOverlay.clear();
+    if (coldLevel > 0) {
+      // 블루 비네팅 (한파 3+)
+      if (coldLevel >= 3) {
+        const vigAlpha = coldLevel >= 5 ? 0.3 : 0.15;
+        // Vignette: fill edges with blue gradient approximation
+        this.coldWaveOverlay.fillStyle(0x1133AA, vigAlpha);
+        this.coldWaveOverlay.fillRect(0, 0, W * 0.15, H); // left
+        this.coldWaveOverlay.fillRect(W * 0.85, 0, W * 0.15, H); // right
+        this.coldWaveOverlay.fillRect(0, 0, W, H * 0.12); // top
+        this.coldWaveOverlay.fillRect(0, H * 0.88, W, H * 0.12); // bottom
+      }
+      // Overall blue overlay
+      const pulse = (coldLevel >= 5 ? 0.2 : coldLevel >= 3 ? 0.12 : 0.06) + Math.sin(this.time.now / 500) * 0.03;
       this.coldWaveOverlay.fillStyle(0x2244CC, pulse);
-      this.coldWaveOverlay.fillRect(0, 0, cam.width, cam.height);
+      this.coldWaveOverlay.fillRect(0, 0, W, H);
       this.coldWaveOverlay.setAlpha(1);
+
+      // 화면 흔들림 (한파 5+)
+      if (coldLevel >= 5 && !this._blizzardShaking) {
+        this._blizzardShaking = true;
+        cam.shake(99999, 0.002); // continuous subtle shake
+      }
+    } else {
+      this.coldWaveOverlay.setAlpha(0);
+      if (this._blizzardShaking) {
+        this._blizzardShaking = false;
+        cam.shake(0); // stop shake
+      }
+    }
+
+    // ═══ 눈 입자 시스템 (한파 강도 연동) ═══
+    if (!this._snowParticles) this._snowParticles = [];
+    const targetCount = coldLevel >= 5 ? 100 : coldLevel >= 3 ? 50 : coldLevel >= 1 ? 20 : 0;
+    const snowAlpha = coldLevel >= 5 ? 0.3 : coldLevel >= 3 ? 0.2 : 0.1;
+    // Spawn missing particles
+    while (this._snowParticles.length < targetCount) {
+      this._snowParticles.push({
+        x: Math.random() * W, y: Math.random() * H,
+        speed: 80 + Math.random() * 150,
+        drift: -30 - Math.random() * 40, // diagonal
+        size: 1 + Math.random() * 3
+      });
+    }
+    // Remove excess
+    while (this._snowParticles.length > targetCount) this._snowParticles.pop();
+    // Update & draw
+    if (this._snowParticles.length > 0) {
+      this._snowParticles.forEach(p => {
+        p.y += p.speed * dt;
+        p.x += p.drift * dt;
+        if (p.y > H + 10) { p.y = -10; p.x = Math.random() * W; }
+        if (p.x < -10) p.x = W + 10;
+        this.coldWaveOverlay.fillStyle(0xFFFFFF, snowAlpha);
+        this.coldWaveOverlay.fillCircle(p.x, p.y, p.size);
+      });
+    }
+  }
+
+  // ═══ 눈덩이/눈사태 시스템 ═══
+  updateSnowballs(dt) {
+    if (!this._snowballs) this._snowballs = [];
+    if (!this._snowballTimer) this._snowballTimer = 0;
+    this._snowballTimer += dt;
+
+    const zone = this.getPlayerZone();
+    const isActive = zone === 'danger' || zone === 'extreme';
+    if (!isActive) return;
+
+    // Spawn interval: 10~20s
+    const spawnInterval = zone === 'extreme' ? 10 : 15 + Math.random() * 5;
+    if (this._snowballTimer >= spawnInterval) {
+      this._snowballTimer = 0;
+      const count = zone === 'extreme' ? Phaser.Math.Between(5, 8) : Phaser.Math.Between(1, 3);
+      const cam = this.cameras.main;
+      for (let i = 0; i < count; i++) {
+        const size = Phaser.Math.Between(20, 60);
+        const sx = cam.scrollX + Phaser.Math.Between(0, cam.width);
+        const sy = cam.scrollY - 40;
+        const speed = Phaser.Math.Between(150, 250);
+        const driftX = Phaser.Math.Between(-40, 40);
+        const g = this.add.graphics().setDepth(45);
+        const snowball = { x: sx, y: sy, size, speed, driftX, graphic: g, damage: Math.floor(15 + size * 0.25) };
+        // Trail particles array
+        snowball.trails = [];
+        this._snowballs.push(snowball);
+      }
+      if (zone === 'extreme') {
+        this.showCenterAlert('⛰️ 눈사태!', '#FFFFFF');
+        this.cameras.main.shake(300, 0.01);
+      }
+    }
+
+    // Update existing snowballs
+    for (let i = this._snowballs.length - 1; i >= 0; i--) {
+      const sb = this._snowballs[i];
+      sb.y += sb.speed * dt;
+      sb.x += sb.driftX * dt;
+      // Draw
+      sb.graphic.clear();
+      sb.graphic.fillStyle(0xFFFFFF, 0.85);
+      sb.graphic.fillCircle(sb.x, sb.y, sb.size / 2);
+      sb.graphic.fillStyle(0xDDEEFF, 0.4);
+      sb.graphic.fillCircle(sb.x - sb.size * 0.15, sb.y - sb.size * 0.15, sb.size * 0.2);
+
+      // Player collision
+      const dist = Phaser.Math.Distance.Between(sb.x, sb.y, this.player.x, this.player.y);
+      if (dist < sb.size / 2 + 12) {
+        this.playerHP -= sb.damage;
+        playHurt();
+        this.cameras.main.shake(150, 0.01);
+        this.showFloatingText(this.player.x, this.player.y - 20, `-${sb.damage} ☃️`, '#AADDFF');
+        // 0.5s slow
+        const origSpeed = this.playerSpeed;
+        this.playerSpeed *= 0.5;
+        this.time.delayedCall(500, () => { this.playerSpeed = Math.max(this.playerSpeed, origSpeed); });
+        sb.graphic.destroy();
+        this._snowballs.splice(i, 1);
+        if (this.playerHP <= 0) this.endGame();
+        continue;
+      }
+
+      // Remove if off screen
+      const cam = this.cameras.main;
+      if (sb.y > cam.scrollY + cam.height + 100 || sb.x < cam.scrollX - 100 || sb.x > cam.scrollX + cam.width + 100) {
+        sb.graphic.destroy();
+        this._snowballs.splice(i, 1);
+      }
     }
   }
 
@@ -4038,6 +4164,9 @@ class GameScene extends Phaser.Scene {
 
     // ═══ Blizzard Visuals ═══
     this.updateBlizzardVisuals(dt);
+
+    // ═══ Snowball/Avalanche ═══
+    this.updateSnowballs(dt);
 
     // ═══ Phase 2: Boss Spawns ═══
     if (!this.boss1Spawned && this.gameElapsed >= 25 * 60) { // 25분
