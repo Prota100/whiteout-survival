@@ -1,0 +1,46 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Logs -->
+  <rect x="9" y="24" width="7" height="2" fill="#8B4513" /> <!-- SaddleBrown -->
+  <rect x="15" y="25" width="8" height="2" fill="#A0522D" /> <!-- Sienna -->
+  <rect x="11" y="22" width="9" height="2" fill="#D2691E" /> <!-- Chocolate -->
+
+  <!-- Embers/Sparks at the base of the flame -->
+  <rect x="10" y="21" width="1" height="1" fill="#FFD700" /> <!-- Gold -->
+  <rect x="21" y="21" width="1" height="1" fill="#FFD700" /> <!-- Gold -->
+
+  <!-- Flames - Layered from dark orange to yellow -->
+
+  <!-- Bottom layer of flame, wide and dark -->
+  <rect x="11" y="21" width="10" height="1" fill="#FF8C00" /> <!-- DarkOrange -->
+  <rect x="12" y="21" width="8" height="1" fill="#FFA500" /> <!-- Orange -->
+  <rect x="14" y="21" width="4" height="1" fill="#FFD700" /> <!-- Gold -->
+
+  <rect x="11" y="20" width="10" height="1" fill="#FF8C00" />
+  <rect x="12" y="20" width="8" height="1" fill="#FFA500" />
+  <rect x="14" y="20" width="4" height="1" fill="#FFD700" />
+
+  <!-- Middle layers, narrowing -->
+  <rect x="12" y="19" width="8" height="1" fill="#FF8C00" />
+  <rect x="13" y="19" width="6" height="1" fill="#FFA500" />
+  <rect x="15" y="19" width="2" height="1" fill="#FFD700" />
+
+  <rect x="12" y="18" width="8" height="1" fill="#FF8C00" />
+  <rect x="13" y="18" width="6" height="1" fill="#FFA500" />
+  <rect x="15" y="18" width="2" height="1" fill="#FFD700" />
+
+  <rect x="13" y="17" width="6" height="1" fill="#FFA500" />
+  <rect x="14" y="17" width="4" height="1" fill="#FFD700" />
+
+  <rect x="14" y="16" width="4" height="1" fill="#FFA500" />
+  <rect x="15" y="16" width="2" height="1" fill="#FFD700" />
+
+  <!-- Top layers, tapering to a point -->
+  <rect x="15" y="15" width="2" height="1" fill="#FFA500" />
+  <rect x="16" y="15" width="1" height="1" fill="#FFD700" />
+
+  <rect x="15" y="14" width="1" height="1" fill="#FFA500" />
+  <rect x="16" y="14" width="1" height="1" fill="#FFD700" />
+  <rect x="17" y="14" width="1" height="1" fill="#FFA500" />
+
+  <rect x="16" y="13" width="1" height="1" fill="#FFD700" />
+</svg>

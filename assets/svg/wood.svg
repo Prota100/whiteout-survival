@@ -1,0 +1,16 @@
+<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+  <!-- Wood Logs -->
+  <rect x="2" y="8" width="12" height="4" fill="#8B4513"/>
+  <rect x="3" y="9" width="10" height="2" fill="#A0522D"/>
+  <!-- Top log -->
+  <rect x="4" y="4" width="10" height="4" fill="#8B4513"/>
+  <rect x="5" y="5" width="8" height="2" fill="#A0522D"/>
+  <!-- Log ends (circles as rects) -->
+  <rect x="2" y="8" width="2" height="4" fill="#D2691E"/>
+  <rect x="12" y="8" width="2" height="4" fill="#D2691E"/>
+  <rect x="4" y="4" width="2" height="4" fill="#D2691E"/>
+  <rect x="12" y="4" width="2" height="4" fill="#D2691E"/>
+  <!-- Ring detail -->
+  <rect x="3" y="9" width="1" height="2" fill="#CD853F"/>
+  <rect x="5" y="5" width="1" height="2" fill="#CD853F"/>
+</svg>

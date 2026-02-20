@@ -62,6 +62,19 @@ function playEat(){_playSFX('eat',0.4)}
 function playQuest(){_playSFX('quest',0.5)}
 function playDeath(){_playSFX('death',0.6)}
 function playWhiff(){_playSFX('slash',0.1)}
+function playLevelUp(){
+  if(!audioCtx||!soundEnabled)return;
+  // Triumphant ascending arpeggio
+  const notes=[523.25,659.25,783.99,1046.5];
+  notes.forEach((freq,i)=>{
+    const osc=audioCtx.createOscillator();const g=audioCtx.createGain();
+    osc.type='triangle';osc.frequency.value=freq;
+    g.gain.setValueAtTime(0.3,audioCtx.currentTime+i*0.1);
+    g.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+i*0.1+0.4);
+    osc.connect(g).connect(audioCtx.destination);
+    osc.start(audioCtx.currentTime+i*0.1);osc.stop(audioCtx.currentTime+i*0.1+0.4);
+  });
+}
 function playUpgradeSelect(){_playSFX('upgrade_select',0.6)}
 function playBoxAppear(){_playSFX('box_appear',0.5)}
 function playEpicCard(){_playSFX('epic_card',0.7)}
@@ -199,7 +212,7 @@ const UPGRADES = {
 };
 
 // ═══ 경험치(XP) 시스템 ═══
-const XP_TABLE = [0, 10, 25, 45, 70, 102, 142, 190, 248, 316, 396, 491, 601, 731, 881, 1056, 1256, 1486, 1756, 2076, 2456];
+const XP_TABLE = [0, 25, 40, 55, 75, 95, 120, 150, 185, 225, 270, 330, 400, 490, 600, 730, 900, 1100, 1350, 1650, 2000];
 const XP_SOURCES = {
   rabbit: 3, deer: 5, penguin: 4, seal: 8,
   wolf: 12, bear: 25, boss: 50, tree: 1, rock: 1, gold: 3,
@@ -208,11 +221,11 @@ const XP_SOURCES = {
 
 // ═══ 한파 스케줄 ═══
 const BLIZZARD_SCHEDULE = [
-  { startMs: 3*60*1000,    duration: 30*1000, tempMult: 2,   reward: { boxes: 1, gold: 20 } },
-  { startMs: 6.5*60*1000,  duration: 40*1000, tempMult: 3,   reward: { boxes: 2, gold: 40 } },
-  { startMs: 10*60*1000,   duration: 45*1000, tempMult: 3.5, reward: { boxes: 2, gold: 60 } },
-  { startMs: 13*60*1000,   duration: 50*1000, tempMult: 4,   reward: { boxes: 2, gold: 80 } },
-  { startMs: 16*60*1000,   duration: 55*1000, tempMult: 4.5, reward: { boxes: 3, gold: 100 } },
+  { startMs: 3*60*1000,      duration: 30*1000, tempMult: 2,   reward: { boxes: 1, gold: 20 } },
+  { startMs: 6*60*1000,      duration: 35*1000, tempMult: 2.5, reward: { boxes: 2, gold: 40 } },
+  { startMs: 8.5*60*1000,    duration: 40*1000, tempMult: 3,   reward: { boxes: 2, gold: 60 } },
+  { startMs: 10.5*60*1000,   duration: 45*1000, tempMult: 3.5, reward: { boxes: 2, gold: 80 } },
+  { startMs: 12.5*60*1000,   duration: 50*1000, tempMult: 4,   reward: { boxes: 3, gold: 100 } },
 ];
 
 // ═══ 맵 구역 시스템 ═══
@@ -251,6 +264,8 @@ class UpgradeManager {
     this.swiftStrikeActive = false;
     this.swiftStrikeUsed = false; // tracks if first attack bonus was used
     this.frostWalkerActive = false;
+    this.swiftStrikeApplied = false; // For SWIFT_STRIKE Lvl 1: true after first bonus used, reset on upgrade/load
+    this.attackCounter = 0; // For SWIFT_STRIKE Lvl 2: count attacks
   }
 
   getLevel(key) { return this.levels[key] || 0; }
@@ -307,7 +322,7 @@ class UpgradeManager {
         scene.playerHP += 20;
         break;
       case 'WARMTH':
-        scene.warmthResist = Math.max(0.1, scene.warmthResist - 0.2);
+        scene.warmthResist = Math.min(1.0, scene.warmthResist + 0.2); // Now increases resistance
         break;
       case 'REGEN':
         this.regenPerSec = lv * 0.5;
@@ -391,6 +406,8 @@ class UpgradeManager {
       this.treasureHunterBonus = 0; this.armorReduction = 0; this.vampireHeal = 0;
       this.winterHeartBonus = 0; this.scavengerSpeed = 0;
       this.swiftStrikeActive = false; this.swiftStrikeUsed = false; this.frostWalkerActive = false;
+      this.swiftStrikeApplied = false; // Reset for new session
+      this.attackCounter = 0; // Reset for new session
       Object.entries(savedLevels).forEach(([key, lv]) => {
         for (let i = 0; i < lv; i++) this.applyUpgrade(key, scene);
       });
@@ -1097,7 +1114,7 @@ class GameScene extends Phaser.Scene {
     this.playerDamage = 10;
     this.playerSpeed = 120;
     this.playerBaseSpeed = 120;
-    this.warmthResist = 1;
+    this.warmthResist = 0;
     this.woodBonus = 0; this.stoneBonus = 0;
     this.temperature = 100; this.maxTemp = 100;
     this.hunger = 100; this.maxHunger = 100;
@@ -1107,6 +1124,7 @@ class GameScene extends Phaser.Scene {
     this.npcsOwned = [];
     this.placedBuildings = [];
     this.gameOver = false;
+    this.isRespawning = false;
     this.buildMode = null;
     this.storageCapacity = 50;
     this.upgradeManager = new UpgradeManager();
@@ -1116,7 +1134,16 @@ class GameScene extends Phaser.Scene {
     this.playerLevel = 1;
     this.pendingLevelUps = 0;
     this.levelUpQueue = 0; // compat alias
-    this.isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || ('ontouchstart' in window);
+
+    // ═══ Kill Combo System ═══
+    this.killCombo = 0;
+    this.killComboTimer = 0; // seconds remaining
+    this.killComboText = null;
+
+    // ═══ Tutorial Hints ═══
+    this.tutorialShown = false;
+
+    // Mobile-first: always use touch/joystick controls
     this.facingRight = true;
 
     // ═══ Phase 2: Game Timer & Act System ═══
@@ -1211,23 +1238,14 @@ class GameScene extends Phaser.Scene {
     this.spawnResourceNodes();
     this.spawnWave();
 
-    this.cursors = this.input.keyboard.createCursorKeys();
-    this.wasd = this.input.keyboard.addKeys('W,A,S,D');
-    this.input.keyboard.on('keydown-E', () => this.interactNearest());
-    this.input.keyboard.on('keydown-B', () => this.toggleBuildMenu());
-    this.input.keyboard.on('keydown-C', () => this.toggleCraftMenu());
-    this.input.keyboard.on('keydown-SPACE', () => this.performAttackNearest());
-
     this.input.on('pointerdown', (p) => {
       resumeAudio();
       if (this.gameOver) return;
       if (this.isUIArea(p)) return;
       if (this.buildMode) { this.placeBuilding(p); return; }
-      // Desktop only: click to attack (mobile uses auto-attack)
-      if (!this.isMobile) this.performAttack(p);
     });
 
-    if (this.isMobile) this.createVirtualJoystick();
+    this.createVirtualJoystick();
     this.createUI();
     window._gameScene = this;
     this.physics.add.overlap(this.player, this.drops, (_, d) => this.collectDrop(d));
@@ -1486,10 +1504,12 @@ class GameScene extends Phaser.Scene {
         this.damageAnimal(nearAnimals[h].a, this.playerDamage);
         this.showAttackFX(nearAnimals[h].a.x, nearAnimals[h].a.y, true);
       }
+      this.upgradeManager.attackCounter++; // Increment attack counter for successful hit
       playSlash();
       this.cameras.main.shake(60, 0.004);
     } else if (bestNode) {
       this.harvestNode(bestNode);
+      this.upgradeManager.attackCounter++; // Increment attack counter for successful hit
       this.showAttackFX(bestNode.x, bestNode.y, true);
     } else {
       playWhiff();
@@ -1502,10 +1522,17 @@ class GameScene extends Phaser.Scene {
     let cd = this.baseAttackSpeed;
     if (this._nearCampfire) cd /= (this._campfireAttackBonus || 1);
     cd *= this.upgradeManager.cooldownReduction;
-    // SWIFT_STRIKE: first attack after selecting upgrade has 50% reduced cooldown
-    if (this.upgradeManager.swiftStrikeActive && !this.upgradeManager.swiftStrikeUsed) {
+
+    // SWIFT_STRIKE Lvl 2: instant cooldown every 3rd attack
+    if (this.upgradeManager.getLevel('SWIFT_STRIKE') >= 2 &&
+        this.upgradeManager.attackCounter > 0 &&
+        this.upgradeManager.attackCounter % 3 === 0) {
+      return 0; // Instant cooldown
+    }
+    // SWIFT_STRIKE Lvl 1 (or initial Lvl 2 bonus): 50% reduced cooldown for the next attack
+    else if (this.upgradeManager.swiftStrikeActive && !this.upgradeManager.swiftStrikeApplied) {
       cd *= 0.5;
-      this.upgradeManager.swiftStrikeUsed = true;
+      this.upgradeManager.swiftStrikeApplied = true; // Mark as applied
     }
     return cd;
   }
@@ -1571,8 +1598,57 @@ class GameScene extends Phaser.Scene {
     });
     if (!this.stats.kills[a.animalType]) this.stats.kills[a.animalType] = 0;
     this.stats.kills[a.animalType]++;
-    // XP gain on kill (replaces old crate-based system)
-    this.gainXP(XP_SOURCES[a.animalType] || 3);
+
+    // ═══ Kill Combo ═══
+    this.killCombo++;
+    this.killComboTimer = 3; // 3 seconds to maintain combo
+    this._updateComboDisplay();
+
+    // XP gain on kill with combo bonus
+    let _xpAmt = XP_SOURCES[a.animalType] || 3;
+    let _comboGoldBonus = 0;
+    if (this.killCombo >= 10) {
+      _xpAmt = Math.floor(_xpAmt * 2); // +100% XP
+      _comboGoldBonus = 1;
+    }
+    if (this.killCombo >= 5) {
+      _comboGoldBonus = 1; // gold +50% handled in drop
+    }
+    this.gainXP(_xpAmt);
+    this.showFloatingText(a.x + 15, a.y - 30, '+' + _xpAmt + ' XP' + (this.killCombo >= 10 ? ' 🔥x2' : ''), '#FFDD44');
+
+    // Combo gold bonus drops
+    if (this.killCombo >= 5) {
+      const bonusGold = Math.max(1, Math.floor((a.def.drops.gold || 0) * 0.5));
+      if (bonusGold > 0) {
+        for (let i = 0; i < bonusGold; i++) {
+          const cAng = Phaser.Math.FloatBetween(0, Math.PI*2);
+          this.spawnDrop('gold', a.x + Math.cos(cAng)*20, a.y + Math.sin(cAng)*20, a.x, a.y);
+        }
+        this.showFloatingText(a.x - 15, a.y - 45, '+' + bonusGold + '💰 콤보!', '#FFD700');
+      }
+    }
+
+    // Combo 5+ particle burst
+    if (this.killCombo >= 5 && this.killCombo < 10) {
+      for (let i = 0; i < 6; i++) {
+        const cAng = (Math.PI*2/6)*i;
+        const cp = this.add.circle(a.x, a.y, 3, 0xFFD700).setDepth(15).setAlpha(0.8);
+        this.tweens.add({ targets: cp, x: a.x+Math.cos(cAng)*35, y: a.y+Math.sin(cAng)*35,
+          alpha: 0, scale: {from:1.2,to:0}, duration: 500, onComplete:()=>cp.destroy() });
+      }
+    }
+    // Combo 10+ special effect
+    if (this.killCombo >= 10) {
+      this.cameras.main.flash(150, 255, 100, 0, true);
+      for (let i = 0; i < 12; i++) {
+        const cAng = (Math.PI*2/12)*i;
+        const colors = [0xFF4400, 0xFFAA00, 0xFFDD00];
+        const cp = this.add.circle(a.x, a.y, 4, Phaser.Utils.Array.GetRandom(colors)).setDepth(15);
+        this.tweens.add({ targets: cp, x: a.x+Math.cos(cAng)*50, y: a.y+Math.sin(cAng)*50,
+          alpha: 0, scale: {from:2,to:0}, duration: 700, ease:'Quad.Out', onComplete:()=>cp.destroy() });
+      }
+    }
     if (this.upgradeManager.explosionLevel > 0) this.triggerExplosion(a.x, a.y);
     if (this.upgradeManager.lifestealAmount > 0) {
       this.playerHP = Math.min(this.playerMaxHP, this.playerHP + this.upgradeManager.lifestealAmount);
@@ -1590,6 +1666,56 @@ class GameScene extends Phaser.Scene {
     if (a.hpBar) a.hpBar.destroy();
     if (a.nameLabel) a.nameLabel.destroy();
     a.destroy();
+  }
+
+  // ═══ Kill Combo Display ═══
+  _updateComboDisplay() {
+    if (this.killCombo < 2) {
+      if (this.killComboText) { this.killComboText.destroy(); this.killComboText = null; }
+      return;
+    }
+    const comboStr = `🔥 ${this.killCombo}x COMBO` + (this.killCombo >= 10 ? ' · XP×2' : this.killCombo >= 5 ? ' · 💰+50%' : '');
+    const color = this.killCombo >= 10 ? '#FF4400' : this.killCombo >= 5 ? '#FFD700' : '#FFDD88';
+    if (!this.killComboText) {
+      this.killComboText = this.add.text(this.cameras.main.width - 10, 100, comboStr, {
+        fontSize: '18px', fontFamily: 'monospace', color, stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+      }).setOrigin(1, 0).setDepth(100).setScrollFactor(0);
+    } else {
+      this.killComboText.setText(comboStr).setColor(color);
+    }
+    // Pulse effect
+    this.tweens.add({ targets: this.killComboText, scale: { from: 1.3, to: 1 }, duration: 200 });
+  }
+
+  // ═══ Tutorial Hints ═══
+  _updateTutorial() {
+    if (this.tutorialShown) return;
+    const t = this.gameElapsed;
+    if (t > 30) { this.tutorialShown = true; return; }
+
+    const hints = [
+      { start: 0, end: 5, text: '🕹️ 조이스틱으로 이동하세요' },
+      { start: 15, end: 20, text: '🪵 나무를 채취해 모닥불을 피우세요' },
+      { start: 25, end: 30, text: '🌡️ 온도가 0 이하로 떨어지면 HP가 깎입니다' },
+    ];
+
+    let activeHint = null;
+    for (const h of hints) {
+      if (t >= h.start && t < h.end) { activeHint = h; break; }
+    }
+
+    if (activeHint) {
+      if (!this._tutorialText) {
+        this._tutorialText = this.add.text(this.cameras.main.centerX, this.cameras.main.height - 80, '', {
+          fontSize: '15px', fontFamily: 'monospace', color: '#FFFFFF',
+          backgroundColor: 'rgba(0,0,0,0.6)', padding: { x: 14, y: 8 },
+          stroke: '#000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(100).setScrollFactor(0);
+      }
+      this._tutorialText.setText(activeHint.text).setVisible(true);
+    } else {
+      if (this._tutorialText) this._tutorialText.setVisible(false);
+    }
   }
 
   spawnDrop(resource, tx, ty, ox, oy) {
@@ -1645,10 +1771,20 @@ class GameScene extends Phaser.Scene {
   }
 
   triggerLevelUp() {
-    // Level up effect
-    this.cameras.main.flash(200, 255, 255, 255, true);
-    this.cameras.main.shake(200, 0.005);
+    // Level up sound
+    playLevelUp();
+
+    // Level up effect - enhanced
+    this.cameras.main.flash(400, 255, 215, 0, true);
+    this.cameras.main.shake(300, 0.008);
     this.showFloatingText(this.player.x, this.player.y - 50, `⬆️ Level ${this.playerLevel}!`, '#FFD700', 1500);
+
+    // Golden edge vignette flash
+    const edgeFlash = this.add.rectangle(this.cameras.main.centerX, this.cameras.main.centerY,
+      this.cameras.main.width, this.cameras.main.height, 0xFFD700, 0)
+      .setDepth(99).setScrollFactor(0);
+    this.tweens.add({ targets: edgeFlash, alpha: { from: 0.3, to: 0 }, duration: 600, ease: 'Quad.Out',
+      onComplete: () => edgeFlash.destroy() });
 
     // Large center text
     const lvText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 60,
@@ -1659,17 +1795,22 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: lvText, y: lvText.y - 40, alpha: 0, scale: { from: 1.2, to: 0.6 },
       duration: 2000, ease: 'Quad.Out', onComplete: () => lvText.destroy() });
 
-    // Circular particle burst
-    for (let i = 0; i < 16; i++) {
-      const ang = (Math.PI * 2 / 16) * i;
-      const colors = [0xFFFFFF, 0xFFD700, 0xFFF8DC];
-      const p = this.add.circle(this.player.x, this.player.y, 4, Phaser.Utils.Array.GetRandom(colors))
-        .setDepth(15).setAlpha(0.9);
-      this.tweens.add({ targets: p,
-        x: this.player.x + Math.cos(ang) * 60,
-        y: this.player.y + Math.sin(ang) * 60,
-        alpha: 0, scale: { from: 1.5, to: 0 }, duration: 800, ease: 'Quad.Out',
-        onComplete: () => p.destroy() });
+    // Circular particle burst - enhanced (24 particles, 2 rings)
+    for (let ring = 0; ring < 2; ring++) {
+      const count = ring === 0 ? 16 : 8;
+      const radius = ring === 0 ? 70 : 40;
+      const delay = ring * 100;
+      for (let i = 0; i < count; i++) {
+        const ang = (Math.PI * 2 / count) * i + ring * 0.2;
+        const colors = [0xFFFFFF, 0xFFD700, 0xFFF8DC, 0xFFAA00];
+        const p = this.add.circle(this.player.x, this.player.y, ring === 0 ? 5 : 3, Phaser.Utils.Array.GetRandom(colors))
+          .setDepth(15).setAlpha(0.9);
+        this.tweens.add({ targets: p, delay,
+          x: this.player.x + Math.cos(ang) * radius,
+          y: this.player.y + Math.sin(ang) * radius,
+          alpha: 0, scale: { from: 1.8, to: 0 }, duration: 900, ease: 'Quad.Out',
+          onComplete: () => p.destroy() });
+      }
     }
 
     // Show upgrade card selection
@@ -2032,7 +2173,7 @@ class GameScene extends Phaser.Scene {
     // Base temp decay + zone penalty, multiplied by blizzard
     const zone = this.getPlayerZone();
     const zoneDecay = ZONE_TEMP_DECAY[zone] || 0;
-    const baseDecay = 0.5 * this.warmthResist;
+    const baseDecay = 0.5 * (1 - this.warmthResist); // warmthResist now directly reduces decay
     const frostRes = this.upgradeManager ? this.upgradeManager.frostResistance : 0;
     this.temperature = Math.max(0, this.temperature - (baseDecay + Math.abs(zoneDecay)) * this.blizzardMultiplier * (1 - frostRes) * dt);
     this.placedBuildings.forEach(b => {
@@ -2093,22 +2234,26 @@ class GameScene extends Phaser.Scene {
     // Create joystick container (hidden by default)
     const base = document.createElement('div');
     base.id = 'vjoystick-base';
+    const safeB = this.safeBottom || 0;
     base.style.cssText = `
-      display:none; position:fixed; width:120px; height:120px;
-      border-radius:50%; border:2.5px solid rgba(255,255,255,0.35);
-      background:radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%);
+      position:fixed; width:160px; height:160px;
+      left:10px; bottom:${70 + safeB}px;
+      border-radius:50%; border:2.5px solid rgba(255,255,255,0.25);
+      background:radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.03) 100%);
       pointer-events:none; z-index:2000;
+      opacity:0.35;
       transition: opacity 0.15s ease;
     `;
     const knob = document.createElement('div');
     knob.id = 'vjoystick-knob';
     knob.style.cssText = `
-      position:absolute; width:48px; height:48px; border-radius:50%;
-      background:radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.25) 100%);
-      border:2px solid rgba(255,255,255,0.6);
+      position:absolute; width:70px; height:70px; border-radius:50%;
+      background:radial-gradient(circle, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.2) 100%);
+      border:2px solid rgba(255,255,255,0.55);
       top:50%; left:50%; transform:translate(-50%,-50%);
       pointer-events:none;
-      transition: none;
+      opacity:0.7;
+      transition: opacity 0.12s ease;
     `;
     base.appendChild(knob);
     document.body.appendChild(base);
@@ -2117,7 +2262,7 @@ class GameScene extends Phaser.Scene {
       // Bottom buttons area
       const h = window.innerHeight;
       const safeB = self.safeBottom || 0;
-      if (cy > h - 55 - safeB) return true;
+      if (cy > h - 60 - safeB) return true;
       // Top HUD
       if (cy < 120 && cx < 260) return true;
       // Active panel (right side)
@@ -2142,12 +2287,12 @@ class GameScene extends Phaser.Scene {
         e.preventDefault();
         activeTouchId = t.identifier;
         self.joystickActive = true;
-        self._vjoy = { cx: t.clientX, cy: t.clientY };
+        // Use center of the fixed joystick base as origin
+        const rect = base.getBoundingClientRect();
+        self._vjoy = { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
 
-        base.style.display = 'block';
-        base.style.left = (t.clientX - 60) + 'px';
-        base.style.top = (t.clientY - 60) + 'px';
-        base.style.opacity = '1';
+        base.style.opacity = '0.55';
+        knob.style.opacity = '0.9';
         knob.style.transform = 'translate(-50%, -50%)';
         break;
       }
@@ -2162,7 +2307,7 @@ class GameScene extends Phaser.Scene {
         const dx = t.clientX - self._vjoy.cx;
         const dy = t.clientY - self._vjoy.cy;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const maxR = 50;
+        const maxR = 60;
         const clamp = Math.min(dist, maxR);
         const ang = Math.atan2(dy, dx);
         const kx = Math.cos(ang) * clamp;
@@ -2189,8 +2334,8 @@ class GameScene extends Phaser.Scene {
           self.joystickActive = false;
           self._smoothMove.x = 0;
           self._smoothMove.y = 0;
-          base.style.opacity = '0';
-          setTimeout(() => { base.style.display = 'none'; }, 150);
+          base.style.opacity = '0.35';
+          knob.style.opacity = '0.7';
           knob.style.transform = 'translate(-50%, -50%)';
           break;
         }
@@ -3065,35 +3210,56 @@ class GameScene extends Phaser.Scene {
   }
 
   endGame() {
-    if (this.gameOver) return;
-    this.gameOver = true; playDeath(); stopFire(); stopBGM(); _bgmStarted=false;
+    // GDD: HP 0 → 마을로 리스폰 2초 (게임오버 없음)
+    if (this.gameOver || this.isRespawning) return;
+    this.isRespawning = true;
+    playHurt();
     const cam = this.cameras.main;
+    cam.flash(400, 255, 0, 0);
+    cam.shake(500, 0.02);
+
     const ov = this.add.graphics().setScrollFactor(0).setDepth(200);
-    ov.fillStyle(0x000000, 0.8); ov.fillRect(0, 0, cam.width, cam.height);
-    this.add.text(cam.width/2, cam.height/2-80, '💀 사망', {
-      fontSize:'44px',fontFamily:'monospace',color:'#FF4444',stroke:'#000',strokeThickness:5
+    ov.fillStyle(0x000000, 0.6); ov.fillRect(0, 0, cam.width, cam.height);
+    const msg = this.add.text(cam.width/2, cam.height/2, '💀 기절...\n마을로 이동 중', {
+      fontSize:'32px', fontFamily:'monospace', color:'#FF8888', stroke:'#000', strokeThickness:4, align:'center', lineSpacing:8
     }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
-    const kills = Object.entries(this.stats.kills).map(([k,v])=>(ANIMALS[k]?.name||k)+': '+v).join(', ') || '없음';
-    const txt = '🎯 사냥: '+kills+'\n🏗️ 건설: '+Object.values(this.stats.built).reduce((a,b)=>a+b,0)+'개\n🔨 제작: '+this.stats.crafted+'개\n👥 NPC: '+this.stats.npcsHired+'명\n📋 퀘스트: '+this.questCompleted.length+'/'+QUESTS.length;
-    this.add.text(cam.width/2, cam.height/2+10, txt, {
-      fontSize:'15px',fontFamily:'monospace',color:'#fff',stroke:'#000',strokeThickness:2,align:'center',lineSpacing:8
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
-    const rb = this.add.text(cam.width/2, cam.height/2+120, '🔄 다시 시작', {
-      fontSize:'26px',fontFamily:'monospace',color:'#4CAF50',stroke:'#000',strokeThickness:3,
-      backgroundColor:'#222244',padding:{x:24,y:12}
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setInteractive();
-    rb.on('pointerdown', () => { SaveManager.delete(); this.scene.start('Title'); });
-    rb.on('pointerover', () => rb.setColor('#66FF66'));
-    rb.on('pointerout', () => rb.setColor('#4CAF50'));
+
+    this.time.delayedCall(2000, () => {
+      // Restore player
+      this.playerHP = Math.floor(this.playerMaxHP * 0.5); // 50% HP on respawn
+      this.hunger = Math.min(this.maxHunger, this.hunger + 30);
+      this.temperature = Math.min(this.maxTemp, this.maxTemp * 0.8);
+      // Move to town center
+      this.player.setPosition(WORLD_W / 2, WORLD_H - 200);
+      this.cameras.main.flash(300, 255, 255, 255);
+      ov.destroy();
+      msg.destroy();
+      this.isRespawning = false;
+    });
   }
 
   update(time, deltaMs) {
-    if (this.gameOver || this.upgradeUIActive) return;
+    if (this.gameOver || this.upgradeUIActive || this.isRespawning) return;
     const dt = deltaMs / 1000;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
+    // ═══ Kill Combo Timer ═══
+    if (this.killComboTimer > 0) {
+      this.killComboTimer -= dt;
+      if (this.killComboTimer <= 0) {
+        this.killCombo = 0;
+        this.killComboTimer = 0;
+        this._updateComboDisplay();
+      }
+    }
+
+    // ═══ Tutorial Hints ═══
+    if (!this.tutorialShown && this.gameElapsed > 0) {
+      this._updateTutorial();
+    }
+
     // Mobile auto-attack
-    if (this.isMobile && this.attackCooldown <= 0) {
+    if (this.attackCooldown <= 0) {
       let nearest = null, nearestDist = Infinity;
       this.animals.getChildren().forEach(a => {
         if (!a.active) return;
@@ -3107,6 +3273,7 @@ class GameScene extends Phaser.Scene {
         this.damageAnimal(nearest, this.playerDamage); playSlash();
         this.showAttackFX(nearest.x, nearest.y, true);
         this.cameras.main.shake(50, 0.003);
+        this.upgradeManager.attackCounter++; // Increment attack counter for successful hit
       } else {
         let nearestNode = null, nearestND = Infinity;
         this.resourceNodes.forEach(n => {
@@ -3120,13 +3287,14 @@ class GameScene extends Phaser.Scene {
           this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
           this.harvestNode(nearestNode);
           this.showAttackFX(nearestNode.x, nearestNode.y, true);
+          this.upgradeManager.attackCounter++; // Increment attack counter for successful hit
         }
       }
     }
 
     // Player movement with smooth lerp
-    if (this.isMobile && this._smoothMove) {
-      // Smooth lerp for mobile virtual joystick
+    if (this._smoothMove) {
+      // Smooth lerp for virtual joystick
       const lerpSpeed = 8 * dt; // smooth interpolation
       this.moveDir.x += (this._smoothMove.x - this.moveDir.x) * Math.min(1, lerpSpeed);
       this.moveDir.y += (this._smoothMove.y - this.moveDir.y) * Math.min(1, lerpSpeed);
@@ -3134,13 +3302,8 @@ class GameScene extends Phaser.Scene {
       if (Math.abs(this.moveDir.x) < 0.01) this.moveDir.x = 0;
       if (Math.abs(this.moveDir.y) < 0.01) this.moveDir.y = 0;
     } else {
-      let mx=0, my=0;
-      if(this.wasd.A.isDown||this.cursors.left.isDown) mx=-1;
-      if(this.wasd.D.isDown||this.cursors.right.isDown) mx=1;
-      if(this.wasd.W.isDown||this.cursors.up.isDown) my=-1;
-      if(this.wasd.S.isDown||this.cursors.down.isDown) my=1;
-      if(mx||my){const l=Math.sqrt(mx*mx+my*my);this.moveDir.x=mx/l;this.moveDir.y=my/l;}
-      else{this.moveDir.x=0;this.moveDir.y=0;}
+      this.moveDir.x = 0;
+      this.moveDir.y = 0;
     }
     this.player.body.setVelocity(this.moveDir.x*this.playerSpeed, this.moveDir.y*this.playerSpeed);
     if (this.moveDir.x > 0.1) { this.player.setFlipX(false); this.facingRight = true; }
@@ -3219,7 +3382,7 @@ class GameScene extends Phaser.Scene {
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, d.x, d.y);
       if (dist < this.upgradeManager.magnetRange) {
         const a = Phaser.Math.Angle.Between(d.x, d.y, this.player.x, this.player.y);
-        const speed = 220 * (1 - dist/70);
+        const speed = 220 * (1 - dist / this.upgradeManager.magnetRange);
         d.x += Math.cos(a) * speed * dt;
         d.y += Math.sin(a) * speed * dt;
         if (dist < 18) this.collectDrop(d);

@@ -49,6 +49,7 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
   border-radius: 8px;
   font-family: monospace; font-size: 14px;
   padding: 9px 12px;
+  min-height: 44px; min-width: 44px;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
@@ -119,6 +120,6 @@ var GV="phase1-xp-blizzard-zone-001";if(localStorage.getItem('gv')!==GV){localSt
 if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(g){g.unregister();});});
 if('caches' in window)caches.keys().then(function(n){n.forEach(function(k){caches.delete(k);});});
 </script>
-<script src="game.js?v=20250220-phase1-xp-blizzard-zone-001"></script>
+<script src="game.js?v=20260220-polish-final-001"></script>
 </body>
 </html>
