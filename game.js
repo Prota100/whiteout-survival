@@ -102,6 +102,7 @@ class SaveManager {
         questIndex: scene.questIndex,
         buildings: scene.placedBuildings.map(b => ({ type: b.type, x: b.x, y: b.y })),
         npcs: scene.npcsOwned.map(n => ({ type: n.npcType, x: n.x, y: n.y })),
+        upgrades: scene.upgradeManager.toJSON(),
       };
       localStorage.setItem(SaveManager.SAVE_KEY, JSON.stringify(saveData));
       return true;
@@ -130,6 +131,199 @@ class SaveManager {
   }
 }
 // ═══ END SAVE MANAGER ═══
+
+// ═══ 🎴 UPGRADE SYSTEM (뱀서 스타일) ═══
+const UPGRADE_CATEGORIES = {
+  combat: { color: '#FF4444', bgColor: 0xCC2222, borderColor: '#FF6666', icon: '⚔️', name: '전투' },
+  survival: { color: '#4488FF', bgColor: 0x2255AA, borderColor: '#66AAFF', icon: '🛡️', name: '생존' },
+  economy: { color: '#FFCC00', bgColor: 0xAA8800, borderColor: '#FFDD44', icon: '💰', name: '경제' },
+  special: { color: '#AA44FF', bgColor: 0x7722CC, borderColor: '#CC66FF', icon: '✨', name: '특수' },
+};
+
+const UPGRADES = {
+  // 전투 (빨강)
+  DAMAGE_UP:    { name: '강력한 일격', desc: '+25% 공격력', icon: '🗡️', category: 'combat', maxLevel: 5, rarity: 'common' },
+  ATTACK_SPEED: { name: '빠른 손놀림', desc: '+20% 공격속도', icon: '⚡', category: 'combat', maxLevel: 4, rarity: 'common' },
+  CRITICAL:     { name: '치명타', desc: '+10% 크리티컬', icon: '💥', category: 'combat', maxLevel: 3, rarity: 'rare' },
+  LIFESTEAL:    { name: '생명 흡수', desc: '공격 시 체력 +1', icon: '🩸', category: 'combat', maxLevel: 3, rarity: 'rare' },
+  KNOCKBACK:    { name: '강타', desc: '+넉백 거리', icon: '💨', category: 'combat', maxLevel: 2, rarity: 'epic' },
+  // 생존 (파랑)
+  MAX_HP:       { name: '튼튼함', desc: '+20 최대 체력', icon: '❤️', category: 'survival', maxLevel: 5, rarity: 'common' },
+  WARMTH:       { name: '방한복', desc: '+체온 저항', icon: '🧥', category: 'survival', maxLevel: 4, rarity: 'common' },
+  REGEN:        { name: '자연 회복', desc: '+초당 체력 회복', icon: '💚', category: 'survival', maxLevel: 3, rarity: 'rare' },
+  MOVEMENT:     { name: '날렵함', desc: '+15% 이동속도', icon: '👟', category: 'survival', maxLevel: 4, rarity: 'common' },
+  DODGE:        { name: '회피', desc: '+10% 회피율', icon: '🌀', category: 'survival', maxLevel: 2, rarity: 'epic' },
+  // 경제 (노랑)
+  LOOT_BONUS:   { name: '행운', desc: '+50% 드롭률', icon: '🍀', category: 'economy', maxLevel: 4, rarity: 'common' },
+  WOOD_BONUS:   { name: '벌목꾼', desc: '+나무 획득량', icon: '🪓', category: 'economy', maxLevel: 3, rarity: 'common' },
+  STONE_BONUS:  { name: '채굴꾼', desc: '+돌 획득량', icon: '⛏️', category: 'economy', maxLevel: 3, rarity: 'common' },
+  STORAGE:      { name: '큰 가방', desc: '+25 보관함', icon: '🎒', category: 'economy', maxLevel: 4, rarity: 'common' },
+  SELL_BONUS:   { name: '상술', desc: '+판매 가격', icon: '🏷️', category: 'economy', maxLevel: 3, rarity: 'rare' },
+  // 특수 (보라)
+  MAGNET:       { name: '자석', desc: '아이템 자동 수집 범위+', icon: '🧲', category: 'special', maxLevel: 2, rarity: 'epic' },
+  MULTI_HIT:    { name: '관통', desc: '적 2명까지 공격', icon: '🔱', category: 'special', maxLevel: 2, rarity: 'epic' },
+  EXPLOSION:    { name: '폭발', desc: '처치 시 폭발 데미지', icon: '💣', category: 'special', maxLevel: 2, rarity: 'epic' },
+  CAMPFIRE_BOOST:{ name: '화덕 마스터', desc: '화덕 효과 +50%', icon: '🔥', category: 'special', maxLevel: 2, rarity: 'rare' },
+  TIME_BONUS:   { name: '시간 조작', desc: '쿨다운 -20%', icon: '⏱️', category: 'special', maxLevel: 2, rarity: 'rare' },
+};
+
+const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5 };
+const RARITY_LABELS = { common: { name: '일반', color: '#CCCCCC' }, rare: { name: '희귀', color: '#4488FF' }, epic: { name: '에픽', color: '#AA44FF' } };
+
+class UpgradeManager {
+  constructor() {
+    this.levels = {}; // { DAMAGE_UP: 2, ... }
+    this.totalKills = 0;
+    this.cratesSpawned = 0; // how many crates triggered so far
+    this.regenPerSec = 0;
+    this.critChance = 0;
+    this.dodgeChance = 0;
+    this.lifestealAmount = 0;
+    this.knockbackBonus = 0;
+    this.lootBonus = 0;
+    this.sellBonus = 0;
+    this.magnetRange = 70; // base magnet range
+    this.multiHitCount = 1;
+    this.explosionLevel = 0;
+    this.campfireBoost = 1;
+    this.cooldownReduction = 1;
+  }
+
+  getLevel(key) { return this.levels[key] || 0; }
+  isMaxed(key) { return this.getLevel(key) >= UPGRADES[key].maxLevel; }
+
+  getAvailableUpgrades() {
+    return Object.keys(UPGRADES).filter(k => !this.isMaxed(k));
+  }
+
+  pickThreeCards() {
+    const available = this.getAvailableUpgrades();
+    if (available.length === 0) return [];
+
+    // Weighted by rarity
+    const weighted = [];
+    available.forEach(k => {
+      const w = RARITY_WEIGHTS[UPGRADES[k].rarity] || 70;
+      for (let i = 0; i < w; i++) weighted.push(k);
+    });
+
+    const picked = [];
+    const used = new Set();
+    const count = Math.min(3, available.length);
+    while (picked.length < count) {
+      const k = weighted[Math.floor(Math.random() * weighted.length)];
+      if (!used.has(k)) { used.add(k); picked.push(k); }
+    }
+    return picked;
+  }
+
+  applyUpgrade(key, scene) {
+    this.levels[key] = (this.levels[key] || 0) + 1;
+    const lv = this.levels[key];
+
+    switch (key) {
+      case 'DAMAGE_UP':
+        scene.playerDamage = Math.round(scene.playerDamage * 1.25 * 100) / 100;
+        if (scene.playerDamage < 1) scene.playerDamage = 1;
+        break;
+      case 'ATTACK_SPEED':
+        scene.baseAttackSpeed *= 0.8;
+        break;
+      case 'CRITICAL':
+        this.critChance = lv * 0.1;
+        break;
+      case 'LIFESTEAL':
+        this.lifestealAmount = lv;
+        break;
+      case 'KNOCKBACK':
+        this.knockbackBonus = lv * 40;
+        break;
+      case 'MAX_HP':
+        scene.playerMaxHP += 20;
+        scene.playerHP += 20;
+        break;
+      case 'WARMTH':
+        scene.warmthResist = Math.max(0.1, scene.warmthResist - 0.2);
+        break;
+      case 'REGEN':
+        this.regenPerSec = lv * 0.5;
+        break;
+      case 'MOVEMENT':
+        scene.playerBaseSpeed *= 1.15;
+        scene.playerSpeed = scene.playerBaseSpeed;
+        break;
+      case 'DODGE':
+        this.dodgeChance = lv * 0.1;
+        break;
+      case 'LOOT_BONUS':
+        this.lootBonus = lv * 0.5;
+        break;
+      case 'WOOD_BONUS':
+        scene.woodBonus += 1;
+        break;
+      case 'STONE_BONUS':
+        scene.stoneBonus += 1;
+        break;
+      case 'STORAGE':
+        scene.storageCapacity += 25;
+        break;
+      case 'SELL_BONUS':
+        this.sellBonus = lv * 0.2;
+        break;
+      case 'MAGNET':
+        this.magnetRange = 70 + lv * 50;
+        break;
+      case 'MULTI_HIT':
+        this.multiHitCount = 1 + lv;
+        break;
+      case 'EXPLOSION':
+        this.explosionLevel = lv;
+        break;
+      case 'CAMPFIRE_BOOST':
+        this.campfireBoost = 1 + lv * 0.5;
+        break;
+      case 'TIME_BONUS':
+        this.cooldownReduction = Math.pow(0.8, lv);
+        break;
+    }
+  }
+
+  onKill(scene) {
+    this.totalKills++;
+    const cratesNeeded = Math.floor(this.totalKills / 5);
+    if (cratesNeeded > this.cratesSpawned) {
+      this.cratesSpawned = cratesNeeded;
+      scene.spawnSupplyCrate();
+    }
+  }
+
+  toJSON() {
+    return {
+      levels: { ...this.levels },
+      totalKills: this.totalKills,
+      cratesSpawned: this.cratesSpawned,
+    };
+  }
+
+  fromJSON(data, scene) {
+    if (!data) return;
+    this.totalKills = data.totalKills || 0;
+    this.cratesSpawned = data.cratesSpawned || 0;
+    // Re-apply all upgrades from scratch
+    if (data.levels) {
+      const savedLevels = { ...data.levels };
+      this.levels = {};
+      this.regenPerSec = 0; this.critChance = 0; this.dodgeChance = 0;
+      this.lifestealAmount = 0; this.knockbackBonus = 0; this.lootBonus = 0;
+      this.sellBonus = 0; this.magnetRange = 70; this.multiHitCount = 1;
+      this.explosionLevel = 0; this.campfireBoost = 1; this.cooldownReduction = 1;
+      Object.entries(savedLevels).forEach(([key, lv]) => {
+        for (let i = 0; i < lv; i++) this.applyUpgrade(key, scene);
+      });
+    }
+  }
+}
+// ═══ END UPGRADE SYSTEM ═══
 
 const WORLD_W = 2400;
 const WORLD_H = 2400;
@@ -419,6 +613,7 @@ class BootScene extends Phaser.Scene {
     this.createRockTexture();
     this.createDropTextures();
     this.createParticleTextures();
+    this.createCrateTexture();
     const loadSave = this.scene.settings.data?.loadSave || false;
     this.scene.start('Game', { loadSave });
   }
@@ -785,10 +980,32 @@ class BootScene extends Phaser.Scene {
     g.generateTexture('slash_fx', 32, 32); g.destroy();
 
     g = this.add.graphics();
+    g.fillStyle(0xFFDD44, 1); g.fillCircle(4, 4, 4);
+    g.fillStyle(0xFFFFAA, 0.7); g.fillCircle(3, 3, 2);
+    g.generateTexture('sparkle', 8, 8); g.destroy();
+
+    g = this.add.graphics();
     g.fillStyle(0xFF6600, 1); g.fillCircle(4, 4, 4);
     g.fillStyle(0xFFAA00, 0.8); g.fillCircle(4, 3, 2.5);
     g.fillStyle(0xFFDD44, 0.5); g.fillCircle(4, 2, 1.5);
     g.generateTexture('fire_particle', 8, 8); g.destroy();
+  }
+
+  createCrateTexture() {
+    const g = this.add.graphics();
+    // Wooden crate with golden trim
+    g.fillStyle(0x8B6914, 1); g.fillRoundedRect(4, 6, 28, 24, 3);
+    g.fillStyle(0xA07B28, 1); g.fillRoundedRect(6, 8, 24, 20, 2);
+    g.lineStyle(2, 0xFFDD44, 0.8); g.strokeRoundedRect(4, 6, 28, 24, 3);
+    // Cross bands
+    g.fillStyle(0x664411, 1);
+    g.fillRect(4, 16, 28, 3);
+    g.fillRect(16, 6, 3, 24);
+    // Lock/star
+    g.fillStyle(0xFFDD44, 1); g.fillCircle(18, 18, 4);
+    g.fillStyle(0xFFAA00, 1); g.fillCircle(18, 18, 2);
+    g.generateTexture('supply_crate', 36, 36);
+    g.destroy();
   }
 }
 
@@ -813,6 +1030,9 @@ class GameScene extends Phaser.Scene {
     this.gameOver = false;
     this.buildMode = null;
     this.storageCapacity = 50;
+    this.upgradeManager = new UpgradeManager();
+    this.supplyCrates = [];
+    this.upgradeUIActive = false;
     this.isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || ('ontouchstart' in window);
     this.facingRight = true;
 
@@ -945,6 +1165,10 @@ class GameScene extends Phaser.Scene {
         this._restoreBuilding(b);
       });
       this.buildMode = null;
+    }
+    // Upgrades
+    if (save.upgrades) {
+      this.upgradeManager.fromJSON(save.upgrades, this);
     }
     // NPCs
     if (save.npcs) {
@@ -1096,12 +1320,16 @@ class GameScene extends Phaser.Scene {
   performAttackNearest() {
     if (this.attackCooldown > 0) return;
     const range = 55;
-    let best = null, bestD = Infinity;
+    // Multi-hit: find N nearest
+    const nearAnimals = [];
     this.animals.getChildren().forEach(a => {
       if (!a.active) return;
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
-      if (d < range && d < bestD) { best = a; bestD = d; }
+      if (d < range) nearAnimals.push({ a, d });
     });
+    nearAnimals.sort((a, b) => a.d - b.d);
+    let best = nearAnimals.length > 0 ? nearAnimals[0].a : null;
+    let bestD = nearAnimals.length > 0 ? nearAnimals[0].d : Infinity;
     let bestNode = null, bestND = Infinity;
     this.resourceNodes.forEach(n => {
       if (n.depleted) return;
@@ -1112,8 +1340,13 @@ class GameScene extends Phaser.Scene {
     this.player.setTexture('player_attack');
     this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
     if (best && bestD <= bestND) {
-      this.damageAnimal(best, this.playerDamage); playSlash();
-      this.showAttackFX(best.x, best.y, true);
+      // Multi-hit
+      const hitCount = Math.min(this.upgradeManager.multiHitCount, nearAnimals.length);
+      for (let h = 0; h < hitCount; h++) {
+        this.damageAnimal(nearAnimals[h].a, this.playerDamage);
+        this.showAttackFX(nearAnimals[h].a.x, nearAnimals[h].a.y, true);
+      }
+      playSlash();
       this.cameras.main.shake(60, 0.004);
     } else if (bestNode) {
       this.harvestNode(bestNode);
@@ -1128,10 +1361,16 @@ class GameScene extends Phaser.Scene {
   getAttackCooldown() {
     let cd = this.baseAttackSpeed;
     if (this._nearCampfire) cd /= (this._campfireAttackBonus || 1);
+    cd *= this.upgradeManager.cooldownReduction;
     return cd;
   }
 
   damageAnimal(a, dmg) {
+    // Critical hit check
+    if (this.upgradeManager.critChance > 0 && Math.random() < this.upgradeManager.critChance) {
+      dmg = Math.ceil(dmg * 2);
+      this.showFloatingText(a.x + 15, a.y - 30, '💥CRIT!', '#FF2222');
+    }
     a.hp -= dmg; a.hitFlash = 0.2; a.setTint(0xFF4444); playHit();
     const fs = dmg >= 3 ? '24px' : dmg >= 2 ? '20px' : '16px';
     const c = dmg >= 3 ? '#FF2222' : '#FF6644';
@@ -1141,7 +1380,8 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: t.y - 40, alpha: 0, scale: { from: 1.3, to: 0.8 },
       duration: 600, ease: 'Back.Out', onComplete: () => t.destroy() });
     const ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, a.x, a.y);
-    a.body.setVelocity(Math.cos(ang) * 120, Math.sin(ang) * 120);
+    const kb = 120 + this.upgradeManager.knockbackBonus;
+    a.body.setVelocity(Math.cos(ang) * kb, Math.sin(ang) * kb);
     for (let i = 0; i < 5; i++) {
       const p = this.add.image(a.x, a.y, 'hit_particle').setDepth(15).setScale(Phaser.Math.FloatBetween(0.5, 1.2));
       this.tweens.add({ targets: p, x: a.x + Phaser.Math.Between(-30, 30), y: a.y + Phaser.Math.Between(-30, 30),
@@ -1152,14 +1392,23 @@ class GameScene extends Phaser.Scene {
 
   killAnimal(a) { playKill();
     const def = a.def;
+    const lootMul = 1 + this.upgradeManager.lootBonus;
     Object.entries(def.drops).forEach(([res, amt]) => {
-      for (let i = 0; i < amt; i++) {
+      const finalAmt = Math.floor(amt * lootMul) + (Math.random() < (amt * lootMul) % 1 ? 1 : 0);
+      for (let i = 0; i < finalAmt; i++) {
         const ang = Phaser.Math.FloatBetween(0, Math.PI*2), dist = Phaser.Math.Between(15, 40);
         this.spawnDrop(res, a.x + Math.cos(ang)*dist, a.y + Math.sin(ang)*dist, a.x, a.y);
       }
     });
     if (!this.stats.kills[a.animalType]) this.stats.kills[a.animalType] = 0;
     this.stats.kills[a.animalType]++;
+    // Upgrade triggers
+    this.upgradeManager.onKill(this);
+    if (this.upgradeManager.explosionLevel > 0) this.triggerExplosion(a.x, a.y);
+    if (this.upgradeManager.lifestealAmount > 0) {
+      this.playerHP = Math.min(this.playerMaxHP, this.playerHP + this.upgradeManager.lifestealAmount);
+      this.showFloatingText(a.x, a.y - 10, '+' + this.upgradeManager.lifestealAmount + '❤️', '#FF8888');
+    }
     for (let i = 0; i < 8; i++) {
       const p = this.add.image(a.x, a.y, 'snowflake').setDepth(15).setTint(0xFFDDDD).setScale(1.5);
       this.tweens.add({ targets: p, x: a.x + Phaser.Math.Between(-40, 40), y: a.y + Phaser.Math.Between(-40, 40),
@@ -1263,6 +1512,12 @@ class GameScene extends Phaser.Scene {
             const ang = Phaser.Math.Angle.Between(a.x, a.y, px, py);
             a.body.setVelocity(Math.cos(ang)*a.def.speed, Math.sin(ang)*a.def.speed);
             if (dist < 28 && a.atkCD <= 0) {
+              // Dodge check
+              if (this.upgradeManager.dodgeChance > 0 && Math.random() < this.upgradeManager.dodgeChance) {
+                a.atkCD = 0.8;
+                this.showFloatingText(px, py - 25, '🌀 회피!', '#88DDFF');
+                return;
+              }
               this.playerHP -= a.def.damage; a.atkCD = 1.2; playHurt();
               this.cameras.main.shake(120, 0.012);
               this.player.setTint(0xFF4444);
@@ -1343,7 +1598,7 @@ class GameScene extends Phaser.Scene {
         case 'merchant': {
           this.followPlayer(npc, 60);
           if (npc.actionTimer <= 0 && this.res.meat >= 3) {
-            this.res.meat -= 3; this.res.gold += 5; npc.actionTimer = 2.5;
+            this.res.meat -= 3; this.res.gold += Math.floor(5 * (1 + this.upgradeManager.sellBonus)); npc.actionTimer = 2.5;
             const t = this.add.text(npc.x, npc.y-15, '💰+5', {fontSize:'15px',fontFamily:'monospace',color:'#FFD700',stroke:'#000',strokeThickness:3}).setDepth(15).setOrigin(0.5);
             this.tweens.add({targets:t, y:t.y-25, alpha:0, duration:600, onComplete:()=>t.destroy()});
           }
@@ -1478,9 +1733,10 @@ class GameScene extends Phaser.Scene {
       if (pd < warmthR) {
         this._nearCampfire = true;
         const intensity = 1 - (pd / warmthR);
-        this.temperature = Math.min(this.maxTemp, this.temperature + effects.healthRegen * intensity * dt);
-        this.playerHP = Math.min(this.playerMaxHP, this.playerHP + effects.healthRegen * intensity * dt);
-        this.res.gold = (this.res.gold || 0) + effects.goldGeneration * intensity * dt;
+        const cfBoost = this.upgradeManager.campfireBoost;
+        this.temperature = Math.min(this.maxTemp, this.temperature + effects.healthRegen * intensity * dt * cfBoost);
+        this.playerHP = Math.min(this.playerMaxHP, this.playerHP + effects.healthRegen * intensity * dt * cfBoost);
+        this.res.gold = (this.res.gold || 0) + effects.goldGeneration * intensity * dt * cfBoost;
         if (pd < 100) {
           this._campfireAttackBonus = Math.max(this._campfireAttackBonus, effects.attackSpeedBonus);
           this.playerSpeed = this.playerBaseSpeed * effects.moveSpeedBonus;
@@ -1849,6 +2105,350 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  // ═══ SUPPLY CRATE SYSTEM ═══
+  spawnSupplyCrate() {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 100 + Math.random() * 100;
+    const cx = this.player.x + Math.cos(angle) * dist;
+    const cy = this.player.y + Math.sin(angle) * dist;
+    const tx = Phaser.Math.Clamp(cx, 50, WORLD_W - 50);
+    const ty = Phaser.Math.Clamp(cy, 50, WORLD_H - 50);
+
+    const crate = this.physics.add.sprite(tx, ty - 200, 'supply_crate').setDepth(8).setScale(0).setAlpha(0);
+    crate.body.setAllowGravity(false);
+    crate.body.setSize(28, 24);
+    crate.isCrate = true;
+    crate._sparkleTimer = 0;
+
+    // Drop animation
+    this.tweens.add({
+      targets: crate, y: ty, scale: 1.2, alpha: 1,
+      duration: 600, ease: 'Bounce.Out',
+      onComplete: () => {
+        this.tweens.add({ targets: crate, scale: { from: 1.2, to: 1 }, duration: 200 });
+        // Glow pulse
+        this.tweens.add({
+          targets: crate, scale: 1.15, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.InOut'
+        });
+      }
+    });
+
+    // Impact particles
+    this.time.delayedCall(500, () => {
+      for (let i = 0; i < 6; i++) {
+        const p = this.add.image(tx, ty, 'sparkle').setDepth(15).setScale(1.5);
+        this.tweens.add({
+          targets: p, x: tx + Phaser.Math.Between(-30, 30), y: ty + Phaser.Math.Between(-30, 10),
+          alpha: 0, scale: 0, duration: 400, onComplete: () => p.destroy()
+        });
+      }
+    });
+
+    // Label
+    const label = this.add.text(tx, ty - 24, '📦 보급상자', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#FFD700',
+      stroke: '#000', strokeThickness: 3
+    }).setDepth(9).setOrigin(0.5);
+    crate._label = label;
+
+    this.supplyCrates.push(crate);
+    this.physics.add.overlap(this.player, crate, () => this.openCrate(crate));
+
+    this.showFloatingText(this.player.x, this.player.y - 30, '📦 보급상자 출현!', '#FFD700');
+  }
+
+  openCrate(crate) {
+    if (!crate.active || this.upgradeUIActive) return;
+    const cards = this.upgradeManager.pickThreeCards();
+    if (cards.length === 0) {
+      this.showFloatingText(crate.x, crate.y - 20, '✅ 모든 업그레이드 최대!', '#88FF88');
+      if (crate._label) crate._label.destroy();
+      crate.destroy();
+      return;
+    }
+
+    // Remove crate with burst effect
+    for (let i = 0; i < 10; i++) {
+      const p = this.add.image(crate.x, crate.y, 'sparkle').setDepth(15).setScale(2);
+      this.tweens.add({
+        targets: p, x: crate.x + Phaser.Math.Between(-50, 50), y: crate.y + Phaser.Math.Between(-50, 50),
+        alpha: 0, scale: 0, duration: 500, onComplete: () => p.destroy()
+      });
+    }
+    if (crate._label) crate._label.destroy();
+    this.supplyCrates = this.supplyCrates.filter(c => c !== crate);
+    crate.destroy();
+
+    this.showUpgradeUI(cards);
+  }
+
+  // ═══ TRIPLE CHOICE UPGRADE UI ═══
+  showUpgradeUI(cards) {
+    this.upgradeUIActive = true;
+    this.physics.pause();
+    const cam = this.cameras.main;
+    const W = cam.width, H = cam.height;
+
+    // Container for all UI elements
+    const uiElements = [];
+
+    // Dark overlay
+    const overlay = this.add.graphics().setScrollFactor(0).setDepth(300);
+    overlay.fillStyle(0x000000, 0).fillRect(0, 0, W, H);
+    uiElements.push(overlay);
+    this.tweens.add({ targets: { v: 0 }, v: 0.75, duration: 300,
+      onUpdate: (_, t) => { overlay.clear(); overlay.fillStyle(0x000000, t.v); overlay.fillRect(0, 0, W, H); }
+    });
+
+    // Title
+    const title = this.add.text(W / 2, H * 0.12, '⬆️ 업그레이드 선택', {
+      fontSize: Math.min(28, W * 0.05) + 'px', fontFamily: 'monospace', color: '#FFD700',
+      stroke: '#000', strokeThickness: 4
+    }).setScrollFactor(0).setDepth(301).setOrigin(0.5).setAlpha(0);
+    uiElements.push(title);
+    this.tweens.add({ targets: title, alpha: 1, y: title.y + 10, duration: 400, ease: 'Back.Out' });
+
+    const subtitle = this.add.text(W / 2, H * 0.18, '카드를 선택하세요', {
+      fontSize: '14px', fontFamily: 'monospace', color: '#AABBCC'
+    }).setScrollFactor(0).setDepth(301).setOrigin(0.5).setAlpha(0);
+    uiElements.push(subtitle);
+    this.tweens.add({ targets: subtitle, alpha: 1, duration: 500, delay: 200 });
+
+    // Card dimensions
+    const cardW = Math.min(160, (W - 60) / 3);
+    const cardH = Math.min(240, H * 0.55);
+    const gap = Math.min(16, W * 0.02);
+    const totalW = cardW * 3 + gap * 2;
+    const startX = (W - totalW) / 2;
+    const cardY = H * 0.25;
+
+    cards.forEach((key, i) => {
+      const upgrade = UPGRADES[key];
+      const cat = UPGRADE_CATEGORIES[upgrade.category];
+      const rarityInfo = RARITY_LABELS[upgrade.rarity];
+      const currentLv = this.upgradeManager.getLevel(key);
+      const nextLv = currentLv + 1;
+      const cx = startX + i * (cardW + gap) + cardW / 2;
+      const cy = cardY + cardH / 2;
+
+      // Card back (for flip animation)
+      const cardBack = this.add.graphics().setScrollFactor(0).setDepth(302);
+      cardBack.fillStyle(0x222244, 0.95);
+      cardBack.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
+      cardBack.lineStyle(3, 0x4466AA, 0.8);
+      cardBack.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
+      // Pattern on back
+      cardBack.fillStyle(0x334466, 0.5);
+      cardBack.fillCircle(cx, cy, 20);
+      const qmark = this.add.text(cx, cy, '?', {
+        fontSize: '36px', fontFamily: 'monospace', color: '#6688AA'
+      }).setScrollFactor(0).setDepth(303).setOrigin(0.5);
+      uiElements.push(cardBack, qmark);
+
+      // Card front (hidden initially)
+      const cardGfx = this.add.graphics().setScrollFactor(0).setDepth(304).setAlpha(0);
+      // Background
+      cardGfx.fillStyle(0x1a1a2e, 0.95);
+      cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
+      // Category color border
+      cardGfx.lineStyle(3, cat.bgColor, 1);
+      cardGfx.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
+      // Top color band
+      cardGfx.fillStyle(cat.bgColor, 0.3);
+      cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, 50, { tl: 12, tr: 12, bl: 0, br: 0 });
+      // Rarity glow for epic
+      if (upgrade.rarity === 'epic') {
+        cardGfx.lineStyle(2, 0xAA44FF, 0.6);
+        cardGfx.strokeRoundedRect(cx - cardW / 2 - 3, cy - cardH / 2 - 3, cardW + 6, cardH + 6, 14);
+      }
+      uiElements.push(cardGfx);
+
+      // Card content texts (hidden initially)
+      const iconText = this.add.text(cx, cy - cardH / 2 + 30, upgrade.icon, {
+        fontSize: '32px'
+      }).setScrollFactor(0).setDepth(305).setOrigin(0.5).setAlpha(0);
+
+      const nameText = this.add.text(cx, cy - cardH / 2 + 62, upgrade.name, {
+        fontSize: '15px', fontFamily: 'monospace', color: cat.color,
+        stroke: '#000', strokeThickness: 2, fontStyle: 'bold'
+      }).setScrollFactor(0).setDepth(305).setOrigin(0.5).setAlpha(0);
+
+      const descText = this.add.text(cx, cy - cardH / 2 + 84, upgrade.desc, {
+        fontSize: '12px', fontFamily: 'monospace', color: '#CCDDEE',
+        wordWrap: { width: cardW - 20 }, align: 'center'
+      }).setScrollFactor(0).setDepth(305).setOrigin(0.5).setAlpha(0);
+
+      const rarityText = this.add.text(cx, cy + cardH / 2 - 55, rarityInfo.name, {
+        fontSize: '11px', fontFamily: 'monospace', color: rarityInfo.color,
+        stroke: '#000', strokeThickness: 2
+      }).setScrollFactor(0).setDepth(305).setOrigin(0.5).setAlpha(0);
+
+      // Level indicator
+      let lvStr = '';
+      for (let l = 0; l < upgrade.maxLevel; l++) {
+        lvStr += l < nextLv ? '★' : '☆';
+      }
+      const lvText = this.add.text(cx, cy + cardH / 2 - 35, 'Lv.' + nextLv + ' ' + lvStr, {
+        fontSize: '12px', fontFamily: 'monospace', color: '#FFD700',
+        stroke: '#000', strokeThickness: 2
+      }).setScrollFactor(0).setDepth(305).setOrigin(0.5).setAlpha(0);
+
+      const catText = this.add.text(cx, cy + cardH / 2 - 18, cat.icon + ' ' + cat.name, {
+        fontSize: '11px', fontFamily: 'monospace', color: cat.color
+      }).setScrollFactor(0).setDepth(305).setOrigin(0.5).setAlpha(0);
+
+      const frontElements = [cardGfx, iconText, nameText, descText, rarityText, lvText, catText];
+      uiElements.push(iconText, nameText, descText, rarityText, lvText, catText);
+
+      // Flip animation: delay per card
+      const flipDelay = 300 + i * 250;
+      this.time.delayedCall(flipDelay, () => {
+        // Hide back
+        this.tweens.add({ targets: [cardBack, qmark], scaleX: 0, duration: 150, ease: 'Quad.In',
+          onComplete: () => { cardBack.setAlpha(0); qmark.setAlpha(0); }
+        });
+        // Show front
+        this.time.delayedCall(150, () => {
+          frontElements.forEach(el => {
+            el.setAlpha(1);
+            if (el.setScale) el.setScale(1, 1);
+          });
+          // Scale-in effect
+          this.tweens.add({
+            targets: frontElements, scaleX: { from: 0, to: 1 }, duration: 200, ease: 'Back.Out'
+          });
+          // Rarity sparkle
+          if (upgrade.rarity === 'epic' || upgrade.rarity === 'rare') {
+            for (let s = 0; s < (upgrade.rarity === 'epic' ? 8 : 4); s++) {
+              this.time.delayedCall(s * 50, () => {
+                const sp = this.add.image(cx + Phaser.Math.Between(-cardW/2, cardW/2), cy + Phaser.Math.Between(-cardH/2, cardH/2), 'sparkle')
+                  .setScrollFactor(0).setDepth(306).setScale(1.5).setTint(upgrade.rarity === 'epic' ? 0xAA44FF : 0x4488FF);
+                uiElements.push(sp);
+                this.tweens.add({ targets: sp, alpha: 0, scale: 0, y: sp.y - 20, duration: 600, onComplete: () => sp.destroy() });
+              });
+            }
+          }
+        });
+      });
+
+      // Interactive zone (enabled after flip)
+      const zone = this.add.zone(cx, cy, cardW, cardH).setScrollFactor(0).setDepth(310).setInteractive();
+      uiElements.push(zone);
+
+      // Hover effect
+      zone.on('pointerover', () => {
+        if (cardGfx.alpha > 0) {
+          cardGfx.clear();
+          cardGfx.fillStyle(0x2a2a4e, 0.95);
+          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
+          cardGfx.lineStyle(4, cat.bgColor, 1);
+          cardGfx.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
+          cardGfx.fillStyle(cat.bgColor, 0.4);
+          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, 50, { tl: 12, tr: 12, bl: 0, br: 0 });
+        }
+      });
+      zone.on('pointerout', () => {
+        if (cardGfx.alpha > 0) {
+          cardGfx.clear();
+          cardGfx.fillStyle(0x1a1a2e, 0.95);
+          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
+          cardGfx.lineStyle(3, cat.bgColor, 1);
+          cardGfx.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
+          cardGfx.fillStyle(cat.bgColor, 0.3);
+          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, 50, { tl: 12, tr: 12, bl: 0, br: 0 });
+        }
+      });
+
+      zone.on('pointerdown', () => {
+        if (cardGfx.alpha < 0.5) return; // not yet revealed
+        this.selectUpgrade(key, uiElements, cx, cy);
+      });
+    });
+
+    this._upgradeUIElements = uiElements;
+  }
+
+  selectUpgrade(key, uiElements, cx, cy) {
+    const upgrade = UPGRADES[key];
+    const cat = UPGRADE_CATEGORIES[upgrade.category];
+
+    // Apply upgrade
+    this.upgradeManager.applyUpgrade(key, this);
+
+    // Selection burst effect
+    for (let i = 0; i < 12; i++) {
+      const ang = (i / 12) * Math.PI * 2;
+      const p = this.add.image(cx, cy, 'sparkle')
+        .setScrollFactor(0).setDepth(320).setScale(2).setTint(cat.bgColor);
+      this.tweens.add({
+        targets: p, x: cx + Math.cos(ang) * 80, y: cy + Math.sin(ang) * 80,
+        alpha: 0, scale: 0, duration: 500, onComplete: () => p.destroy()
+      });
+    }
+
+    // Acquisition text
+    const acqText = this.add.text(this.cameras.main.width / 2, this.cameras.main.height * 0.85,
+      '✨ ' + upgrade.icon + ' ' + upgrade.name + ' 획득!', {
+      fontSize: '22px', fontFamily: 'monospace', color: cat.color,
+      stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(320).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({
+      targets: acqText, alpha: 1, scale: { from: 0.5, to: 1.2 }, duration: 400, ease: 'Back.Out',
+      onComplete: () => {
+        this.tweens.add({ targets: acqText, alpha: 0, y: acqText.y - 30, duration: 800, delay: 400,
+          onComplete: () => acqText.destroy()
+        });
+      }
+    });
+
+    // Close UI after brief delay
+    this.time.delayedCall(300, () => {
+      uiElements.forEach(el => {
+        if (el && el.destroy) {
+          this.tweens.add({ targets: el, alpha: 0, duration: 200, onComplete: () => el.destroy() });
+        }
+      });
+      this.time.delayedCall(250, () => {
+        this.upgradeUIActive = false;
+        this.physics.resume();
+        // Auto-save after upgrade
+        SaveManager.save(this);
+      });
+    });
+  }
+
+  // ═══ EXPLOSION ON KILL (upgrade effect) ═══
+  triggerExplosion(x, y) {
+    const radius = 60 + this.upgradeManager.explosionLevel * 30;
+    const dmg = this.upgradeManager.explosionLevel;
+
+    // Visual explosion
+    const g = this.add.graphics().setDepth(15);
+    let ring = { r: 10, a: 0.8 };
+    this.tweens.add({
+      targets: ring, r: radius, a: 0, duration: 300,
+      onUpdate: () => { g.clear(); g.fillStyle(0xFF6600, ring.a * 0.3); g.fillCircle(x, y, ring.r); g.lineStyle(3, 0xFF4400, ring.a); g.strokeCircle(x, y, ring.r); },
+      onComplete: () => g.destroy()
+    });
+
+    // Damage nearby enemies
+    this.animals.getChildren().forEach(a => {
+      if (!a.active) return;
+      if (Phaser.Math.Distance.Between(x, y, a.x, a.y) < radius) {
+        this.damageAnimal(a, dmg);
+      }
+    });
+
+    // Particles
+    for (let i = 0; i < 8; i++) {
+      const p = this.add.image(x, y, 'fire_particle').setDepth(15).setScale(2);
+      this.tweens.add({
+        targets: p, x: x + Phaser.Math.Between(-50, 50), y: y + Phaser.Math.Between(-50, 50),
+        alpha: 0, scale: 0, duration: 400, onComplete: () => p.destroy()
+      });
+    }
+  }
+
   endGame() {
     if (this.gameOver) return;
     this.gameOver = true; playDeath(); stopFire(); stopBGM(); _bgmStarted=false;
@@ -1873,7 +2473,7 @@ class GameScene extends Phaser.Scene {
   }
 
   update(time, deltaMs) {
-    if (this.gameOver) return;
+    if (this.gameOver || this.upgradeUIActive) return;
     const dt = deltaMs / 1000;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
@@ -1931,6 +2531,22 @@ class GameScene extends Phaser.Scene {
     if (this.moveDir.x > 0.1) { this.player.setFlipX(false); this.facingRight = true; }
     else if (this.moveDir.x < -0.1) { this.player.setFlipX(true); this.facingRight = false; }
 
+    // Upgrade: passive regen
+    if (this.upgradeManager.regenPerSec > 0) {
+      this.playerHP = Math.min(this.playerMaxHP, this.playerHP + this.upgradeManager.regenPerSec * dt);
+    }
+    // Upgrade: sparkle on supply crates
+    this.supplyCrates.forEach(c => {
+      if (!c.active) return;
+      c._sparkleTimer = (c._sparkleTimer || 0) + dt;
+      if (c._sparkleTimer > 0.5) {
+        c._sparkleTimer = 0;
+        const sp = this.add.image(c.x + Phaser.Math.Between(-14, 14), c.y + Phaser.Math.Between(-12, 12), 'sparkle').setDepth(9).setScale(0.8);
+        this.tweens.add({ targets: sp, alpha: 0, y: sp.y - 15, scale: 0, duration: 500, onComplete: () => sp.destroy() });
+      }
+      if (c._label && c._label.active) c._label.setPosition(c.x, c.y - 24);
+    });
+
     this.updateAnimalAI(dt);
     this.updateNPCs(dt);
     this.updateCampfireSystem(dt);
@@ -1955,7 +2571,7 @@ class GameScene extends Phaser.Scene {
     this.drops.getChildren().forEach(d => {
       if(!d.active) return;
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, d.x, d.y);
-      if (dist < 70) {
+      if (dist < this.upgradeManager.magnetRange) {
         const a = Phaser.Math.Angle.Between(d.x, d.y, this.player.x, this.player.y);
         const speed = 220 * (1 - dist/70);
         d.x += Math.cos(a) * speed * dt;
