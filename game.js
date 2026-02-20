@@ -1215,9 +1215,9 @@ class GameScene extends Phaser.Scene {
   }
 
   isJoystickArea(p) {
-    const h = this.cameras.main.height, w = this.cameras.main.width;
-    // Left 45% of screen, between 30% from top and above DOM buttons
-    return p.x < w * 0.45 && p.y > h * 0.25 && p.y < h - this.safeBottom - 55;
+    const h = this.cameras.main.height;
+    // Full width, above bottom buttons area
+    return p.y > h * 0.15 && p.y < h - this.safeBottom - 60;
   }
 
   createUI() {
