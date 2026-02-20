@@ -230,6 +230,107 @@ class SaveManager {
 }
 // ═══ END SAVE MANAGER ═══
 
+// ═══ 💫 META PROGRESSION ═══
+class MetaManager {
+  static META_KEY = 'whiteout_meta';
+  
+  static getDefault() {
+    return {
+      version: '1.0',
+      totalPoints: 0,
+      spentPoints: 0,
+      bestTime: 0,
+      totalRuns: 0,
+      upgrades: {
+        startHP: 0,
+        startTempResist: 0,
+        startWood: 0,
+        extraCard: 0
+      }
+    };
+  }
+  
+  static load() {
+    try {
+      const raw = localStorage.getItem(MetaManager.META_KEY);
+      return raw ? JSON.parse(raw) : MetaManager.getDefault();
+    } catch (e) {
+      return MetaManager.getDefault();
+    }
+  }
+  
+  static save(meta) {
+    localStorage.setItem(MetaManager.META_KEY, JSON.stringify(meta));
+  }
+  
+  static earnPoints(survivalSeconds, totalKills, maxCombo) {
+    return Math.floor(survivalSeconds / 10) + totalKills + (maxCombo * 2);
+  }
+  
+  static getAvailablePoints() {
+    const meta = MetaManager.load();
+    return meta.totalPoints - meta.spentPoints;
+  }
+  
+  static getUpgradeCost(type, level) {
+    const costs = {
+      startHP: [100, 200, 400, 800, 1600],
+      startTempResist: [100, 200, 400, 800, 1600],
+      startWood: [50, 100, 200, 400, 800],
+      extraCard: [500, 1000, 2000]
+    };
+    return costs[type]?.[level] || 9999;
+  }
+  
+  static getMaxLevel(type) {
+    return type === 'extraCard' ? 3 : 5;
+  }
+  
+  static canUpgrade(type) {
+    const meta = MetaManager.load();
+    const level = meta.upgrades[type];
+    if (level >= MetaManager.getMaxLevel(type)) return false;
+    return MetaManager.getAvailablePoints() >= MetaManager.getUpgradeCost(type, level);
+  }
+  
+  static doUpgrade(type) {
+    const meta = MetaManager.load();
+    const level = meta.upgrades[type];
+    const cost = MetaManager.getUpgradeCost(type, level);
+    if (MetaManager.getAvailablePoints() < cost) return false;
+    
+    meta.spentPoints += cost;
+    meta.upgrades[type]++;
+    MetaManager.save(meta);
+    return true;
+  }
+  
+  static recordRun(survivalSeconds, totalKills, maxCombo) {
+    const meta = MetaManager.load();
+    const earned = MetaManager.earnPoints(survivalSeconds, totalKills, maxCombo);
+    meta.totalPoints += earned;
+    meta.bestTime = Math.max(meta.bestTime, survivalSeconds);
+    meta.totalRuns++;
+    MetaManager.save(meta);
+    return earned;
+  }
+  
+  static getBonusStats() {
+    const meta = MetaManager.load();
+    return {
+      bonusHP: meta.upgrades.startHP * 20,
+      bonusTempResist: meta.upgrades.startTempResist * 0.05,
+      bonusWood: meta.upgrades.startWood * 3,
+      extraCardChoices: meta.upgrades.extraCard
+    };
+  }
+  
+  static reset() {
+    localStorage.removeItem(MetaManager.META_KEY);
+  }
+}
+// ═══ END META PROGRESSION ═══
+
 // ═══ 🎴 UPGRADE SYSTEM (뱀서 스타일) ═══
 const UPGRADE_CATEGORIES = {
   combat: { color: '#FF4444', bgColor: 0xCC2222, borderColor: '#FF6666', icon: '⚔️', name: '전투' },
@@ -656,6 +757,23 @@ class TitleScene extends Phaser.Scene {
       }
     });
     
+    // "영구 강화" button
+    const metaBtnY = newBtnY + btnH + 20;
+    const meta = MetaManager.load();
+    const hasPoints = MetaManager.getAvailablePoints() > 0;
+    this._createButton(W / 2, metaBtnY, btnW, btnH, `🔮 영구 강화${hasPoints ? ' ✨' : ''}`, hasPoints ? 0xaa44aa : 0x444466, () => {
+      this._showMetaUpgradeUI();
+    });
+    
+    // Show best time if exists
+    if (meta.bestTime > 0) {
+      const bestMin = Math.floor(meta.bestTime / 60);
+      const bestSec = Math.floor(meta.bestTime % 60);
+      this.add.text(W / 2, metaBtnY + btnH / 2 + 16, `🏆 최고 기록: ${bestMin}분 ${bestSec}초 | 총 ${meta.totalRuns}회`, {
+        fontSize: '12px', fontFamily: 'monospace', color: '#aa88cc'
+      }).setOrigin(0.5);
+    }
+    
     // Version
     this.add.text(W - 10, H - 10, 'v1.0', {
       fontSize: '11px', fontFamily: 'monospace', color: '#334'
@@ -726,6 +844,114 @@ class TitleScene extends Phaser.Scene {
     cancelHit.on('pointerdown', () => {
       [overlay, dlg, title, msg, confirmBg, confirmTxt, confirmHit, cancelBg, cancelTxt, cancelHit].forEach(o => o.destroy());
     });
+  }
+  
+  _showMetaUpgradeUI() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    
+    // Overlay
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.8).setInteractive().setDepth(100);
+    
+    // Panel
+    const panel = this.add.graphics().setDepth(101);
+    const pw = Math.min(400, W * 0.85);
+    const ph = Math.min(500, H * 0.8);
+    panel.fillStyle(0x1a1a2e, 0.98);
+    panel.fillRoundedRect(W / 2 - pw / 2, H / 2 - ph / 2, pw, ph, 12);
+    panel.lineStyle(2, 0xaa44aa, 0.8);
+    panel.strokeRoundedRect(W / 2 - pw / 2, H / 2 - ph / 2, pw, ph, 12);
+    
+    // Title
+    const title = this.add.text(W / 2, H / 2 - ph / 2 + 30, '🔮 영구 강화', {
+      fontSize: '24px', fontFamily: 'monospace', color: '#ddaaff'
+    }).setOrigin(0.5).setDepth(102);
+    
+    // Points display
+    const available = MetaManager.getAvailablePoints();
+    const pointsTxt = this.add.text(W / 2, H / 2 - ph / 2 + 60, `💎 보유 포인트: ${available}`, {
+      fontSize: '16px', fontFamily: 'monospace', color: '#ffdd44'
+    }).setOrigin(0.5).setDepth(102);
+    
+    const meta = MetaManager.load();
+    let yPos = H / 2 - ph / 2 + 100;
+    const items = [];
+    
+    // Upgrade definitions
+    const upgrades = [
+      { key: 'startHP', name: '❤️ 시작 체력', desc: '+20 HP', max: 5 },
+      { key: 'startTempResist', name: '🧥 체온 저항', desc: '+5% 저항', max: 5 },
+      { key: 'startWood', name: '🪵 시작 나무', desc: '+3 나무', max: 5 },
+      { key: 'extraCard', name: '🎴 카드 선택', desc: '+1 선택지', max: 3 }
+    ];
+    
+    upgrades.forEach(upg => {
+      const level = meta.upgrades[upg.key];
+      const cost = MetaManager.getUpgradeCost(upg.key, level);
+      const canBuy = available >= cost && level < upg.max;
+      const maxed = level >= upg.max;
+      
+      // Item bg
+      const itemBg = this.add.graphics().setDepth(102);
+      itemBg.fillStyle(canBuy ? 0x332244 : 0x222233, 0.9);
+      itemBg.fillRoundedRect(W / 2 - pw / 2 + 20, yPos - 10, pw - 40, 70, 8);
+      
+      // Name & desc
+      this.add.text(W / 2 - pw / 2 + 35, yPos + 5, `${upg.name} (Lv.${level}/${upg.max})`, {
+        fontSize: '14px', fontFamily: 'monospace', color: maxed ? '#88ff88' : '#ccccdd'
+      }).setOrigin(0, 0).setDepth(103);
+      
+      this.add.text(W / 2 - pw / 2 + 35, yPos + 25, upg.desc, {
+        fontSize: '11px', fontFamily: 'monospace', color: '#8899aa'
+      }).setOrigin(0, 0).setDepth(103);
+      
+      // Cost or Maxed
+      const costTxt = maxed ? '최대' : `${cost} 포인트`;
+      this.add.text(W / 2 + pw / 2 - 35, yPos + 20, costTxt, {
+        fontSize: '12px', fontFamily: 'monospace', color: maxed ? '#88ff88' : (canBuy ? '#ffdd44' : '#ff6666')
+      }).setOrigin(1, 0).setDepth(103);
+      
+      // Upgrade button
+      if (!maxed) {
+        const btnBg = this.add.graphics().setDepth(103);
+        btnBg.fillStyle(canBuy ? 0xaa44aa : 0x444455, 0.9);
+        btnBg.fillRoundedRect(W / 2 + pw / 2 - 90, yPos + 40, 70, 24, 4);
+        
+        const btnTxt = this.add.text(W / 2 + pw / 2 - 55, yPos + 52, '강화', {
+          fontSize: '12px', fontFamily: 'monospace', color: canBuy ? '#fff' : '#888'
+        }).setOrigin(0.5).setDepth(104);
+        
+        if (canBuy) {
+          const btnHit = this.add.rectangle(W / 2 + pw / 2 - 55, yPos + 52, 70, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(105);
+          btnHit.on('pointerdown', () => {
+            if (MetaManager.doUpgrade(upg.key)) {
+              // Refresh UI
+              [overlay, panel, title, pointsTxt, ...items].forEach(o => o.destroy());
+              this._showMetaUpgradeUI();
+            }
+          });
+          items.push(btnHit);
+        }
+        items.push(btnBg, btnTxt);
+      }
+      
+      items.push(itemBg);
+      yPos += 85;
+    });
+    
+    // Close button
+    const closeBg = this.add.graphics().setDepth(102);
+    closeBg.fillStyle(0x444466, 0.9);
+    closeBg.fillRoundedRect(W / 2 - 50, H / 2 + ph / 2 - 50, 100, 36, 6);
+    const closeTxt = this.add.text(W / 2, H / 2 + ph / 2 - 32, '닫기', {
+      fontSize: '14px', fontFamily: 'monospace', color: '#aabbcc'
+    }).setOrigin(0.5).setDepth(103);
+    const closeHit = this.add.rectangle(W / 2, H / 2 + ph / 2 - 32, 100, 36, 0, 0).setInteractive({ useHandCursor: true }).setDepth(104);
+    closeHit.on('pointerdown', () => {
+      [overlay, panel, title, pointsTxt, closeBg, closeTxt, closeHit, ...items].forEach(o => o.destroy());
+    });
+    
+    items.push(overlay, panel, title, pointsTxt, closeBg, closeTxt, closeHit);
   }
   
   update(time, delta) {
@@ -1191,6 +1417,15 @@ class GameScene extends Phaser.Scene {
     this.moveDir = { x: 0, y: 0 };
     this.npcsOwned = [];
     this.placedBuildings = [];
+    
+    // ═══ Apply Meta Progression Bonuses ═══
+    const meta = MetaManager.getBonusStats();
+    this.playerMaxHP += meta.bonusHP;
+    this.playerHP = this.playerMaxHP;
+    this.warmthResist += meta.bonusTempResist;
+    this.res.wood += meta.bonusWood;
+    this.extraCardChoices = meta.extraCardChoices || 0;
+    
     this.gameOver = false;
     this.isRespawning = false;
     this.buildMode = null;
@@ -3523,6 +3758,11 @@ class GameScene extends Phaser.Scene {
   showVictory() {
     if (this.gameOver) return;
     this.gameOver = true; // Prevents further game updates
+    
+    // Record meta progression
+    const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
+    const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0);
+    
     playWinSound(); // Assumes a win sound exists or will be added
 
     const cam = this.cameras.main;
@@ -3538,7 +3778,7 @@ class GameScene extends Phaser.Scene {
     }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
 
     const statsText = this.add.text(cam.width/2, cam.height/2 + 30, 
-      `⏱️ 1시간 생존! | ⚔️ 처치: ${Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0)} | ⭐ Lv.${this.playerLevel} | 🔥 최고 콤보: ${this.stats.maxCombo || 0}`, {
+      `⏱️ 1시간 생존! | ⚔️ 처치: ${Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0)} | ⭐ Lv.${this.playerLevel} | 🔥 최고 콤보: ${this.stats.maxCombo || 0}\n💎 +${earned} 포인트 획득!`, {
       fontSize:'18px', fontFamily:'monospace', color:'#DDFFEE', stroke:'#000', strokeThickness:4, align:'center'
     }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
 
