@@ -68,6 +68,69 @@ function startFire(){if(!audioCtx||!soundEnabled||fireAmbSrc)return;const bs=Mat
 function stopFire(){if(fireAmbSrc){try{fireAmbSrc.s.stop()}catch(e){}fireAmbSrc=null}}
 // ═══ END SOUND ═══
 
+// ═══ 💾 SAVE MANAGER ═══
+class SaveManager {
+  static SAVE_KEY = 'whiteout_save';
+  
+  static save(scene) {
+    try {
+      const saveData = {
+        version: '1.0',
+        timestamp: Date.now(),
+        player: {
+          x: scene.player ? scene.player.x : WORLD_W / 2,
+          y: scene.player ? scene.player.y : WORLD_H / 2,
+          hp: scene.playerHP,
+          maxHP: scene.playerMaxHP,
+          damage: scene.playerDamage,
+          speed: scene.playerSpeed,
+          baseSpeed: scene.playerBaseSpeed,
+          warmthResist: scene.warmthResist,
+          woodBonus: scene.woodBonus,
+          stoneBonus: scene.stoneBonus,
+          baseAttackSpeed: scene.baseAttackSpeed,
+          facingRight: scene.facingRight,
+        },
+        resources: { ...scene.res },
+        temperature: scene.temperature,
+        maxTemp: scene.maxTemp,
+        hunger: scene.hunger,
+        maxHunger: scene.maxHunger,
+        storageCapacity: scene.storageCapacity,
+        stats: JSON.parse(JSON.stringify(scene.stats)),
+        questCompleted: [...scene.questCompleted],
+        questIndex: scene.questIndex,
+        buildings: scene.placedBuildings.map(b => ({ type: b.type, x: b.x, y: b.y })),
+        npcs: scene.npcsOwned.map(n => ({ type: n.npcType, x: n.x, y: n.y })),
+      };
+      localStorage.setItem(SaveManager.SAVE_KEY, JSON.stringify(saveData));
+      return true;
+    } catch (e) {
+      console.error('Save failed:', e);
+      return false;
+    }
+  }
+  
+  static load() {
+    try {
+      const saved = localStorage.getItem(SaveManager.SAVE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error('Load failed:', e);
+      return null;
+    }
+  }
+  
+  static exists() {
+    return !!localStorage.getItem(SaveManager.SAVE_KEY);
+  }
+  
+  static delete() {
+    localStorage.removeItem(SaveManager.SAVE_KEY);
+  }
+}
+// ═══ END SAVE MANAGER ═══
+
 const WORLD_W = 2400;
 const WORLD_H = 2400;
 
@@ -133,6 +196,211 @@ const QUESTS = [
   { id: 'q8', name: 'NPC 고용', desc: 'NPC 1명 고용', check: s => s.npcsHired >= 1, reward: { wood: 10, stone: 10 } },
 ];
 
+// ═══ 🎬 TITLE SCENE ═══
+class TitleScene extends Phaser.Scene {
+  constructor() { super('Title'); }
+
+  create() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    
+    // Dark background
+    this.cameras.main.setBackgroundColor('#0a0a1a');
+    
+    // Scrolling snow landscape (Factorio-style)
+    this.bgGraphics = this.add.graphics();
+    this.snowTiles = [];
+    for (let i = 0; i < 80; i++) {
+      this.snowTiles.push({
+        x: Math.random() * W * 2,
+        y: Math.random() * H * 2,
+        size: 1 + Math.random() * 3,
+        speed: 0.2 + Math.random() * 0.5,
+        alpha: 0.1 + Math.random() * 0.3
+      });
+    }
+    
+    // Ground scroll tiles
+    this.groundTiles = [];
+    for (let i = 0; i < 30; i++) {
+      this.groundTiles.push({
+        x: Math.random() * W * 2 - W * 0.5,
+        y: Math.random() * H * 2 - H * 0.5,
+        w: 20 + Math.random() * 60,
+        h: 10 + Math.random() * 30,
+        color: Phaser.Math.Between(0x1a1a3e, 0x2a2a4e),
+        speed: 0.3 + Math.random() * 0.3
+      });
+    }
+    
+    // Snow particles
+    this.snowParticles = [];
+    for (let i = 0; i < 120; i++) {
+      this.snowParticles.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        size: 1 + Math.random() * 3,
+        speedX: -0.3 - Math.random() * 0.5,
+        speedY: 0.5 + Math.random() * 1.5,
+        alpha: 0.3 + Math.random() * 0.7,
+        wobble: Math.random() * Math.PI * 2
+      });
+    }
+    
+    this.snowGfx = this.add.graphics();
+    
+    // Title text
+    this.add.text(W / 2, H * 0.25, '❄️ 화이트아웃 서바이벌', {
+      fontSize: Math.min(42, W * 0.06) + 'px',
+      fontFamily: 'monospace',
+      color: '#e0e8ff',
+      stroke: '#000',
+      strokeThickness: 4,
+      shadow: { offsetX: 2, offsetY: 2, color: '#0a0a2a', blur: 8, fill: true }
+    }).setOrigin(0.5);
+    
+    this.add.text(W / 2, H * 0.33, '극한의 추위에서 살아남아라', {
+      fontSize: Math.min(18, W * 0.03) + 'px',
+      fontFamily: 'monospace',
+      color: '#8899bb',
+    }).setOrigin(0.5);
+    
+    // Menu buttons
+    const btnY = H * 0.52;
+    const btnW = Math.min(260, W * 0.5);
+    const btnH = 50;
+    const hasSave = SaveManager.exists();
+    
+    // "이어하기" button
+    if (hasSave) {
+      this._createButton(W / 2, btnY, btnW, btnH, '▶ 이어하기', 0x2255aa, () => {
+        this.scene.start('Boot', { loadSave: true });
+      });
+      
+      // Show save info
+      const saveData = SaveManager.load();
+      if (saveData) {
+        const date = new Date(saveData.timestamp);
+        const timeStr = date.toLocaleDateString('ko-KR') + ' ' + date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        this.add.text(W / 2, btnY + btnH / 2 + 16, '💾 ' + timeStr, {
+          fontSize: '12px', fontFamily: 'monospace', color: '#6688aa'
+        }).setOrigin(0.5);
+      }
+    }
+    
+    // "새로하기" button
+    const newBtnY = hasSave ? btnY + btnH + 40 : btnY;
+    this._createButton(W / 2, newBtnY, btnW, btnH, '🆕 새로하기', hasSave ? 0x444466 : 0x2255aa, () => {
+      if (hasSave) {
+        this._showConfirmDialog();
+      } else {
+        this.scene.start('Boot', { loadSave: false });
+      }
+    });
+    
+    // Version
+    this.add.text(W - 10, H - 10, 'v1.0', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#334'
+    }).setOrigin(1, 1);
+    
+    this.elapsed = 0;
+  }
+  
+  _createButton(x, y, w, h, text, color, callback) {
+    const bg = this.add.graphics();
+    bg.fillStyle(color, 0.8);
+    bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 8);
+    bg.lineStyle(2, 0x88aadd, 0.5);
+    bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 8);
+    
+    const txt = this.add.text(x, y, text, {
+      fontSize: '20px', fontFamily: 'monospace', color: '#e0e8ff',
+      stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5);
+    
+    const hitArea = this.add.rectangle(x, y, w, h, 0x000000, 0).setInteractive({ useHandCursor: true });
+    hitArea.on('pointerover', () => { bg.clear(); bg.fillStyle(color, 1); bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 8); bg.lineStyle(2, 0xaaccff, 0.8); bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 8); });
+    hitArea.on('pointerout', () => { bg.clear(); bg.fillStyle(color, 0.8); bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 8); bg.lineStyle(2, 0x88aadd, 0.5); bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 8); });
+    hitArea.on('pointerdown', callback);
+    
+    return { bg, txt, hitArea };
+  }
+  
+  _showConfirmDialog() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    
+    // Overlay
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.7).setInteractive().setDepth(100);
+    
+    // Dialog box
+    const dlg = this.add.graphics().setDepth(101);
+    const dw = Math.min(320, W * 0.7);
+    const dh = 180;
+    dlg.fillStyle(0x1a1a2e, 0.95);
+    dlg.fillRoundedRect(W / 2 - dw / 2, H / 2 - dh / 2, dw, dh, 12);
+    dlg.lineStyle(2, 0xff6644, 0.8);
+    dlg.strokeRoundedRect(W / 2 - dw / 2, H / 2 - dh / 2, dw, dh, 12);
+    
+    const title = this.add.text(W / 2, H / 2 - 50, '⚠️ 경고', {
+      fontSize: '20px', fontFamily: 'monospace', color: '#ff8866'
+    }).setOrigin(0.5).setDepth(102);
+    
+    const msg = this.add.text(W / 2, H / 2 - 15, '기존 저장 데이터가 삭제됩니다.\n정말 새로 시작하시겠습니까?', {
+      fontSize: '14px', fontFamily: 'monospace', color: '#ccccdd', align: 'center'
+    }).setOrigin(0.5).setDepth(102);
+    
+    // Confirm button
+    const confirmBg = this.add.graphics().setDepth(102);
+    confirmBg.fillStyle(0xcc3322, 0.9); confirmBg.fillRoundedRect(W / 2 - 70 - 50, H / 2 + 40, 100, 36, 6);
+    const confirmTxt = this.add.text(W / 2 - 70, H / 2 + 58, '삭제 후 시작', { fontSize: '13px', fontFamily: 'monospace', color: '#fff' }).setOrigin(0.5).setDepth(102);
+    const confirmHit = this.add.rectangle(W / 2 - 70, H / 2 + 58, 100, 36, 0, 0).setInteractive({ useHandCursor: true }).setDepth(103);
+    confirmHit.on('pointerdown', () => {
+      SaveManager.delete();
+      this.scene.start('Boot', { loadSave: false });
+    });
+    
+    // Cancel button
+    const cancelBg = this.add.graphics().setDepth(102);
+    cancelBg.fillStyle(0x334466, 0.9); cancelBg.fillRoundedRect(W / 2 + 70 - 50, H / 2 + 40, 100, 36, 6);
+    const cancelTxt = this.add.text(W / 2 + 70, H / 2 + 58, '취소', { fontSize: '13px', fontFamily: 'monospace', color: '#aabbcc' }).setOrigin(0.5).setDepth(102);
+    const cancelHit = this.add.rectangle(W / 2 + 70, H / 2 + 58, 100, 36, 0, 0).setInteractive({ useHandCursor: true }).setDepth(103);
+    cancelHit.on('pointerdown', () => {
+      [overlay, dlg, title, msg, confirmBg, confirmTxt, confirmHit, cancelBg, cancelTxt, cancelHit].forEach(o => o.destroy());
+    });
+  }
+  
+  update(time, delta) {
+    this.elapsed += delta * 0.001;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    
+    // Draw scrolling ground
+    this.bgGraphics.clear();
+    this.groundTiles.forEach(t => {
+      t.x -= t.speed;
+      t.y -= t.speed * 0.3;
+      if (t.x + t.w < -50) { t.x = W + 50; t.y = Math.random() * H; }
+      this.bgGraphics.fillStyle(t.color, 0.3);
+      this.bgGraphics.fillRect(t.x, t.y, t.w, t.h);
+    });
+    
+    // Snow particles
+    this.snowGfx.clear();
+    this.snowParticles.forEach(p => {
+      p.x += p.speedX;
+      p.y += p.speedY;
+      p.wobble += 0.02;
+      p.x += Math.sin(p.wobble) * 0.3;
+      if (p.y > H + 10) { p.y = -10; p.x = Math.random() * W; }
+      if (p.x < -10) { p.x = W + 10; }
+      this.snowGfx.fillStyle(0xffffff, p.alpha * (0.7 + Math.sin(this.elapsed + p.wobble) * 0.3));
+      this.snowGfx.fillCircle(p.x, p.y, p.size);
+    });
+  }
+}
+// ═══ END TITLE SCENE ═══
+
 class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
   
@@ -151,7 +419,8 @@ class BootScene extends Phaser.Scene {
     this.createRockTexture();
     this.createDropTextures();
     this.createParticleTextures();
-    this.scene.start('Game');
+    const loadSave = this.scene.settings.data?.loadSave || false;
+    this.scene.start('Game', { loadSave });
   }
 
   createPlayerTexture() {
@@ -621,6 +890,107 @@ class GameScene extends Phaser.Scene {
     window._gameScene = this;
     this.physics.add.overlap(this.player, this.drops, (_, d) => this.collectDrop(d));
     this.campfireParticleTimer = 0;
+
+    // ── Load Save Data ──
+    const loadSave = this.scene.settings.data?.loadSave;
+    if (loadSave) {
+      const save = SaveManager.load();
+      if (save) {
+        this._applySaveData(save);
+      }
+    }
+    
+    // ── Auto-Save Timer (60초) ──
+    this.autoSaveTimer = this.time.addEvent({
+      delay: 60000,
+      callback: () => {
+        if (!this.gameOver) {
+          SaveManager.save(this);
+          this._showSaveIndicator();
+        }
+      },
+      loop: true
+    });
+  }
+
+  _applySaveData(save) {
+    // Player stats
+    if (save.player) {
+      this.player.setPosition(save.player.x, save.player.y);
+      this.playerHP = save.player.hp;
+      this.playerMaxHP = save.player.maxHP;
+      this.playerDamage = save.player.damage;
+      this.playerSpeed = save.player.speed;
+      this.playerBaseSpeed = save.player.baseSpeed;
+      this.warmthResist = save.player.warmthResist;
+      this.woodBonus = save.player.woodBonus;
+      this.stoneBonus = save.player.stoneBonus;
+      this.baseAttackSpeed = save.player.baseAttackSpeed;
+      this.facingRight = save.player.facingRight;
+    }
+    // Resources
+    if (save.resources) this.res = save.resources;
+    if (save.temperature != null) this.temperature = save.temperature;
+    if (save.maxTemp != null) this.maxTemp = save.maxTemp;
+    if (save.hunger != null) this.hunger = save.hunger;
+    if (save.maxHunger != null) this.maxHunger = save.maxHunger;
+    if (save.storageCapacity != null) this.storageCapacity = save.storageCapacity;
+    if (save.stats) this.stats = save.stats;
+    if (save.questCompleted) this.questCompleted = save.questCompleted;
+    if (save.questIndex != null) this.questIndex = save.questIndex;
+    // Buildings
+    if (save.buildings) {
+      save.buildings.forEach(b => {
+        this.buildMode = b.type;
+        this._restoreBuilding(b);
+      });
+      this.buildMode = null;
+    }
+    // NPCs
+    if (save.npcs) {
+      save.npcs.forEach(n => {
+        this._restoreNPC(n);
+      });
+    }
+  }
+
+  _restoreBuilding(b) {
+    const def = BUILDINGS[b.type];
+    if (!def) return;
+    const spr = this.add.sprite(b.x, b.y, 'building_' + b.type).setDepth(3);
+    spr.type = b.type;
+    spr.buildDef = def;
+    this.placedBuildings.push(spr);
+    this.buildingSprites.push(spr);
+    if (def.storageBonus) this.storageCapacity += def.storageBonus;
+    if (!this.stats.built[b.type]) this.stats.built[b.type] = 0;
+  }
+
+  _restoreNPC(n) {
+    const npcDef = NPC_DEFS.find(d => d.type === n.type);
+    if (!npcDef) return;
+    const npc = this.physics.add.sprite(n.x, n.y, 'npc_' + n.type).setDepth(5);
+    npc.npcType = n.type;
+    npc.npcDef = npcDef;
+    npc.setCollideWorldBounds(true);
+    npc.body.setSize(16, 20).setOffset(8, 10);
+    npc.actionTimer = 0;
+    npc.state = 'idle';
+    this.npcSprites.add(npc);
+    this.npcsOwned.push(npc);
+  }
+
+  _showSaveIndicator() {
+    const cam = this.cameras.main;
+    const txt = this.add.text(cam.scrollX + cam.width - 10, cam.scrollY + 10, '💾 저장됨', {
+      fontSize: '14px', fontFamily: 'monospace', color: '#88ccff',
+      stroke: '#000', strokeThickness: 2
+    }).setOrigin(1, 0).setDepth(200);
+    this.tweens.add({
+      targets: txt, alpha: 0, y: txt.y - 20,
+      duration: 1500, ease: 'Power2',
+      onComplete: () => txt.destroy()
+    });
   }
 
   drawBackground() {
@@ -1068,6 +1438,7 @@ class GameScene extends Phaser.Scene {
     this.stats.built[this.buildMode]++;
     if (def.storageBonus) this.storageCapacity += def.storageBonus;
     playBuild(); this.showFloatingText(wx, wy - 40, '✅ '+def.name+' 건설!', '#4CAF50');
+    SaveManager.save(this); this._showSaveIndicator();
     for (let i = 0; i < 8; i++) {
       const p = this.add.image(wx, wy, 'snowflake').setDepth(15).setTint(0xFFDD88).setScale(1.2);
       this.tweens.add({ targets: p, x: wx + Phaser.Math.Between(-35, 35), y: wy + Phaser.Math.Between(-35, 35),
@@ -1156,7 +1527,7 @@ class GameScene extends Phaser.Scene {
       case 'warmthResist': this.warmthResist = Math.max(0.1, this.warmthResist - recipe.value); break;
       case 'speed': this.playerSpeed += recipe.value; this.playerBaseSpeed += recipe.value; break;
     }
-    this.stats.crafted++; playCraft();
+    this.stats.crafted++; playCraft(); SaveManager.save(this);
     this.showFloatingText(this.player.x, this.player.y - 30, '✨ '+recipe.icon+' '+recipe.name+' 제작!', '#64B5F6');
   }
 
@@ -1501,7 +1872,7 @@ class GameScene extends Phaser.Scene {
       fontSize:'26px',fontFamily:'monospace',color:'#4CAF50',stroke:'#000',strokeThickness:3,
       backgroundColor:'#222244',padding:{x:24,y:12}
     }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setInteractive();
-    rb.on('pointerdown', () => this.scene.restart());
+    rb.on('pointerdown', () => { SaveManager.delete(); this.scene.start('Title'); });
     rb.on('pointerover', () => rb.setColor('#66FF66'));
     rb.on('pointerout', () => rb.setColor('#4CAF50'));
   }
@@ -1611,7 +1982,7 @@ const config = {
   backgroundColor: '#1a1a2e',
   physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
   scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, GameScene],
+  scene: [TitleScene, BootScene, GameScene],
   input: { activePointers: 3 },
 };
 
