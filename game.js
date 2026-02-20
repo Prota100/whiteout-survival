@@ -1,7 +1,7 @@
 // Whiteout Survival - Hyper Casual Web Game
 // Built with Phaser 3
 
-const GAME_DURATION = 60; // seconds
+const GAME_DURATION = Infinity; // 무제한 플레이
 const WORLD_W = 1600;
 const WORLD_H = 1600;
 
@@ -30,7 +30,7 @@ const NPC_DEFS = [
 ];
 
 const ANIMAL_STATS = {
-  rabbit: { hp: 1, speed: 120, damage: 0, meat: 1, color: 0xCCCCCC, size: 8, behavior: 'flee', name: '토끼' },
+  rabbit: { hp: 1, speed: 30, damage: 0, meat: 1, color: 0xCCCCCC, size: 8, behavior: 'flee', name: '토끼' },
   wolf: { hp: 3, speed: 90, damage: 1, meat: 3, color: 0x666666, size: 12, behavior: 'chase', name: '늑대' },
   bear: { hp: 8, speed: 60, damage: 3, meat: 8, color: 0x8B4513, size: 18, behavior: 'chase', name: '곰' },
 };
@@ -79,7 +79,7 @@ class GameScene extends Phaser.Scene {
     this.playerHP = 10;
     this.playerMaxHP = 10;
     this.playerDamage = 1;
-    this.playerSpeed = 160;
+    this.playerSpeed = 150;
     this.attackCooldown = 0;
     this.timelineIndex = 0;
     this.npcsOwned = [];
@@ -311,9 +311,19 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnTimeline() {
-    // Check which timeline entries should fire
-    while (this.timelineIndex < TIMELINE.length && TIMELINE[this.timelineIndex].time <= this.gameTime) {
-      const entry = TIMELINE[this.timelineIndex];
+    // Check which timeline entries should fire (loops every 60s)
+    const cycleTime = this.gameTime % 60;
+    const cycle = Math.floor(this.gameTime / 60);
+    const expectedIndex = cycle * TIMELINE.length;
+    
+    // Reset index for new cycle
+    if (this.timelineIndex < expectedIndex) {
+      this.timelineIndex = expectedIndex;
+    }
+    
+    const localIndex = this.timelineIndex - expectedIndex;
+    if (localIndex < TIMELINE.length && TIMELINE[localIndex].time <= cycleTime) {
+      const entry = TIMELINE[localIndex];
       for (let i = 0; i < entry.count; i++) {
         this.spawnAnimal(entry.type);
       }
@@ -740,7 +750,7 @@ class GameScene extends Phaser.Scene {
 
       if (animal.animalBehavior === 'flee') {
         // Rabbit: flee from player when close
-        if (distToPlayer < 150) {
+        if (distToPlayer < 100) {
           const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, animal.x, animal.y);
           animal.body.setVelocity(
             Math.cos(angle) * animal.animalSpeed,
@@ -829,10 +839,10 @@ class GameScene extends Phaser.Scene {
     const h = this.cameras.main.height;
     const pad = 10;
 
-    // Timer
-    const remaining = Math.max(0, Math.ceil(GAME_DURATION - this.gameTime));
-    this.timerText.setText(`⏱ ${remaining}s`);
-    if (remaining <= 10) this.timerText.setColor('#FF4444');
+    // Timer - show elapsed time
+    const elapsed = Math.floor(this.gameTime);
+    this.timerText.setText(`⏱ ${elapsed}s 생존하세요`);
+    this.timerText.setColor('#FFFFFF');
 
     // Resources
     this.meatText.setText(`🥩 ${this.meat}`);
@@ -934,12 +944,8 @@ class GameScene extends Phaser.Scene {
 
     // Game timer
     this.gameTime += delta;
-    if (this.gameTime >= GAME_DURATION) {
-      this.endGame(true);
-      return;
-    }
 
-    // Spawn timeline
+    // Spawn timeline (loops every 60s)
     this.spawnTimeline();
 
     // Attack cooldown
