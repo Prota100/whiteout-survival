@@ -504,9 +504,16 @@ class GameScene extends Phaser.Scene {
     this.isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || ('ontouchstart' in window);
     this.facingRight = true;
 
-    // Safe area bottom for iOS
+    // Safe area bottom - compute from DOM
     this.safeBottom = 0;
-    if (/iPhone/.test(navigator.userAgent) && window.screen.height >= 812) {
+    try {
+      const d = document.createElement('div');
+      d.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom,0px);visibility:hidden;';
+      document.body.appendChild(d);
+      this.safeBottom = d.offsetHeight || 0;
+      document.body.removeChild(d);
+    } catch(e) {}
+    if (!this.safeBottom && /iPhone/.test(navigator.userAgent) && window.screen.height >= 812) {
       this.safeBottom = 34;
     }
 
@@ -1167,9 +1174,7 @@ class GameScene extends Phaser.Scene {
 
     this.input.on('pointerdown', p => {
       if (this.gameOver || this.isUIArea(p)) return;
-      const h = this.cameras.main.height;
-      const safeY = h - this.safeBottom - 60;
-      if (p.x < this.cameras.main.width * 0.45 && p.y > h * 0.3 && p.y < safeY) {
+      if (this.isJoystickArea(p)) {
         this.joystickActive = true; this.joystickPID = p.id;
         this.joyOrigin = {x:p.x, y:p.y};
         this.joystickBase.clear().setAlpha(1);
@@ -1198,8 +1203,9 @@ class GameScene extends Phaser.Scene {
   }
 
   isJoystickArea(p) {
-    const h = this.cameras.main.height;
-    return p.x < this.cameras.main.width * 0.45 && p.y > h * 0.3 && p.y < h - this.safeBottom - 60;
+    const h = this.cameras.main.height, w = this.cameras.main.width;
+    // Left 45% of screen, between 30% from top and above DOM buttons
+    return p.x < w * 0.45 && p.y > h * 0.25 && p.y < h - this.safeBottom - 55;
   }
 
   createUI() {
@@ -1215,45 +1221,37 @@ class GameScene extends Phaser.Scene {
     this.uiQuest = this.add.text(10, 82, '', {...s, fontSize:'11px', color:'#FFD700', wordWrap:{width:220}}).setScrollFactor(0).setDepth(100);
     this.uiBuffText = this.add.text(10, 100, '', {...s, fontSize:'10px', color:'#FF8844'}).setScrollFactor(0).setDepth(100);
 
-    this.uiBtns = [];
-    const btnData = [
-      { label: '⚔️공격', action: () => this.performAttackNearest() },
-      { label: '🔥건설', action: () => this.toggleBuildMenu() },
-      { label: '🔨제작', action: () => this.toggleCraftMenu() },
-      { label: '👥고용', action: () => this.toggleHireMenu() },
-      { label: '🥩먹기', action: () => this.interactNearest() },
-      { label: '🔊', action: () => { soundEnabled=!soundEnabled; if(!soundEnabled)stopFire(); } },
-    ];
-    btnData.forEach(bd => {
-      const btn = this.add.text(0, 0, bd.label, {
-        fontSize: this.isMobile ? '15px' : '14px', fontFamily: 'monospace', color: '#fff',
-        backgroundColor: '#222244dd', padding: { x: this.isMobile ? 10 : 8, y: this.isMobile ? 8 : 6 },
-        stroke: '#000', strokeThickness: 2,
-      }).setScrollFactor(0).setDepth(100).setInteractive();
-      btn.on('pointerdown', (e) => { e.stopPropagation(); bd.action(); });
-      this.uiBtns.push(btn);
+    // ═══ DOM Buttons (100% reliable touch) ═══
+    const scene = this;
+    const bind = (id, fn) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); resumeAudio(); fn(); });
+    };
+    bind('btn-attack', () => scene.performAttackNearest());
+    bind('btn-build', () => scene.toggleBuildMenu());
+    bind('btn-craft', () => scene.toggleCraftMenu());
+    bind('btn-hire', () => scene.toggleHireMenu());
+    bind('btn-eat', () => scene.interactNearest());
+    bind('btn-sound', () => {
+      soundEnabled = !soundEnabled;
+      if (!soundEnabled) stopFire();
+      const el = document.getElementById('btn-sound');
+      if (el) el.textContent = soundEnabled ? '🔊' : '🔇';
     });
 
     this.panelBg = this.add.graphics().setScrollFactor(0).setDepth(110).setVisible(false);
     this.panelTexts = []; this.panelZones = []; this.activePanel = null;
     this.npcLabels = [];
-    this.positionUI();
-    this.scale.on('resize', () => this.positionUI());
-  }
-
-  positionUI() {
-    const w = this.cameras.main.width, h = this.cameras.main.height;
-    const btnY = h - 48 - this.safeBottom;
-    let totalW = 0;
-    this.uiBtns.forEach(btn => { totalW += btn.width + 5; });
-    let startX = Math.max(4, (w - totalW) / 2);
-    this.uiBtns.forEach(btn => { btn.setPosition(startX, btnY); startX += btn.width + 5; });
   }
 
   isUIArea(p) {
     const h = this.cameras.main.height, w = this.cameras.main.width;
-    if (p.y > h - 60 - this.safeBottom) return true;
-    if (p.y < 115 && p.x < 260) return true;
+    // Bottom DOM buttons area (55px + safe area)
+    if (p.y > h - 55 - this.safeBottom) return true;
+    // Top HUD area
+    if (p.y < 120 && p.x < 260) return true;
+    // Panel area
     if (this.activePanel && p.x > w - 240 && p.y > 60 && p.y < h - 60) return true;
     return false;
   }

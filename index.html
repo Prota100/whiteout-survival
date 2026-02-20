@@ -12,39 +12,93 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
-  overscroll-behavior: none;
-  touch-action: none;
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
-  position: fixed;
-  top: 0; left: 0;
+  width: 100%; height: 100vh; height: 100dvh;
+  overflow: hidden; overscroll-behavior: none;
+  touch-action: none; -webkit-touch-callout: none;
+  -webkit-user-select: none; user-select: none;
+  position: fixed; top: 0; left: 0;
 }
 body { background: #1a1a2e; }
 #game-container {
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  position: relative;
+  width: 100vw; height: 100vh; height: 100dvh;
+  overflow: hidden;
 }
-canvas { display: block; }
+canvas { display: block; position: absolute; top: 0; left: 0; }
+
+/* ═══ DOM UI OVERLAY ═══ */
+#ui-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 10; pointer-events: none;
+}
+#bottom-buttons {
+  position: absolute;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  left: 0; right: 0;
+  display: flex; justify-content: center; gap: 5px;
+  padding: 0 8px;
+  pointer-events: none;
+}
+#bottom-buttons button {
+  pointer-events: auto;
+  background: rgba(20, 20, 50, 0.88);
+  color: #fff; border: 1.5px solid rgba(100, 120, 200, 0.4);
+  border-radius: 8px;
+  font-family: monospace; font-size: 14px;
+  padding: 9px 12px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+#bottom-buttons button:active {
+  background: rgba(60, 60, 120, 0.95);
+  border-color: rgba(140, 160, 255, 0.7);
+}
+@media (max-width: 420px) {
+  #bottom-buttons button { font-size: 12px; padding: 7px 8px; }
+}
+@media (max-width: 360px) {
+  #bottom-buttons button { font-size: 11px; padding: 6px 6px; }
+}
+
+/* Joystick zone indicator (mobile only) */
+#joystick-hint {
+  display: none;
+  position: absolute;
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  left: 30px;
+  width: 80px; height: 80px;
+  border: 2px dashed rgba(255,255,255,0.15);
+  border-radius: 50%;
+  pointer-events: none;
+}
+@media (hover: none) and (pointer: coarse) {
+  #joystick-hint { display: block; }
+}
 </style>
 </head>
 <body>
-<div id="game-container"></div>
+<div id="game-container">
+  <div id="ui-overlay">
+    <div id="bottom-buttons">
+      <button id="btn-attack" ontouchstart="">⚔️공격</button>
+      <button id="btn-build" ontouchstart="">🔥건설</button>
+      <button id="btn-craft" ontouchstart="">🔨제작</button>
+      <button id="btn-hire" ontouchstart="">👥고용</button>
+      <button id="btn-eat" ontouchstart="">🥩먹기</button>
+      <button id="btn-sound" ontouchstart="">🔊</button>
+    </div>
+    <div id="joystick-hint"></div>
+  </div>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 <script>
-var GV="ultimate-006";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
+var GV="ultimate-007";if(localStorage.getItem('gv')!==GV){localStorage.clear();sessionStorage.clear();localStorage.setItem('gv',GV);}
 if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(g){g.unregister();});});
 if('caches' in window)caches.keys().then(function(n){n.forEach(function(k){caches.delete(k);});});
 </script>
-<script src="game.js?v=20250220-ultimate-006"></script>
+<script src="game.js?v=20250220-ultimate-007"></script>
 </body>
 </html>
