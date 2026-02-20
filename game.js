@@ -1013,14 +1013,22 @@ class BootScene extends Phaser.Scene {
   create() {
     initAudio();
     this.createPlayerTexture();
+    this.createPlayerBackTexture();
     this.createPlayerAttackTexture();
     this.createRabbitTexture();
+    this.createRabbitBackTexture();
     this.createDeerTexture();
+    this.createDeerBackTexture();
     this.createPenguinTexture();
+    this.createPenguinBackTexture();
     this.createSealTexture();
+    this.createSealBackTexture();
     this.createWolfTexture();
+    this.createWolfBackTexture();
     this.createBearTexture();
+    this.createBearBackTexture();
     this.createNPCTextures();
+    this.createNPCBackTextures();
     this.createTreeTexture();
     this.createRockTexture();
     this.createDropTextures();
@@ -1065,6 +1073,53 @@ class BootScene extends Phaser.Scene {
     g.fillRect(12, 36, 7, 4);
     g.fillRect(21, 36, 7, 4);
     g.generateTexture('player', s, s);
+    g.destroy();
+  }
+
+  createPlayerBackTexture() {
+    const g = this.add.graphics();
+    const s = 40;
+    // 모자 (뒷모습)
+    g.fillStyle(0xCC2222, 1);
+    g.fillRect(12, 2, 16, 8);
+    g.fillRect(11, 5, 18, 4);
+    // 뒤통수 (머리카락)
+    g.fillStyle(0x553322, 1);
+    g.fillRect(13, 10, 14, 9);
+    g.fillStyle(0x442211, 1);
+    g.fillRect(14, 11, 12, 7);
+    // 코트 뒷면
+    g.fillStyle(0x2299CC, 1);
+    g.fillRect(11, 19, 18, 12);
+    // 코트 뒤쪽 라인
+    g.fillStyle(0x1188BB, 1);
+    g.fillRect(19, 19, 2, 12);
+    // 배낭
+    g.fillStyle(0x885522, 1);
+    g.fillRect(13, 20, 14, 10);
+    g.fillStyle(0x774411, 1);
+    g.fillRect(14, 21, 12, 8);
+    g.fillStyle(0xAA7733, 1);
+    g.fillRect(15, 22, 4, 3);
+    // 배낭 끈
+    g.fillStyle(0x664411, 1);
+    g.fillRect(11, 20, 2, 8);
+    g.fillRect(27, 20, 2, 8);
+    // 팔
+    g.fillStyle(0x2299CC, 1);
+    g.fillRect(7, 20, 4, 9);
+    g.fillRect(29, 20, 4, 9);
+    g.fillStyle(0x884422, 1);
+    g.fillRect(7, 29, 4, 3);
+    g.fillRect(29, 29, 4, 3);
+    // 다리
+    g.fillStyle(0x555566, 1);
+    g.fillRect(13, 31, 6, 6);
+    g.fillRect(21, 31, 6, 6);
+    g.fillStyle(0x664422, 1);
+    g.fillRect(12, 36, 7, 4);
+    g.fillRect(21, 36, 7, 4);
+    g.generateTexture('player_back', s, s);
     g.destroy();
   }
 
@@ -1274,6 +1329,167 @@ class BootScene extends Phaser.Scene {
     g.destroy();
   }
 
+  createRabbitBackTexture() {
+    const g = this.add.graphics();
+    const sz = 28;
+    // 몸통 뒷면
+    g.fillStyle(0xFFEEDD, 1);
+    g.fillRoundedRect(7, 12, 14, 12, 5);
+    g.fillRoundedRect(9, 6, 10, 8, 4);
+    // 귀 뒷면
+    g.fillStyle(0xEEDDBB, 1);
+    g.fillRect(10, 0, 3, 8);
+    g.fillRect(15, 0, 3, 8);
+    // 눈 없음 - 뒤통수
+    g.fillStyle(0xEEDDCC, 1);
+    g.fillRoundedRect(10, 7, 8, 6, 3);
+    // 꼬리 (솜뭉치)
+    g.fillStyle(0xFFFFFF, 1);
+    g.fillCircle(14, 24, 4);
+    // 발
+    g.fillStyle(0xEEDDBB, 1);
+    g.fillRect(8, 23, 4, 3);
+    g.fillRect(16, 23, 4, 3);
+    g.generateTexture('rabbit_back', sz, sz);
+    g.destroy();
+  }
+
+  createDeerBackTexture() {
+    const g = this.add.graphics();
+    const sz = 32;
+    // 몸통 뒷면
+    g.fillStyle(0xC4A46C, 1);
+    g.fillRoundedRect(7, 14, 18, 12, 4);
+    g.fillRoundedRect(9, 6, 14, 10, 4);
+    // 뿔
+    g.fillStyle(0x8B6914, 1);
+    g.fillRect(11, 1, 2, 6);
+    g.fillRect(19, 1, 2, 6);
+    g.fillRect(9, 2, 2, 3);
+    g.fillRect(21, 2, 2, 3);
+    // 뒤통수 (눈 없음)
+    g.fillStyle(0xB89458, 1);
+    g.fillRoundedRect(11, 8, 10, 6, 3);
+    // 꼬리
+    g.fillStyle(0xE8D8B8, 1);
+    g.fillRect(14, 12, 4, 3);
+    // 다리
+    g.fillStyle(0xA08050, 1);
+    g.fillRect(10, 25, 3, 6);
+    g.fillRect(19, 25, 3, 6);
+    g.fillStyle(0x444444, 1);
+    g.fillRect(10, 30, 3, 2);
+    g.fillRect(19, 30, 3, 2);
+    g.generateTexture('deer_back', sz, sz);
+    g.destroy();
+  }
+
+  createPenguinBackTexture() {
+    const g = this.add.graphics();
+    const sz = 28;
+    // 검은 등
+    g.fillStyle(0x222222, 1);
+    g.fillRoundedRect(7, 4, 14, 18, 5);
+    // 머리 뒷면 (검은색)
+    g.fillStyle(0x1a1a1a, 1);
+    g.fillRoundedRect(9, 2, 10, 8, 4);
+    // 날개
+    g.fillStyle(0x333333, 1);
+    g.fillRect(4, 9, 3, 8);
+    g.fillRect(21, 9, 3, 8);
+    // 발
+    g.fillStyle(0xFF8800, 1);
+    g.fillRect(8, 22, 5, 3);
+    g.fillRect(15, 22, 5, 3);
+    g.generateTexture('penguin_back', sz, sz);
+    g.destroy();
+  }
+
+  createSealBackTexture() {
+    const g = this.add.graphics();
+    const sz = 32;
+    // 몸통 뒷면
+    g.fillStyle(0x7B8D9E, 1);
+    g.fillEllipse(16, 14, 28, 16);
+    // 머리 뒷면
+    g.fillStyle(0x6B7D8E, 1);
+    g.fillCircle(7, 12, 7);
+    // 꼬리
+    g.fillStyle(0x6B7D8E, 1);
+    g.fillEllipse(26, 16, 8, 5);
+    // 등 무늬
+    g.fillStyle(0x5B6D7E, 0.5);
+    g.fillEllipse(16, 13, 18, 6);
+    g.generateTexture('seal_back', sz, sz);
+    g.destroy();
+  }
+
+  createWolfBackTexture() {
+    const g = this.add.graphics();
+    const sz = 32;
+    // 몸통 뒷면
+    g.fillStyle(0x555566, 1);
+    g.fillRoundedRect(6, 12, 20, 12, 4);
+    // 머리 뒷면 (눈 없음)
+    g.fillStyle(0x666677, 1);
+    g.fillRoundedRect(3, 5, 14, 10, 4);
+    // 귀
+    g.fillStyle(0x444455, 1);
+    g.fillTriangle(5, 0, 3, 6, 9, 6);
+    g.fillTriangle(14, 0, 11, 6, 17, 6);
+    // 뒤통수 털
+    g.fillStyle(0x777788, 1);
+    g.fillRoundedRect(4, 6, 12, 7, 3);
+    // 꼬리 (위로 올림)
+    g.fillStyle(0x555566, 1);
+    g.fillRect(26, 8, 4, 4);
+    g.fillRect(28, 5, 3, 5);
+    // 다리
+    g.fillStyle(0x444455, 1);
+    g.fillRect(9, 23, 3, 6);
+    g.fillRect(14, 23, 3, 6);
+    g.fillRect(21, 23, 3, 6);
+    g.fillStyle(0x333344, 1);
+    g.fillRect(8, 28, 4, 3);
+    g.fillRect(13, 28, 4, 3);
+    g.fillRect(20, 28, 4, 3);
+    g.generateTexture('wolf_back', sz, sz);
+    g.destroy();
+  }
+
+  createBearBackTexture() {
+    const g = this.add.graphics();
+    const sz = 44;
+    // 몸통 뒷면
+    g.fillStyle(0xF0EEE8, 1);
+    g.fillRoundedRect(6, 14, 32, 20, 10);
+    // 머리 뒷면
+    g.fillStyle(0xF5F3EE, 1);
+    g.fillCircle(22, 12, 12);
+    // 귀
+    g.fillStyle(0xE0DDD5, 1);
+    g.fillCircle(13, 3, 4);
+    g.fillCircle(31, 3, 4);
+    g.fillStyle(0xDDBBAA, 1);
+    g.fillCircle(13, 3, 2);
+    g.fillCircle(31, 3, 2);
+    // 뒤통수 (눈 없음)
+    g.fillStyle(0xE8E5DD, 1);
+    g.fillCircle(22, 12, 10);
+    // 등 무늬
+    g.fillStyle(0xDDD8D0, 1);
+    g.fillEllipse(22, 22, 24, 12);
+    // 다리
+    g.fillStyle(0xE8E5DD, 1);
+    g.fillRoundedRect(9, 32, 8, 10, 4);
+    g.fillRoundedRect(27, 32, 8, 10, 4);
+    g.fillStyle(0xDDDAD2, 1);
+    g.fillRoundedRect(8, 38, 10, 5, 3);
+    g.fillRoundedRect(26, 38, 10, 5, 3);
+    g.generateTexture('bear_back', sz, sz);
+    g.destroy();
+  }
+
   createNPCTextures() {
     let g = this.add.graphics();
     g.fillStyle(0x8B6914, 1); g.fillRect(10, 15, 12, 10);
@@ -1319,6 +1535,53 @@ class BootScene extends Phaser.Scene {
     g.fillStyle(0xFFDD00, 1); g.fillCircle(6, 19, 2);
     g.fillStyle(0x555566, 1); g.fillRect(12, 25, 3, 5); g.fillRect(17, 25, 3, 5);
     g.generateTexture('npc_warrior', 32, 32); g.destroy();
+  }
+
+  createNPCBackTextures() {
+    // 사냥꾼 뒷모습
+    let g = this.add.graphics();
+    g.fillStyle(0x8B6914, 1); g.fillRect(10, 15, 12, 10);
+    g.fillStyle(0x553322, 1); g.fillRect(12, 6, 8, 8); // 뒤통수
+    g.fillStyle(0x6B4914, 1); g.fillRect(11, 3, 10, 5); // 모자
+    // 등에 활
+    g.lineStyle(2, 0x884422, 1);
+    g.beginPath(); g.arc(16, 18, 6, -1.2, 1.2); g.strokePath();
+    g.fillStyle(0x555555, 1); g.fillRect(12, 25, 3, 5); g.fillRect(17, 25, 3, 5);
+    g.generateTexture('npc_hunter_back', 32, 32); g.destroy();
+
+    // 상인 뒷모습
+    g = this.add.graphics();
+    g.fillStyle(0xEEDDCC, 1); g.fillRect(10, 15, 12, 10);
+    g.fillStyle(0x553322, 1); g.fillRect(12, 6, 8, 8);
+    g.fillStyle(0x44AA44, 1); g.fillRect(11, 2, 10, 5);
+    // 배낭
+    g.fillStyle(0x885522, 1); g.fillRect(12, 16, 8, 8);
+    g.fillStyle(0x774411, 1); g.fillRect(13, 17, 6, 6);
+    g.fillStyle(0x555555, 1); g.fillRect(12, 25, 3, 5); g.fillRect(17, 25, 3, 5);
+    g.generateTexture('npc_merchant_back', 32, 32); g.destroy();
+
+    // 채집꾼 뒷모습
+    g = this.add.graphics();
+    g.fillStyle(0x66AA44, 1); g.fillRect(10, 15, 12, 10);
+    g.fillStyle(0x553322, 1); g.fillRect(12, 6, 8, 8);
+    g.fillStyle(0x558833, 1); g.fillRect(11, 3, 10, 5);
+    // 등에 도구
+    g.fillStyle(0x884422, 1); g.fillRect(20, 12, 2, 14);
+    g.fillStyle(0x555555, 1); g.fillRect(12, 25, 3, 5); g.fillRect(17, 25, 3, 5);
+    g.generateTexture('npc_gatherer_back', 32, 32); g.destroy();
+
+    // 전사 뒷모습
+    g = this.add.graphics();
+    g.fillStyle(0x3366AA, 1); g.fillRect(10, 15, 12, 10);
+    g.fillStyle(0x553322, 1); g.fillRect(12, 6, 8, 8);
+    g.fillStyle(0x5588CC, 1); g.fillRect(11, 3, 10, 4);
+    // 등에 방패
+    g.fillStyle(0x3355AA, 1); g.fillRoundedRect(11, 16, 10, 8, 2);
+    g.fillStyle(0xFFDD00, 1); g.fillCircle(16, 20, 2);
+    // 등에 칼
+    g.fillStyle(0xCCCCCC, 1); g.fillRect(22, 8, 2, 14);
+    g.fillStyle(0x555566, 1); g.fillRect(12, 25, 3, 5); g.fillRect(17, 25, 3, 5);
+    g.generateTexture('npc_warrior_back', 32, 32); g.destroy();
   }
 
   createTreeTexture() {
@@ -2430,8 +2693,21 @@ class GameScene extends Phaser.Scene {
         }
       }
 
-      if (a.body.velocity.x > 5) a.setFlipX(false);
-      else if (a.body.velocity.x < -5) a.setFlipX(true);
+      // 방향에 따른 스프라이트 전환 (뒷모습 포함)
+      const avx = a.body.velocity.x, avy = a.body.velocity.y;
+      if (Math.abs(avx) > Math.abs(avy)) {
+        // 좌우 이동 → 앞모습
+        if (avx > 5) a.setFlipX(false);
+        else if (avx < -5) a.setFlipX(true);
+        if (Math.abs(avx) > 5) a.setTexture(a.animalType);
+      } else if (avy < -5) {
+        // 위로 이동 → 뒷모습
+        a.setTexture(a.animalType + '_back');
+        a.setFlipX(false);
+      } else if (avy > 5) {
+        // 아래로 이동 → 앞모습
+        a.setTexture(a.animalType);
+      }
       if (a.nameLabel) a.nameLabel.setPosition(a.x, a.y - a.def.size - 14);
       if (a.hpBar) {
         a.hpBar.clear();
@@ -2506,8 +2782,18 @@ class GameScene extends Phaser.Scene {
           break;
         }
       }
-      if (npc.body.velocity.x > 5) npc.setFlipX(false);
-      else if (npc.body.velocity.x < -5) npc.setFlipX(true);
+      // NPC 방향에 따른 스프라이트 전환 (뒷모습 포함)
+      const nvx = npc.body.velocity.x, nvy = npc.body.velocity.y;
+      if (Math.abs(nvx) > Math.abs(nvy)) {
+        if (nvx > 5) npc.setFlipX(false);
+        else if (nvx < -5) npc.setFlipX(true);
+        if (Math.abs(nvx) > 5) npc.setTexture('npc_' + npc.npcType);
+      } else if (nvy < -5) {
+        npc.setTexture('npc_' + npc.npcType + '_back');
+        npc.setFlipX(false);
+      } else if (nvy > 5) {
+        npc.setTexture('npc_' + npc.npcType);
+      }
       this.drops.getChildren().forEach(d => {
         if (!d.active) return;
         if (Phaser.Math.Distance.Between(npc.x, npc.y, d.x, d.y) < 25) this.collectDrop(d);
@@ -4087,26 +4373,31 @@ class GameScene extends Phaser.Scene {
       if (mag > 1) { finalMX /= mag; finalMY /= mag; }
     }
     this.player.body.setVelocity(finalMX*this.playerSpeed, finalMY*this.playerSpeed);
-    // 4방향 스프라이트 전환 (상하좌우)
+    // 4방향 스프라이트 전환 (상하좌우) + 뒷모습
     const absX = Math.abs(finalMX);
     const absY = Math.abs(finalMY);
     if (absX > absY) {
-      // 좌우 이동
+      // 좌우 이동 → 앞모습
       if (finalMX > 0.1) { 
         this.player.setFlipX(false); 
         this.facingRight = true; 
         this.playerFacing = 'right';
+        if (this.attackCooldown <= 0) this.player.setTexture('player');
       } else if (finalMX < -0.1) { 
         this.player.setFlipX(true); 
         this.facingRight = false; 
         this.playerFacing = 'left';
+        if (this.attackCooldown <= 0) this.player.setTexture('player');
       }
     } else if (absY > 0.1) {
       // 상하 이동
       if (finalMY < -0.1) {
         this.playerFacing = 'up';
+        this.player.setFlipX(false);
+        if (this.attackCooldown <= 0) this.player.setTexture('player_back');
       } else if (finalMY > 0.1) {
         this.playerFacing = 'down';
+        if (this.attackCooldown <= 0) this.player.setTexture('player');
       }
     }
 
