@@ -465,18 +465,34 @@ class UpgradeManager {
     return picked;
   }
 
+  // Diminishing returns: 2nd=70%, 3rd=40%, 4th+=20%
+  _diminish(lv) {
+    if (lv <= 1) return 1.0;
+    if (lv === 2) return 0.7;
+    if (lv === 3) return 0.4;
+    return 0.2;
+  }
+
   applyUpgrade(key, scene) {
     this.levels[key] = (this.levels[key] || 0) + 1;
     const lv = this.levels[key];
+    const dim = this._diminish(lv);
 
     switch (key) {
-      case 'DAMAGE_UP':
-        scene.playerDamage = Math.round(scene.playerDamage * 1.25 * 100) / 100;
+      case 'DAMAGE_UP': {
+        const boost = 1 + 0.25 * dim;
+        scene.playerDamage = Math.round(scene.playerDamage * boost * 100) / 100;
         if (scene.playerDamage < 1) scene.playerDamage = 1;
+        // Cap: 300% of base (base=10)
+        scene.playerDamage = Math.min(scene.playerDamage, 30);
         break;
-      case 'ATTACK_SPEED':
-        scene.baseAttackSpeed *= 0.8;
+      }
+      case 'ATTACK_SPEED': {
+        scene.baseAttackSpeed *= (1 - 0.2 * dim);
+        // Cap: 400% speed => min cooldown 0.35/4 = 0.0875
+        scene.baseAttackSpeed = Math.max(0.0875, scene.baseAttackSpeed);
         break;
+      }
       case 'CRITICAL':
         this.critChance = lv * 0.1;
         break;
@@ -497,8 +513,11 @@ class UpgradeManager {
         this.regenPerSec = lv * 0.5;
         break;
       case 'MOVEMENT':
-        scene.playerBaseSpeed *= 1.15;
+        scene.playerBaseSpeed *= (1 + 0.15 * dim);
         scene.playerSpeed = scene.playerBaseSpeed;
+        // Cap: 250% of base (base=120 => max 300)
+        scene.playerBaseSpeed = Math.min(300, scene.playerBaseSpeed);
+        scene.playerSpeed = Math.min(300, scene.playerSpeed);
         break;
       case 'DODGE':
         this.dodgeChance = lv * 0.1;
@@ -640,13 +659,16 @@ const RESOURCE_NODES = {
 
 // ── Quests ──
 const QUESTS = [
-  { id: 'q1', name: '첫 사냥', desc: '토끼 3마리 사냥', check: s => s.kills.rabbit >= 3, reward: { meat: 3 } },
+  { id: 'q1', name: '첫 사냥', desc: '토끼 15마리 사냥', check: s => s.kills.rabbit >= 15, reward: { meat: 3 } },
   { id: 'q2', name: '나무꾼', desc: '나무 10개 채집', check: s => s.woodGathered >= 10, reward: { stone: 5 } },
   { id: 'q3', name: '화덕 건설', desc: '화덕 1개 건설', check: s => s.built.campfire >= 1, reward: { leather: 3 } },
+  { id: 'q3b', name: '고기 수집', desc: '고기 5개 모으기', check: s => (s.meatCollected||0) >= 5, reward: { gold: 50 }, rewardEffect: { tempBonus: 5 } },
   { id: 'q4', name: '도구 제작', desc: '도구 1개 제작', check: s => s.crafted >= 1, reward: { meat: 10 } },
-  { id: 'q5', name: '용맹한 사냥꾼', desc: '늑대 2마리 사냥', check: s => s.kills.wolf >= 2, reward: { leather: 5 } },
+  { id: 'q5', name: '용맹한 사냥꾼', desc: '늑대 10마리 사냥', check: s => s.kills.wolf >= 10, reward: { leather: 5 } },
+  { id: 'q5b', name: '사슴 사냥꾼', desc: '사슴 10마리 사냥', check: s => s.kills.deer >= 10, reward: { leather: 5, meat: 8 } },
   { id: 'q6', name: '텐트 건설', desc: '텐트 건설하기', check: s => s.built.tent >= 1, reward: { meat: 15 } },
-  { id: 'q7', name: '곰 사냥', desc: '곰 1마리 사냥', check: s => s.kills.bear >= 1, reward: { leather: 8, meat: 10 } },
+  { id: 'q6b', name: '대량 납품', desc: '고기 10개 모으기', check: s => (s.meatCollected||0) >= 10, reward: { gold: 100 }, rewardEffect: { maxHPBonus: 20 } },
+  { id: 'q7', name: '곰 사냥', desc: '곰 5마리 사냥', check: s => s.kills.bear >= 5, reward: { leather: 8, meat: 10 } },
   { id: 'q8', name: 'NPC 고용', desc: 'NPC 1명 고용', check: s => s.npcsHired >= 1, reward: { wood: 10, stone: 10 } },
 ];
 
@@ -1492,7 +1514,7 @@ class GameScene extends Phaser.Scene {
       this.safeBottom = 34;
     }
 
-    this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0, maxCombo: 0 };
+    this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0, maxCombo: 0, meatCollected: 0 };
     this.gameWon = false;
     this.questIndex = 0;
     this.questCompleted = [];
@@ -2028,6 +2050,13 @@ class GameScene extends Phaser.Scene {
           ease: 'Quad.Out', onComplete: () => p.destroy() });
       }
     }
+    // ═══ 고기 드랍 시스템 (확률 기반) ═══
+    const meatDropChance = { rabbit: 0.3, deer: 0.5, wolf: 0.7, bear: 1.0 };
+    const dropChance = meatDropChance[a.animalType] || 0;
+    if (dropChance > 0 && Math.random() < dropChance) {
+      this.stats.meatCollected = (this.stats.meatCollected || 0) + 1;
+    }
+
     const def = a.def;
     const lootMul = 1 + this.upgradeManager.lootBonus;
     Object.entries(def.drops).forEach(([res, amt]) => {
@@ -2653,9 +2682,9 @@ class GameScene extends Phaser.Scene {
     switch(recipe.effect) {
       case 'woodBonus': this.woodBonus += recipe.value; break;
       case 'stoneBonus': this.stoneBonus += recipe.value; break;
-      case 'damage': this.playerDamage += recipe.value; break;
+      case 'damage': this.playerDamage = Math.min(30, this.playerDamage + recipe.value); break;
       case 'warmthResist': this.warmthResist = Math.min(1.0, this.warmthResist + recipe.value); break;
-      case 'speed': this.playerSpeed += recipe.value; this.playerBaseSpeed += recipe.value; break;
+      case 'speed': this.playerSpeed = Math.min(300, this.playerSpeed + recipe.value); this.playerBaseSpeed = Math.min(300, this.playerBaseSpeed + recipe.value); break;
     }
     this.stats.crafted++; playCraft(); SaveManager.save(this);
     this.showFloatingText(this.player.x, this.player.y - 30, '✨ '+recipe.icon+' '+recipe.name+' 제작!', '#64B5F6');
@@ -2695,6 +2724,11 @@ class GameScene extends Phaser.Scene {
     const q = QUESTS[this.questIndex];
     if (q.check(this.stats)) {
       Object.entries(q.reward).forEach(([r, amt]) => this.res[r] = (this.res[r]||0) + amt);
+      // Special reward effects
+      if (q.rewardEffect) {
+        if (q.rewardEffect.tempBonus) this.temperature = Math.min(this.maxTemp, this.temperature + q.rewardEffect.tempBonus);
+        if (q.rewardEffect.maxHPBonus) { this.playerMaxHP += q.rewardEffect.maxHPBonus; this.playerHP += q.rewardEffect.maxHPBonus; }
+      }
       this.questCompleted.push(q.id); this.questIndex++; playQuest();
       const cam = this.cameras.main;
       const qText = this.add.text(cam.width/2, cam.height * 0.3, '🎉 퀘스트 완료!\n'+q.name, {
