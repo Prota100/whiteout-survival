@@ -9,7 +9,7 @@ let _bgm=null,_bgmStarted=false;
 function initAudio(){
   try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){soundEnabled=false}
   // Preload all sound files
-  const sounds=['bgm','slash','hit','kill','coin','chop','build','craft','hire','hurt','eat','quest','death'];
+  const sounds=['bgm','slash','hit','kill','coin','chop','build','craft','hire','hurt','eat','quest','death','upgrade_select','box_appear','epic_card'];
   sounds.forEach(name=>{
     fetch('sounds/'+name+'.mp3').then(r=>r.arrayBuffer()).then(buf=>{
       if(audioCtx)audioCtx.decodeAudioData(buf,decoded=>{_sfxCache[name]=decoded;},()=>{});
@@ -62,6 +62,9 @@ function playEat(){_playSFX('eat',0.4)}
 function playQuest(){_playSFX('quest',0.5)}
 function playDeath(){_playSFX('death',0.6)}
 function playWhiff(){_playSFX('slash',0.1)}
+function playUpgradeSelect(){_playSFX('upgrade_select',0.6)}
+function playBoxAppear(){_playSFX('box_appear',0.5)}
+function playEpicCard(){_playSFX('epic_card',0.7)}
 
 // Fire ambient (keep Web Audio procedural for looping crackle)
 function startFire(){if(!audioCtx||!soundEnabled||fireAmbSrc)return;const bs=Math.floor(audioCtx.sampleRate*2),b=audioCtx.createBuffer(1,bs,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<bs;i++){d[i]=(Math.random()*2-1)*0.03;if(Math.random()<0.002)d[i]*=8}const s=audioCtx.createBufferSource(),g=audioCtx.createGain();s.buffer=b;s.loop=true;g.gain.value=0.12;s.connect(g).connect(audioCtx.destination);s.start();fireAmbSrc={s,g}}
@@ -2121,6 +2124,7 @@ class GameScene extends Phaser.Scene {
     crate._sparkleTimer = 0;
 
     // Drop animation
+    playBoxAppear();
     this.tweens.add({
       targets: crate, y: ty, scale: 1.2, alpha: 1,
       duration: 600, ease: 'Bounce.Out',
@@ -2371,6 +2375,10 @@ class GameScene extends Phaser.Scene {
   selectUpgrade(key, uiElements, cx, cy) {
     const upgrade = UPGRADES[key];
     const cat = UPGRADE_CATEGORIES[upgrade.category];
+
+    // Sound on selection
+    if (upgrade.rarity === 'epic') playEpicCard();
+    else playUpgradeSelect();
 
     // Apply upgrade
     this.upgradeManager.applyUpgrade(key, this);
