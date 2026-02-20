@@ -2428,18 +2428,18 @@ class GameScene extends Phaser.Scene {
     const existingBase = document.getElementById('vjoystick-base');
     if (existingBase) existingBase.remove();
 
-    // Create joystick container (hidden by default)
+    // Create joystick container (hidden by default — dynamic joystick)
     const base = document.createElement('div');
     base.id = 'vjoystick-base';
-    const safeB = this.safeBottom || 0;
     base.style.cssText = `
       position:fixed; width:160px; height:160px;
-      left:10px; bottom:${70 + safeB}px;
+      left:0; top:0;
       border-radius:50%; border:2.5px solid rgba(255,255,255,0.25);
       background:radial-gradient(circle, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.03) 100%);
       pointer-events:none; z-index:2000;
-      opacity:0.35;
-      transition: opacity 0.15s ease;
+      opacity:0; visibility:hidden;
+      transform:translate(-50%,-50%);
+      transition: opacity 0.12s ease, visibility 0.12s ease;
     `;
     const knob = document.createElement('div');
     knob.id = 'vjoystick-knob';
@@ -2449,20 +2449,55 @@ class GameScene extends Phaser.Scene {
       border:2px solid rgba(255,255,255,0.55);
       top:50%; left:50%; transform:translate(-50%,-50%);
       pointer-events:none;
-      opacity:0.7;
-      transition: opacity 0.12s ease;
     `;
     base.appendChild(knob);
     document.body.appendChild(base);
 
+    const showJoystick = (cx, cy) => {
+      base.style.left = cx + 'px';
+      base.style.top = cy + 'px';
+      base.style.opacity = '0.55';
+      base.style.visibility = 'visible';
+      knob.style.transform = 'translate(-50%, -50%)';
+      self._vjoy = { cx, cy };
+      self.joystickActive = true;
+    };
+
+    const hideJoystick = () => {
+      base.style.opacity = '0';
+      base.style.visibility = 'hidden';
+      knob.style.transform = 'translate(-50%, -50%)';
+      self.joystickActive = false;
+      self._smoothMove.x = 0;
+      self._smoothMove.y = 0;
+    };
+
+    const updateKnob = (clientX, clientY) => {
+      const dx = clientX - self._vjoy.cx;
+      const dy = clientY - self._vjoy.cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxR = 60;
+      const clamp = Math.min(dist, maxR);
+      const ang = Math.atan2(dy, dx);
+      const kx = Math.cos(ang) * clamp;
+      const ky = Math.sin(ang) * clamp;
+      knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
+
+      if (dist > 8) {
+        const strength = Math.min(1, dist / maxR);
+        self._smoothMove.x = Math.cos(ang) * strength;
+        self._smoothMove.y = Math.sin(ang) * strength;
+      } else {
+        self._smoothMove.x = 0;
+        self._smoothMove.y = 0;
+      }
+    };
+
     const isUITouch = (cx, cy) => {
-      // Bottom buttons area
       const h = window.innerHeight;
       const safeB = self.safeBottom || 0;
       if (cy > h - 60 - safeB) return true;
-      // Top HUD
       if (cy < 120 && cx < 260) return true;
-      // Active panel (right side)
       if (self.activePanel && cx > window.innerWidth - 240 && cy > 60) return true;
       return false;
     };
@@ -2472,25 +2507,16 @@ class GameScene extends Phaser.Scene {
 
     const onStart = (e) => {
       if (self.gameOver) return;
-      // Find the first new touch that's not on UI
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
-        if (activeTouchId !== null) break; // already have a joystick touch
+        if (activeTouchId !== null) break;
         if (isUITouch(t.clientX, t.clientY)) continue;
-        // Check if touching a DOM button
         const el = document.elementFromPoint(t.clientX, t.clientY);
         if (el && (el.tagName === 'BUTTON' || el.closest('#bottom-buttons') || el.closest('#dom-hud'))) continue;
 
         e.preventDefault();
         activeTouchId = t.identifier;
-        self.joystickActive = true;
-        // Use center of the fixed joystick base as origin
-        const rect = base.getBoundingClientRect();
-        self._vjoy = { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
-
-        base.style.opacity = '0.55';
-        knob.style.opacity = '0.9';
-        knob.style.transform = 'translate(-50%, -50%)';
+        showJoystick(t.clientX, t.clientY);
         break;
       }
     };
@@ -2501,25 +2527,7 @@ class GameScene extends Phaser.Scene {
         const t = e.changedTouches[i];
         if (t.identifier !== activeTouchId) continue;
         e.preventDefault();
-        const dx = t.clientX - self._vjoy.cx;
-        const dy = t.clientY - self._vjoy.cy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const maxR = 60;
-        const clamp = Math.min(dist, maxR);
-        const ang = Math.atan2(dy, dx);
-        const kx = Math.cos(ang) * clamp;
-        const ky = Math.sin(ang) * clamp;
-        knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
-
-        // Analog input: normalize by maxR for smooth 0~1 range
-        if (dist > 8) {
-          const strength = Math.min(1, dist / maxR);
-          self._smoothMove.x = Math.cos(ang) * strength;
-          self._smoothMove.y = Math.sin(ang) * strength;
-        } else {
-          self._smoothMove.x = 0;
-          self._smoothMove.y = 0;
-        }
+        updateKnob(t.clientX, t.clientY);
         break;
       }
     };
@@ -2528,12 +2536,7 @@ class GameScene extends Phaser.Scene {
       for (let i = 0; i < e.changedTouches.length; i++) {
         if (e.changedTouches[i].identifier === activeTouchId) {
           activeTouchId = null;
-          self.joystickActive = false;
-          self._smoothMove.x = 0;
-          self._smoothMove.y = 0;
-          base.style.opacity = '0.35';
-          knob.style.opacity = '0.7';
-          knob.style.transform = 'translate(-50%, -50%)';
+          hideJoystick();
           break;
         }
       }
@@ -2544,8 +2547,8 @@ class GameScene extends Phaser.Scene {
     document.addEventListener('touchend', onEnd, { passive: false });
     document.addEventListener('touchcancel', onEnd, { passive: false });
 
-    // ─── Desktop mouse support (joystick via mouse drag) ───
-    const MOUSE_ID = -1; // synthetic touch id for mouse
+    // ─── Desktop mouse support (dynamic joystick via mouse drag) ───
+    const MOUSE_ID = -1;
     const onMouseDown = (e) => {
       if (self.gameOver) return;
       if (isUITouch(e.clientX, e.clientY)) return;
@@ -2553,40 +2556,16 @@ class GameScene extends Phaser.Scene {
       if (el && (el.tagName === 'BUTTON' || el.closest('#bottom-buttons') || el.closest('#dom-hud'))) return;
       if (activeTouchId !== null) return;
       activeTouchId = MOUSE_ID;
-      self.joystickActive = true;
-      const rect = base.getBoundingClientRect();
-      self._vjoy = { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
-      base.style.opacity = '0.55';
-      knob.style.opacity = '0.9';
-      knob.style.transform = 'translate(-50%, -50%)';
+      showJoystick(e.clientX, e.clientY);
     };
     const onMouseMove = (e) => {
       if (activeTouchId !== MOUSE_ID) return;
-      const dx = e.clientX - self._vjoy.cx;
-      const dy = e.clientY - self._vjoy.cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const maxR = 60;
-      const clamp = Math.min(dist, maxR);
-      const ang = Math.atan2(dy, dx);
-      knob.style.transform = `translate(calc(-50% + ${Math.cos(ang)*clamp}px), calc(-50% + ${Math.sin(ang)*clamp}px))`;
-      if (dist > 8) {
-        const strength = Math.min(1, dist / maxR);
-        self._smoothMove.x = Math.cos(ang) * strength;
-        self._smoothMove.y = Math.sin(ang) * strength;
-      } else {
-        self._smoothMove.x = 0;
-        self._smoothMove.y = 0;
-      }
+      updateKnob(e.clientX, e.clientY);
     };
     const onMouseUp = () => {
       if (activeTouchId !== MOUSE_ID) return;
       activeTouchId = null;
-      self.joystickActive = false;
-      self._smoothMove.x = 0;
-      self._smoothMove.y = 0;
-      base.style.opacity = '0.35';
-      knob.style.opacity = '0.7';
-      knob.style.transform = 'translate(-50%, -50%)';
+      hideJoystick();
     };
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('mousemove', onMouseMove);
@@ -2597,6 +2576,7 @@ class GameScene extends Phaser.Scene {
       document.removeEventListener('touchstart', onStart);
       document.removeEventListener('touchmove', onMove);
       document.removeEventListener('touchend', onEnd);
+      document.removeEventListener('touchcancel', onEnd);
       document.removeEventListener('mousedown', onMouseDown);
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
