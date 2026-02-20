@@ -1,5 +1,29 @@
-// Whiteout Survival - Final Master Version
-// All feedback applied: mobile, balance, visuals, campfire system, buildings
+// Whiteout Survival - ULTIMATE with Sound FX
+// All feedback applied: mobile, balance, visuals, campfire, buildings, SOUND
+
+// ═══ 🔊 SOUND ENGINE ═══
+let audioCtx=null,soundEnabled=true,fireAmbSrc=null;
+function initAudio(){try{audioCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){soundEnabled=false}}
+function resumeAudio(){if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume()}
+function _osc(type,f1,f2,dur,vol){if(!audioCtx||!soundEnabled)return;const t=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(f1,t);o.frequency.exponentialRampToValueAtTime(f2,t+dur);g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);o.connect(g).connect(audioCtx.destination);o.start(t);o.stop(t+dur)}
+function _noise(dur,vol,decay){if(!audioCtx||!soundEnabled)return;const t=audioCtx.currentTime,bs=Math.floor(audioCtx.sampleRate*dur),b=audioCtx.createBuffer(1,bs,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<bs;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/bs,decay);const s=audioCtx.createBufferSource(),g=audioCtx.createGain();s.buffer=b;g.gain.value=vol;s.connect(g).connect(audioCtx.destination);s.start(t)}
+function _arp(type,freqs,gap,vol,dur){if(!audioCtx||!soundEnabled)return;const t=audioCtx.currentTime;freqs.forEach((f,i)=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(vol,t+i*gap);g.gain.exponentialRampToValueAtTime(0.001,t+i*gap+dur);o.connect(g).connect(audioCtx.destination);o.start(t+i*gap);o.stop(t+i*gap+dur)})}
+function playSlash(){_osc('sawtooth',1200,200,0.12,0.25)}
+function playHit(){_noise(0.06,0.5,1.5);_osc('sine',150,40,0.1,0.3)}
+function playKill(){_osc('triangle',600,80,0.3,0.2);_noise(0.08,0.4,3)}
+function playCoin(){_osc('sine',880,1760,0.12,0.15)}
+function playChop(){_osc('square',300,100,0.08,0.15)}
+function playBuild(){_arp('sine',[440,554,659],0.08,0.12,0.15)}
+function playCraft(){_arp('triangle',[523,659,784,1047],0.06,0.1,0.12)}
+function playHire(){_arp('sine',[392,494,587,784],0.1,0.15,0.2)}
+function playHurt(){_osc('sawtooth',200,80,0.15,0.2)}
+function playEat(){_arp('sine',[200,250,300],0.06,0.08,0.06)}
+function playQuest(){_arp('sine',[523,659,784,1047,1319],0.08,0.12,0.25)}
+function playDeath(){_arp('sawtooth',[400,300,200,100],0.15,0.15,0.3)}
+function playWhiff(){_osc('sine',800,400,0.06,0.06)}
+function startFire(){if(!audioCtx||!soundEnabled||fireAmbSrc)return;const bs=Math.floor(audioCtx.sampleRate*2),b=audioCtx.createBuffer(1,bs,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<bs;i++){d[i]=(Math.random()*2-1)*0.03;if(Math.random()<0.002)d[i]*=8}const s=audioCtx.createBufferSource(),g=audioCtx.createGain();s.buffer=b;s.loop=true;g.gain.value=0.12;s.connect(g).connect(audioCtx.destination);s.start();fireAmbSrc={s,g}}
+function stopFire(){if(fireAmbSrc){try{fireAmbSrc.s.stop()}catch(e){}fireAmbSrc=null}}
+// ═══ END SOUND ═══
 
 const WORLD_W = 2400;
 const WORLD_H = 2400;
@@ -70,6 +94,7 @@ class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
   
   create() {
+    initAudio();
     this.createPlayerTexture();
     this.createPlayerAttackTexture();
     this.createRabbitTexture();
@@ -533,6 +558,7 @@ class GameScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-SPACE', () => this.performAttackNearest());
 
     this.input.on('pointerdown', (p) => {
+      resumeAudio();
       if (this.gameOver) return;
       if (this.isUIArea(p)) return;
       if (this.isMobile && this.isJoystickArea(p)) return;
@@ -586,7 +612,7 @@ class GameScene extends Phaser.Scene {
 
   harvestNode(node) {
     if (node.depleted) return;
-    node.nodeHP--;
+    node.nodeHP--; playChop();
     this.tweens.add({ targets: node, x: node.x + 4, duration: 40, yoyo: true, repeat: 3 });
     for (let i = 0; i < 3; i++) {
       const p = this.add.image(node.x, node.y, node.nodeType === 'tree' ? 'wood_drop' : 'stone_drop')
@@ -642,8 +668,8 @@ class GameScene extends Phaser.Scene {
       if (n.depleted) return;
       if (Phaser.Math.Distance.Between(wx, wy, n.x, n.y) < range) { this.harvestNode(n); hit = true; }
     });
+    if(hit){playSlash();this.cameras.main.shake(60,0.003);}else playWhiff();
     this.showAttackFX(wx, wy, hit);
-    if (hit) this.cameras.main.shake(60, 0.003);
   }
 
   performAttackNearest() {
@@ -665,13 +691,14 @@ class GameScene extends Phaser.Scene {
     this.player.setTexture('player_attack');
     this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
     if (best && bestD <= bestND) {
-      this.damageAnimal(best, this.playerDamage);
+      this.damageAnimal(best, this.playerDamage); playSlash();
       this.showAttackFX(best.x, best.y, true);
       this.cameras.main.shake(60, 0.004);
     } else if (bestNode) {
       this.harvestNode(bestNode);
       this.showAttackFX(bestNode.x, bestNode.y, true);
     } else {
+      playWhiff();
       const dx = this.moveDir.x || (this.facingRight ? 1 : -1);
       this.showAttackFX(this.player.x + dx*40, this.player.y + (this.moveDir.y||0)*40, false);
     }
@@ -684,7 +711,7 @@ class GameScene extends Phaser.Scene {
   }
 
   damageAnimal(a, dmg) {
-    a.hp -= dmg; a.hitFlash = 0.2; a.setTint(0xFF4444);
+    a.hp -= dmg; a.hitFlash = 0.2; a.setTint(0xFF4444); playHit();
     const fs = dmg >= 3 ? '24px' : dmg >= 2 ? '20px' : '16px';
     const c = dmg >= 3 ? '#FF2222' : '#FF6644';
     const t = this.add.text(a.x + Phaser.Math.Between(-10, 10), a.y - 20, '-'+dmg, {
@@ -702,7 +729,7 @@ class GameScene extends Phaser.Scene {
     if (a.hp <= 0) this.killAnimal(a);
   }
 
-  killAnimal(a) {
+  killAnimal(a) { playKill();
     const def = a.def;
     Object.entries(def.drops).forEach(([res, amt]) => {
       for (let i = 0; i < amt; i++) {
@@ -749,7 +776,7 @@ class GameScene extends Phaser.Scene {
       }
       return;
     }
-    this.res[r] = (this.res[r]||0) + drop.value;
+    this.res[r] = (this.res[r]||0) + drop.value; playCoin();
     const icons = { meat: '🥩', wood: '🪵', stone: '🪨', leather: '🧶' };
     const t = this.add.text(drop.x, drop.y, '+1'+( icons[r]||''), {
       fontSize: '15px', fontFamily: 'monospace', color: '#FFFFFF', stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
@@ -815,7 +842,7 @@ class GameScene extends Phaser.Scene {
             const ang = Phaser.Math.Angle.Between(a.x, a.y, px, py);
             a.body.setVelocity(Math.cos(ang)*a.def.speed, Math.sin(ang)*a.def.speed);
             if (dist < 28 && a.atkCD <= 0) {
-              this.playerHP -= a.def.damage; a.atkCD = 1.2;
+              this.playerHP -= a.def.damage; a.atkCD = 1.2; playHurt();
               this.cameras.main.shake(120, 0.012);
               this.player.setTint(0xFF4444);
               this.time.delayedCall(150, ()=>{if(this.player.active)this.player.clearTint();});
@@ -928,7 +955,7 @@ class GameScene extends Phaser.Scene {
       this.player.x + Phaser.Math.Between(-30,30), this.player.y + Phaser.Math.Between(-30,30),
       'npc_'+def.type).setCollideWorldBounds(true).setDepth(9);
     npc.npcType = def.type; npc.npcDef = def; npc.actionTimer = 0;
-    this.npcSprites.add(npc); this.npcsOwned.push(npc); this.stats.npcsHired++;
+    this.npcSprites.add(npc); this.npcsOwned.push(npc); this.stats.npcsHired++; playHire();
     const ht = this.add.text(npc.x, npc.y-20, '✨ '+def.name+' 고용!', {
       fontSize:'16px',fontFamily:'monospace',color:'#FFD700',stroke:'#000',strokeThickness:3
     }).setDepth(20).setOrigin(0.5);
@@ -989,7 +1016,7 @@ class GameScene extends Phaser.Scene {
     if (!this.stats.built[this.buildMode]) this.stats.built[this.buildMode] = 0;
     this.stats.built[this.buildMode]++;
     if (def.storageBonus) this.storageCapacity += def.storageBonus;
-    this.showFloatingText(wx, wy - 40, '✅ '+def.name+' 건설!', '#4CAF50');
+    playBuild(); this.showFloatingText(wx, wy - 40, '✅ '+def.name+' 건설!', '#4CAF50');
     for (let i = 0; i < 8; i++) {
       const p = this.add.image(wx, wy, 'snowflake').setDepth(15).setTint(0xFFDD88).setScale(1.2);
       this.tweens.add({ targets: p, x: wx + Phaser.Math.Between(-35, 35), y: wy + Phaser.Math.Between(-35, 35),
@@ -1041,6 +1068,9 @@ class GameScene extends Phaser.Scene {
 
     if (!this._nearCampfire) this.playerSpeed = this.playerBaseSpeed;
 
+    // 🔊 Fire ambient
+    if(this._nearCampfire&&!fireAmbSrc)startFire();else if(!this._nearCampfire&&fireAmbSrc)stopFire();
+
     // Fire particles
     this.campfireParticleTimer += dt;
     if (this.campfireParticleTimer > 0.1) {
@@ -1075,7 +1105,7 @@ class GameScene extends Phaser.Scene {
       case 'warmthResist': this.warmthResist = Math.max(0.1, this.warmthResist - recipe.value); break;
       case 'speed': this.playerSpeed += recipe.value; this.playerBaseSpeed += recipe.value; break;
     }
-    this.stats.crafted++;
+    this.stats.crafted++; playCraft();
     this.showFloatingText(this.player.x, this.player.y - 30, '✨ '+recipe.icon+' '+recipe.name+' 제작!', '#64B5F6');
   }
 
@@ -1099,7 +1129,7 @@ class GameScene extends Phaser.Scene {
     if (this.hunger <= 0) { this.playerHP -= 1.5 * dt; if (this.playerHP <= 0) this.endGame(); }
     if (this.hunger < 30 && this.res.meat > 0) {
       this.res.meat--; this.hunger = Math.min(this.maxHunger, this.hunger + 25);
-      this.showFloatingText(this.player.x, this.player.y - 20, '🥩 자동 섭취', '#FF9800');
+      playEat(); this.showFloatingText(this.player.x, this.player.y - 20, '🥩 자동 섭취', '#FF9800');
     }
   }
 
@@ -1108,7 +1138,7 @@ class GameScene extends Phaser.Scene {
     const q = QUESTS[this.questIndex];
     if (q.check(this.stats)) {
       Object.entries(q.reward).forEach(([r, amt]) => this.res[r] = (this.res[r]||0) + amt);
-      this.questCompleted.push(q.id); this.questIndex++;
+      this.questCompleted.push(q.id); this.questIndex++; playQuest();
       const cam = this.cameras.main;
       const qText = this.add.text(cam.width/2, cam.height * 0.3, '🎉 퀘스트 완료!\n'+q.name, {
         fontSize:'22px',fontFamily:'monospace',color:'#FFD700',stroke:'#000',strokeThickness:4,align:'center',lineSpacing:4
@@ -1121,7 +1151,7 @@ class GameScene extends Phaser.Scene {
     if (this.res.meat > 0 && this.hunger < 80) {
       this.res.meat--; this.hunger = Math.min(this.maxHunger, this.hunger + 25);
       this.playerHP = Math.min(this.playerMaxHP, this.playerHP + 2);
-      this.showFloatingText(this.player.x, this.player.y - 20, '🥩 회복!', '#4CAF50');
+      playEat(); this.showFloatingText(this.player.x, this.player.y - 20, '🥩 회복!', '#4CAF50');
     }
   }
 
@@ -1192,6 +1222,7 @@ class GameScene extends Phaser.Scene {
       { label: '🔨제작', action: () => this.toggleCraftMenu() },
       { label: '👥고용', action: () => this.toggleHireMenu() },
       { label: '🥩먹기', action: () => this.interactNearest() },
+      { label: '🔊', action: () => { soundEnabled=!soundEnabled; if(!soundEnabled)stopFire(); } },
     ];
     btnData.forEach(bd => {
       const btn = this.add.text(0, 0, bd.label, {
@@ -1334,7 +1365,7 @@ class GameScene extends Phaser.Scene {
 
   endGame() {
     if (this.gameOver) return;
-    this.gameOver = true;
+    this.gameOver = true; playDeath(); stopFire();
     const cam = this.cameras.main;
     const ov = this.add.graphics().setScrollFactor(0).setDepth(200);
     ov.fillStyle(0x000000, 0.8); ov.fillRect(0, 0, cam.width, cam.height);
@@ -1372,7 +1403,7 @@ class GameScene extends Phaser.Scene {
         this.attackCooldown = this.getAttackCooldown();
         this.player.setTexture('player_attack');
         this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
-        this.damageAnimal(nearest, this.playerDamage);
+        this.damageAnimal(nearest, this.playerDamage); playSlash();
         this.showAttackFX(nearest.x, nearest.y, true);
         this.cameras.main.shake(50, 0.003);
       } else {
