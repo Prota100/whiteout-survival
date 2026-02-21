@@ -239,6 +239,8 @@ class GameScene extends Phaser.Scene {
     this.gameElapsed = 0; // seconds since game start
     this.currentAct = 1;
     this.waveTimer = 0; // 30s wave spawn timer
+    this._actTransitionPlayed = {}; // { 2: true, 3: true, 4: true }
+    this._actCinematicActive = false;
 
     // ═══ Act 3: Special Wave Events ═══
     this._eliteWaveTriggered = {}; // { 15: true, 30: true, 45: true }
@@ -481,6 +483,8 @@ class GameScene extends Phaser.Scene {
 
     // ═══ MINIMAP ═══
     this._initMinimap();
+    // ═══ ACT HUD ═══
+    this._initActHUD();
     // ═══ HIT VIGNETTE ═══
     this._initVignette();
     // M key for minimap toggle
@@ -616,6 +620,9 @@ class GameScene extends Phaser.Scene {
     if (save.act4MinibossSpawned != null) this.act4MinibossSpawned = save.act4MinibossSpawned;
     if (save.waveNumber != null) this.waveNumber = save.waveNumber;
     this.currentAct = this.getCurrentAct();
+    // Mark already-passed act transitions as played
+    for (let a = 2; a <= this.currentAct; a++) this._actTransitionPlayed[a] = true;
+    this._updateActHUD();
     // NPCs
     if (save.npcs) {
       save.npcs.forEach(n => {
@@ -5224,6 +5231,177 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  // ═══ Act Transition Cinematic ═══
+  _triggerActTransition(actNum) {
+    if (this._actCinematicActive) return;
+    this._actCinematicActive = true;
+
+    const ACT_DATA = {
+      2: { roman: 'II', title: '생존자에서 전사로', subtitle: '혹한의 전장' },
+      3: { roman: 'III', title: '폭풍의 심장으로', subtitle: '폭풍의 심장' },
+      4: { roman: 'IV', title: '마지막 사투', subtitle: '최후의 사투' },
+    };
+    const data = ACT_DATA[actNum];
+    if (!data) { this._actCinematicActive = false; return; }
+
+    const cam = this.cameras.main;
+    const W = cam.width, H = cam.height;
+
+    // Pause enemies
+    this.animals?.children?.each(a => { if (a.active && a.body) a.body.moves = false; });
+
+    // Black overlay
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0)
+      .setScrollFactor(0).setDepth(500).setOrigin(0.5);
+
+    // Act number text
+    const actLabel = this.add.text(W / 2, H / 2 - 30,
+      `─── ACT ${data.roman} ───`, {
+        fontSize: '20px', fontFamily: 'monospace', color: '#FFFFFF',
+        stroke: '#000', strokeThickness: 2, letterSpacing: 8
+      }).setScrollFactor(0).setDepth(501).setOrigin(0.5).setAlpha(0);
+
+    // Title text (gold)
+    const titleText = this.add.text(W / 2, H / 2 + 15, data.title, {
+      fontSize: '32px', fontFamily: 'monospace', color: '#FFD700',
+      stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(501).setOrigin(0.5).setAlpha(0);
+
+    // Phase 1: Fade to black (0.5s)
+    this.tweens.add({
+      targets: overlay, alpha: 0.85, duration: 500, ease: 'Power2',
+      onComplete: () => {
+        // Phase 2: Show text (appear with scale)
+        this.tweens.add({
+          targets: [actLabel, titleText], alpha: 1, duration: 300, ease: 'Power2',
+        });
+        this.tweens.add({
+          targets: titleText, scale: { from: 0.7, to: 1 }, duration: 400, ease: 'Back.Out',
+        });
+
+        // Phase 3: Hold 1.5s then fade out
+        this.time.delayedCall(1500, () => {
+          this.tweens.add({
+            targets: [overlay, actLabel, titleText], alpha: 0, duration: 500, ease: 'Power2',
+            onComplete: () => {
+              overlay.destroy(); actLabel.destroy(); titleText.destroy();
+              this._actCinematicActive = false;
+
+              // Resume enemies
+              this.animals?.children?.each(a => { if (a.active && a.body) a.body.moves = true; });
+
+              // Apply atmosphere changes
+              this._applyActAtmosphere(actNum);
+
+              // Story text
+              const storyKeys = { 2: 'act2', 3: 'act3', 4: 'act4' };
+              if (storyKeys[actNum]) this.showActStoryText(ACT_STORY[storyKeys[actNum]]);
+
+              // Spawn act wave
+              this._spawnActWave(actNum);
+            }
+          });
+        });
+      }
+    });
+
+    // Camera shake for drama
+    this.cameras.main.shake(300, 0.008);
+  }
+
+  _applyActAtmosphere(actNum) {
+    const cam = this.cameras.main;
+    if (actNum === 2) {
+      // Darken tint overlay
+      if (!this._actTintOverlay) {
+        this._actTintOverlay = this.add.rectangle(cam.width / 2, cam.height / 2, cam.width, cam.height, 0x000022, 0)
+          .setScrollFactor(0).setDepth(45).setOrigin(0.5);
+      }
+      this.tweens.add({ targets: this._actTintOverlay, alpha: 0.15, duration: 2000 });
+    } else if (actNum === 3) {
+      // Increase snow density (tint darker)
+      if (this._actTintOverlay) {
+        this.tweens.add({ targets: this._actTintOverlay, alpha: 0.25, duration: 2000 });
+      }
+    } else if (actNum === 4) {
+      // Dark vignette + tint
+      if (this._actTintOverlay) {
+        this.tweens.add({ targets: this._actTintOverlay, alpha: 0.35, duration: 2000 });
+      }
+      // Add permanent dark vignette
+      if (!this._actVignetteGfx) {
+        this._actVignetteGfx = this.add.graphics().setScrollFactor(0).setDepth(190).setAlpha(0);
+        const W = cam.width, H = cam.height;
+        const g = this._actVignetteGfx;
+        g.fillStyle(0x000000, 1);
+        g.fillRect(0, 0, W, H);
+        g.fillStyle(0x000000, 0);
+        // Simple vignette: dark edges
+        for (let i = 0; i < 20; i++) {
+          const a = (i / 20) * 0.6;
+          g.fillStyle(0x000000, a);
+          g.fillRect(0, 0, W * (1 - i/20) * 0.15, H);
+          g.fillRect(W - W * (1 - i/20) * 0.15, 0, W * (1 - i/20) * 0.15, H);
+          g.fillRect(0, 0, W, H * (1 - i/20) * 0.12);
+          g.fillRect(0, H - H * (1 - i/20) * 0.12, W, H * (1 - i/20) * 0.12);
+        }
+      }
+      this.tweens.add({ targets: this._actVignetteGfx, alpha: 0.5, duration: 3000 });
+    }
+  }
+
+  _spawnActWave(actNum) {
+    this.showCenterAlert('⚠️ 강화된 적이 등장한다!', '#FF4444');
+    this.cameras.main.shake(200, 0.005);
+    this.time.delayedCall(1000, () => {
+      if (actNum === 2) {
+        // Elite wolf pack
+        for (let i = 0; i < 6; i++) this.spawnAnimal('wolf');
+        for (let i = 0; i < 2; i++) this.spawnAnimal('dire_wolf');
+      } else if (actNum === 3) {
+        // Split slime + ice hunter mix
+        for (let i = 0; i < 3; i++) this.spawnAnimal('split_slime');
+        for (let i = 0; i < 3; i++) this.spawnAnimal('ice_hunter');
+        for (let i = 0; i < 2; i++) this.spawnAnimal('wolf');
+      } else if (actNum === 4) {
+        // Blizzard shaman + miniboss
+        for (let i = 0; i < 2; i++) this.spawnAnimal('blizzard_shaman');
+        for (let i = 0; i < 2; i++) this.spawnAnimal('ice_hunter');
+        this.spawnAnimal('bear');
+      }
+    });
+  }
+
+  _initActHUD() {
+    const cam = this.cameras.main;
+    const ACT_NAMES = {
+      1: 'Act I: 설원의 시작', 2: 'Act II: 혹한의 전장',
+      3: 'Act III: 폭풍의 심장', 4: 'Act IV: 최후의 사투', 5: 'Act V: 최강의 결전'
+    };
+    // Background pill
+    this._actHUDBg = this.add.rectangle(cam.width / 2, 12, 180, 22, 0x000000, 0.5)
+      .setScrollFactor(0).setDepth(100).setOrigin(0.5, 0);
+    this._actHUDText = this.add.text(cam.width / 2, 14, ACT_NAMES[this.currentAct] || 'Act I: 설원의 시작', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#FFD700',
+      stroke: '#000', strokeThickness: 2
+    }).setScrollFactor(0).setDepth(101).setOrigin(0.5, 0);
+  }
+
+  _updateActHUD() {
+    const ACT_NAMES = {
+      1: 'Act I: 설원의 시작', 2: 'Act II: 혹한의 전장',
+      3: 'Act III: 폭풍의 심장', 4: 'Act IV: 최후의 사투', 5: 'Act V: 최강의 결전'
+    };
+    if (this._actHUDText) {
+      this._actHUDText.setText(ACT_NAMES[this.currentAct] || `Act ${this.currentAct}`);
+      // Flash effect on change
+      this.tweens.add({
+        targets: [this._actHUDText, this._actHUDBg],
+        scale: { from: 1.3, to: 1 }, duration: 500, ease: 'Back.Out'
+      });
+    }
+  }
+
   // ═══ Act Story Text (타이핑 효과) ═══
   showActStoryText(text) {
     if (!text || this._actStoryActive) return;
@@ -6288,12 +6466,19 @@ class GameScene extends Phaser.Scene {
 
     const newAct = this.getCurrentAct();
     if (newAct !== this.currentAct) {
+      const prevAct = this.currentAct;
       this.currentAct = newAct;
-      this.showCenterAlert(`🎬 Act ${this.currentAct} 시작!`, '#FFD700');
-      this.cameras.main.flash(500, 255, 255, 200);
-      // Act story text
-      const storyKeys = { 2: 'act2', 3: 'act3', 4: 'act4', 5: 'act5' };
-      if (storyKeys[newAct]) this.showActStoryText(ACT_STORY[storyKeys[newAct]]);
+      // Act transition cinematic for acts 2-4, simple alert for act 5
+      if (newAct >= 2 && newAct <= 4 && !this._actTransitionPlayed[newAct]) {
+        this._actTransitionPlayed[newAct] = true;
+        this._triggerActTransition(newAct);
+      } else {
+        this.showCenterAlert(`🎬 Act ${this.currentAct} 시작!`, '#FFD700');
+        this.cameras.main.flash(500, 255, 255, 200);
+        const storyKeys = { 2: 'act2', 3: 'act3', 4: 'act4', 5: 'act5' };
+        if (storyKeys[newAct]) this.showActStoryText(ACT_STORY[storyKeys[newAct]]);
+      }
+      this._updateActHUD();
     }
 
     // ═══ Boss Rush Mode Update ═══
