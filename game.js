@@ -607,7 +607,7 @@ class SynergyManager {
     if (this.coldImmunityTimer >= 5) {
       this.coldImmunityTimer -= 5;
       scene._coldImmunePulse = true;
-      scene.showFloatingText(scene.player.x, scene.player.y - 40, '❄️ 한파 무효!', '#88DDFF');
+      if (scene.player && scene.player.active) scene.showFloatingText(scene.player.x, scene.player.y - 40, '❄️ 한파 무효!', '#88DDFF');
     }
   }
 
@@ -1337,6 +1337,11 @@ class TitleScene extends Phaser.Scene {
       fontFamily: 'monospace',
       color: '#8899bb',
     }).setOrigin(0.5);
+
+    // Version text
+    this.add.text(W - 10, H - 10, 'v1.0', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#445566', alpha: 0.6
+    }).setOrigin(1, 1).setDepth(20);
     
     // Menu buttons
     const btnY = H * 0.52;
@@ -3526,10 +3531,11 @@ class GameScene extends Phaser.Scene {
   }
 
   damageAnimal(a, dmg) {
+    if (!a || !a.active) return;
     // Warrior rage mode: 1.5x damage when HP <= 50%
     if (this._warriorRageActive) dmg = Math.round(dmg * 1.5);
     // Shield Bash: stun on ready
-    if (this.upgradeManager.shieldBashReady) {
+    if (this.upgradeManager.shieldBashReady && a.body) {
       this.upgradeManager.shieldBashReady = false;
       a.body.setVelocity(0, 0); a.body.moves = false;
       this.showFloatingText(a.x, a.y - 30, '🛡️스턴!', '#FFD700');
@@ -3556,7 +3562,7 @@ class GameScene extends Phaser.Scene {
       duration: 600, ease: 'Back.Out', onComplete: () => t.destroy() });
     const ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, a.x, a.y);
     const kb = 120 + this.upgradeManager.knockbackBonus;
-    a.body.setVelocity(Math.cos(ang) * kb, Math.sin(ang) * kb);
+    if (a.body) a.body.setVelocity(Math.cos(ang) * kb, Math.sin(ang) * kb);
     for (let i = 0; i < 5; i++) {
       const p = this.add.image(a.x, a.y, 'hit_particle').setDepth(15).setScale(Phaser.Math.FloatBetween(0.5, 1.2));
       this.tweens.add({ targets: p, x: a.x + Phaser.Math.Between(-30, 30), y: a.y + Phaser.Math.Between(-30, 30),
@@ -7026,7 +7032,7 @@ class GameScene extends Phaser.Scene {
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
     // ═══ Class Passive: Warrior Rage Mode ═══
-    if (this._playerClass === 'warrior') {
+    if (this._playerClass === 'warrior' && this.player && this.player.active) {
       if (this.playerHP <= this.playerMaxHP * 0.5) {
         if (!this._warriorRageActive) {
           this._warriorRageActive = true;
@@ -7050,11 +7056,11 @@ class GameScene extends Phaser.Scene {
         this._classSprintActive = false;
         this.playerBaseSpeed /= 3;
         this.playerSpeed = this.playerBaseSpeed;
-        if (!this._warriorRageActive) this.player.clearTint();
+        if (!this._warriorRageActive && this.player && this.player.active) this.player.clearTint();
       }
     }
     // ═══ Class Ability: Warrior Roar (auto on cooldown) ═══
-    if (this.upgradeManager._classWarriorRoar && this._classRoarCD <= 0) {
+    if (this.upgradeManager._classWarriorRoar && this._classRoarCD <= 0 && this.player && this.player.active) {
       const nearEnemies = this.animals.getChildren().filter(a => a.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y) < 100);
       if (nearEnemies.length > 0) {
         this._classRoarCD = 15; // 15s cooldown
@@ -7084,7 +7090,7 @@ class GameScene extends Phaser.Scene {
       }
     }
     // ═══ Class Ability: Survivor Sprint (auto on cooldown when enemies near) ═══
-    if (this.upgradeManager._classSurvivorSprint && this._classSprintCD <= 0 && !this._classSprintActive) {
+    if (this.upgradeManager._classSurvivorSprint && this._classSprintCD <= 0 && !this._classSprintActive && this.player && this.player.active) {
       const dangerClose = this.animals.getChildren().some(a => a.active && a.def && a.def.hostile && Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y) < 80);
       if (dangerClose) {
         this._classSprintCD = 20;
