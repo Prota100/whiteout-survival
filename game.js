@@ -846,7 +846,7 @@ function getDailyChallengeKey() {
 const XP_TABLE = [0, 12, 20, 30, 42, 55, 70, 90, 115, 145, 180, 220, 270, 330, 400, 490, 600, 730, 900, 1100, 1350];
 const XP_SOURCES = {
   rabbit: 5, deer: 8, penguin: 6, seal: 12,
-  wolf: 18, bear: 35, ice_golem: 60, snow_leopard: 25, boss: 80, tree: 2, rock: 2, gold: 5,
+  wolf: 18, bear: 35, ice_golem: 60, snow_leopard: 25, ice_hunter: 22, splitting_slime: 30, blizzard_shaman: 35, boss: 80, tree: 2, rock: 2, gold: 5,
   default: 5,
 };
 
@@ -1784,6 +1784,9 @@ const ANIMALS = {
   bear:    { hp: 80, speed: 70,  damage: 15, drops: { meat: 6, leather: 3 }, size: 26, behavior: 'chase', name: '🐻 곰', aggroRange: 140, fleeRange: 0, fleeDistance: 0, color: 0xF0EEE8 },
   ice_golem: { hp: 240, speed: 60, damage: 50, drops: { meat: 10, leather: 5, gold: 15 }, size: 24, behavior: 'chase', name: '🧊 얼음골렘', aggroRange: 200, fleeRange: 0, fleeDistance: 0, color: 0x88CCEE },
   snow_leopard: { hp: 45, speed: 220, damage: 20, drops: { meat: 4, leather: 2, gold: 5 }, size: 14, behavior: 'chase', name: '🐆 눈표범', aggroRange: 250, fleeRange: 0, fleeDistance: 0, color: 0xF8F8FF },
+  ice_hunter: { hp: 45, speed: 80, damage: 3, drops: { meat: 3, leather: 2, gold: 3 }, size: 20, behavior: 'ranged', name: '🏹 얼음사냥꾼', aggroRange: 280, fleeRange: 0, fleeDistance: 0, color: 0x4488CC },
+  splitting_slime: { hp: 64, speed: 45, damage: 8, drops: { meat: 4, gold: 5 }, size: 24, behavior: 'chase', name: '💥 분열슬라임', aggroRange: 160, fleeRange: 0, fleeDistance: 0, color: 0x44CC44 },
+  blizzard_shaman: { hp: 25, speed: 70, damage: 2, drops: { meat: 2, gold: 8 }, size: 18, behavior: 'shaman', name: '🔮 눈보라샤먼', aggroRange: 200, fleeRange: 100, fleeDistance: 120, color: 0xAA55FF },
 };
 
 // ── Building Definitions (ENHANCED) ──
@@ -3623,7 +3626,9 @@ class BootScene extends Phaser.Scene {
       'createRabbitTexture', 'createRabbitBackTexture', 'createDeerTexture', 'createDeerBackTexture',
       'createPenguinTexture', 'createPenguinBackTexture', 'createSealTexture', 'createSealBackTexture',
       'createWolfTexture', 'createWolfBackTexture', 'createBearTexture', 'createBearBackTexture',
-      'createIceGolemTexture', 'createSnowLeopardTexture', 'createNPCTextures', 'createNPCBackTextures',
+      'createIceGolemTexture', 'createSnowLeopardTexture',
+      'createIceHunterTexture', 'createSplittingSlimeTexture', 'createBlizzardShamanTexture',
+      'createNPCTextures', 'createNPCBackTextures',
       'createTreeTexture', 'createRockTexture', 'createDropTextures', 'createParticleTextures', 'createCrateTexture'
     ];
     let idx = 0;
@@ -4160,6 +4165,76 @@ class BootScene extends Phaser.Scene {
     g.destroy();
   }
 
+  createIceHunterTexture() {
+    const g = this.add.graphics(); const sz = 40;
+    // Diamond body shape (blue)
+    g.fillStyle(0x4488CC, 1);
+    g.fillTriangle(20, 2, 38, 20, 20, 38);
+    g.fillTriangle(20, 2, 2, 20, 20, 38);
+    // Inner lighter diamond
+    g.fillStyle(0x66AADD, 1);
+    g.fillTriangle(20, 8, 32, 20, 20, 32);
+    g.fillTriangle(20, 8, 8, 20, 20, 32);
+    // Eyes
+    g.fillStyle(0xCCEEFF, 1);
+    g.fillCircle(15, 18, 2); g.fillCircle(25, 18, 2);
+    g.fillStyle(0x112244, 1);
+    g.fillCircle(15, 18, 1); g.fillCircle(25, 18, 1);
+    g.generateTexture('ice_hunter', sz, sz); g.destroy();
+  }
+
+  createSplittingSlimeTexture() {
+    const g = this.add.graphics(); const sz = 48;
+    // Big green circle
+    g.fillStyle(0x44CC44, 1);
+    g.fillCircle(24, 26, 20);
+    // Highlight
+    g.fillStyle(0x88EE88, 0.6);
+    g.fillCircle(18, 20, 8);
+    // Eyes
+    g.fillStyle(0xFFFFFF, 1);
+    g.fillCircle(17, 22, 4); g.fillCircle(31, 22, 4);
+    g.fillStyle(0x115511, 1);
+    g.fillCircle(18, 23, 2); g.fillCircle(32, 23, 2);
+    g.generateTexture('splitting_slime', sz, sz); g.destroy();
+    // Mini slime texture
+    const g2 = this.add.graphics(); const sz2 = 24;
+    g2.fillStyle(0x44CC44, 1);
+    g2.fillCircle(12, 14, 10);
+    g2.fillStyle(0x88EE88, 0.6);
+    g2.fillCircle(9, 11, 4);
+    g2.fillStyle(0xFFFFFF, 1);
+    g2.fillCircle(9, 12, 2); g2.fillCircle(15, 12, 2);
+    g2.fillStyle(0x115511, 1);
+    g2.fillCircle(9, 12, 1); g2.fillCircle(15, 12, 1);
+    g2.generateTexture('mini_slime', sz2, sz2); g2.destroy();
+  }
+
+  createBlizzardShamanTexture() {
+    const g = this.add.graphics(); const sz = 36;
+    // Star shape (purple)
+    g.fillStyle(0xAA55FF, 1);
+    const cx = 18, cy = 18, outerR = 16, innerR = 7;
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const a = (Math.PI * 2 * i / 10) - Math.PI / 2;
+      const r = i % 2 === 0 ? outerR : innerR;
+      pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+    }
+    g.beginPath(); g.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+    g.closePath(); g.fillPath();
+    // Inner glow
+    g.fillStyle(0xCC88FF, 0.6);
+    g.fillCircle(cx, cy, 6);
+    // Eyes
+    g.fillStyle(0xFFFFFF, 1);
+    g.fillCircle(14, 16, 2); g.fillCircle(22, 16, 2);
+    g.fillStyle(0x440088, 1);
+    g.fillCircle(14, 16, 1); g.fillCircle(22, 16, 1);
+    g.generateTexture('blizzard_shaman', sz, sz); g.destroy();
+  }
+
   createNPCTextures() {
     let g = this.add.graphics();
     g.fillStyle(0x8B6914, 1); g.fillRect(10, 15, 12, 10);
@@ -4691,6 +4766,9 @@ class GameScene extends Phaser.Scene {
     }
 
     this.animals = this.physics.add.group();
+    this._iceBolts = [];
+    this._playerSlowed = false;
+    this._shamanHintShown = false;
     this.drops = this.physics.add.group();
     this.npcSprites = this.physics.add.group();
     this.resourceNodes = [];
@@ -5125,6 +5203,10 @@ class GameScene extends Phaser.Scene {
     this._applyDifficultyToAnimal(a, def);
     // FTUE context hints
     if (type === 'bear') this._ftueOnEnemySpawn('bear');
+    else if (type === 'blizzard_shaman' && !this._shamanHintShown) {
+      this._shamanHintShown = true;
+      this.showCenterAlert('🔮 샤먼을 먼저 처치하세요!', '#AA55FF');
+    }
     else if (def.behavior === 'chase') this._ftueOnFirstEnemy();
     a.wanderTimer = 0; a.wanderDir = {x:0,y:0}; a.hitFlash = 0; a.atkCD = 0; a.fleeTimer = 0;
     if (a.maxHP > 2) a.hpBar = this.add.graphics().setDepth(6);
@@ -5373,6 +5455,69 @@ class GameScene extends Phaser.Scene {
       }
       const howl = this.add.text(a.x, a.y - 15, '🐺 Awooo~', { fontSize: '12px', fontFamily: 'monospace', color: '#AAAACC', stroke: '#000', strokeThickness: 2 }).setDepth(15).setOrigin(0.5);
       this.tweens.add({ targets: howl, y: howl.y - 25, alpha: 0, duration: 500, onComplete: () => howl.destroy() });
+    } else if (a.animalType === 'ice_hunter') {
+      // Blue particles + ice crystal effect
+      for (let i = 0; i < 8; i++) {
+        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const sd = Phaser.Math.Between(20, 60);
+        const p = this.add.circle(a.x, a.y, Phaser.Math.Between(2, 5), 0x44AAFF).setDepth(15);
+        this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*sd, y: a.y + Math.sin(sa)*sd, alpha: 0, duration: 500, onComplete: () => p.destroy() });
+      }
+      // Ice crystal shatter
+      for (let i = 0; i < 4; i++) {
+        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const cr = this.add.rectangle(a.x, a.y, 4, 10, 0x88DDFF).setDepth(15).setAngle(Phaser.Math.Between(0, 360));
+        this.tweens.add({ targets: cr, x: a.x + Math.cos(sa)*40, y: a.y + Math.sin(sa)*40, alpha: 0, angle: cr.angle + 90, duration: 600, onComplete: () => cr.destroy() });
+      }
+    } else if (a.animalType === 'splitting_slime' && !a._isMiniSlime) {
+      // Spawn 2 mini slimes
+      for (let i = 0; i < 2; i++) {
+        const ox = (i === 0 ? -15 : 15);
+        const mini = this.physics.add.sprite(a.x + ox, a.y, 'mini_slime').setCollideWorldBounds(true).setDepth(5);
+        mini.animalType = 'splitting_slime';
+        mini._isMiniSlime = true;
+        const miniDef = { ...ANIMALS.splitting_slime, hp: Math.round(ANIMALS.splitting_slime.hp * 0.3), size: 12, name: '💧 미니슬라임' };
+        mini.def = miniDef;
+        this._applyDifficultyToAnimal(mini, miniDef);
+        mini.setScale(0.5);
+        mini.wanderTimer = 0; mini.wanderDir = {x:0,y:0}; mini.hitFlash = 0; mini.atkCD = 0; mini.fleeTimer = 0;
+        mini.hpBar = this.add.graphics().setDepth(6);
+        mini.nameLabel = this.add.text(mini.x, mini.y - 10, miniDef.name, {
+          fontSize: '9px', fontFamily: 'monospace', color: '#FF4444', stroke: '#000', strokeThickness: 3
+        }).setDepth(6).setOrigin(0.5);
+        this.animals.add(mini);
+      }
+      // Green splatter
+      for (let i = 0; i < 10; i++) {
+        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const p = this.add.circle(a.x, a.y, Phaser.Math.Between(3, 6), 0x44CC44).setDepth(15);
+        this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*50, y: a.y + Math.sin(sa)*50, alpha: 0, duration: 600, onComplete: () => p.destroy() });
+      }
+      this.showFloatingText(a.x, a.y - 20, '💥 분열!', '#44CC44');
+    } else if (a.animalType === 'splitting_slime' && a._isMiniSlime) {
+      // Small green puff
+      for (let i = 0; i < 4; i++) {
+        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const p = this.add.circle(a.x, a.y, 2, 0x88EE88).setDepth(15);
+        this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*20, y: a.y + Math.sin(sa)*20, alpha: 0, duration: 400, onComplete: () => p.destroy() });
+      }
+    } else if (a.animalType === 'blizzard_shaman') {
+      // Remove buffs from nearby enemies
+      this.animals.getChildren().forEach(b => {
+        if (b._shamanBuffed && b._shamanBuffSource === a) {
+          b._shamanBuffed = false;
+          b._shamanBuffSource = null;
+        }
+      });
+      // Purple explosion
+      const sw = this.add.circle(a.x, a.y, 10, 0xAA55FF, 0.5).setDepth(15);
+      this.tweens.add({ targets: sw, scale: 5, alpha: 0, duration: 600, onComplete: () => sw.destroy() });
+      for (let i = 0; i < 8; i++) {
+        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const p = this.add.star(a.x, a.y, 5, 2, 5, 0xCC88FF).setDepth(15);
+        this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*50, y: a.y + Math.sin(sa)*50, alpha: 0, angle: 180, duration: 700, onComplete: () => p.destroy() });
+      }
+      this.showFloatingText(a.x, a.y - 20, '🔮 샤먼 처치!', '#AA55FF');
     } else if (a.animalType === 'bear') {
       // Brown big particle explosion
       for (let i = 0; i < 14; i++) {
@@ -5472,7 +5617,7 @@ class GameScene extends Phaser.Scene {
       }
     }
     // ═══ 고기 드랍 시스템 (확률 기반) ═══
-    const meatDropChance = { rabbit: 0.3, deer: 0.5, wolf: 0.7, bear: 1.0 };
+    const meatDropChance = { rabbit: 0.3, deer: 0.5, wolf: 0.7, bear: 1.0, ice_hunter: 0.6, splitting_slime: 0.5, blizzard_shaman: 0.4 };
     const dropChance = meatDropChance[a.animalType] || 0;
     if (dropChance > 0 && Math.random() < dropChance) {
       this.stats.meatCollected = (this.stats.meatCollected || 0) + 1;
@@ -6741,6 +6886,50 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  _fireIceBolt(fromX, fromY, toX, toY) {
+    const ang = Phaser.Math.Angle.Between(fromX, fromY, toX, toY);
+    const bolt = this.add.circle(fromX, fromY, 4, 0x44AAFF).setDepth(10);
+    bolt._vx = Math.cos(ang) * 200;
+    bolt._vy = Math.sin(ang) * 200;
+    bolt._life = 3;
+    this._iceBolts.push(bolt);
+  }
+
+  _updateIceBolts(dt) {
+    for (let i = this._iceBolts.length - 1; i >= 0; i--) {
+      const b = this._iceBolts[i];
+      b.x += b._vx * dt;
+      b.y += b._vy * dt;
+      b._life -= dt;
+      if (b._life <= 0 || b.x < 0 || b.x > WORLD_W || b.y < 0 || b.y > WORLD_H) {
+        b.destroy(); this._iceBolts.splice(i, 1); continue;
+      }
+      // Check player collision
+      const dist = Phaser.Math.Distance.Between(b.x, b.y, this.player.x, this.player.y);
+      if (dist < 18) {
+        // Hit player
+        const dmg = 3 * (this._diffMode ? this._diffMode.enemyDmg : 1) * (this._endlessMultiplier || 1);
+        this.playerHP -= dmg;
+        this.showFloatingText(this.player.x, this.player.y - 20, '🧊-' + Math.round(dmg), '#44AAFF');
+        playHurt();
+        // Slow effect
+        if (!this._playerSlowed) {
+          this._playerSlowed = true;
+          const origSpeed = this.playerSpeed;
+          this.playerSpeed *= 0.5;
+          this.player.setTint(0x88CCFF);
+          this.time.delayedCall(500, () => {
+            this.playerSpeed = Math.max(this.playerSpeed, origSpeed);
+            this._playerSlowed = false;
+            if (this.player.active) this.player.clearTint();
+          });
+        }
+        b.destroy(); this._iceBolts.splice(i, 1);
+        if (this.playerHP <= 0) this.endGame();
+      }
+    }
+  }
+
   updateAnimalAI(dt) {
     const px = this.player.x, py = this.player.y;
     this.animals.getChildren().forEach(a => {
@@ -6783,7 +6972,65 @@ class GameScene extends Phaser.Scene {
       }
 
       if (!repelled) {
-        if (a.def.behavior === 'flee') {
+        // ═══ Ice Hunter: ranged behavior - keep distance, shoot bolts ═══
+        if (a.def.behavior === 'ranged') {
+          if (dist < a.def.aggroRange) {
+            if (dist < 200) {
+              // Too close - back away
+              const ang = Phaser.Math.Angle.Between(px, py, a.x, a.y);
+              a.body.setVelocity(Math.cos(ang) * a.def.speed, Math.sin(ang) * a.def.speed);
+            } else if (dist > 250) {
+              // Too far - approach
+              const ang = Phaser.Math.Angle.Between(a.x, a.y, px, py);
+              a.body.setVelocity(Math.cos(ang) * a.def.speed, Math.sin(ang) * a.def.speed);
+            } else {
+              // In sweet spot - strafe
+              const ang = Phaser.Math.Angle.Between(a.x, a.y, px, py) + Math.PI / 2;
+              a.body.setVelocity(Math.cos(ang) * a.def.speed * 0.5, Math.sin(ang) * a.def.speed * 0.5);
+            }
+            // Shoot ice bolt every 3 seconds
+            a._shootCD = (a._shootCD || 0) - dt;
+            if (a._shootCD <= 0) {
+              a._shootCD = 3;
+              this._fireIceBolt(a.x, a.y, px, py);
+            }
+          } else this.wander(a, dt, 0.3);
+        }
+        // ═══ Blizzard Shaman: flee + buff nearby enemies ═══
+        else if (a.def.behavior === 'shaman') {
+          // Buff nearby enemies: speed +20%
+          this.animals.getChildren().forEach(b => {
+            if (b === a || !b.active || b.animalType === 'blizzard_shaman') return;
+            const bd = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
+            if (bd < 300) {
+              if (!b._shamanBuffed) {
+                b._shamanBuffed = true;
+                b._shamanBuffSource = a;
+                b._origSpeed = b.def.speed;
+              }
+            }
+          });
+          // Flee from player
+          if (dist < a.def.fleeRange) {
+            const ang = Phaser.Math.Angle.Between(px, py, a.x, a.y);
+            a.body.setVelocity(Math.cos(ang) * a.def.speed * 1.5, Math.sin(ang) * a.def.speed * 1.5);
+            a.fleeTimer = 2;
+          } else if (a.fleeTimer > 0) {
+            a.fleeTimer -= dt;
+          } else if (dist < a.def.aggroRange) {
+            // Slowly wander away from player
+            const ang = Phaser.Math.Angle.Between(px, py, a.x, a.y);
+            a.body.setVelocity(Math.cos(ang) * a.def.speed * 0.4, Math.sin(ang) * a.def.speed * 0.4);
+          } else this.wander(a, dt, 0.3);
+          // Visual: purple aura pulse
+          if (!a._auraPulse || a._auraPulse <= 0) {
+            a._auraPulse = 2;
+            const aura = this.add.circle(a.x, a.y, 10, 0xAA55FF, 0.3).setDepth(4);
+            this.tweens.add({ targets: aura, scale: 6, alpha: 0, duration: 1500, onComplete: () => aura.destroy() });
+          }
+          a._auraPulse -= dt;
+        }
+        else if (a.def.behavior === 'flee') {
           if (dist < a.def.fleeRange) {
             const ang = Phaser.Math.Angle.Between(px, py, a.x, a.y);
             a.body.setVelocity(Math.cos(ang)*a.def.speed, Math.sin(ang)*a.def.speed);
@@ -6812,7 +7059,8 @@ class GameScene extends Phaser.Scene {
           }
           if (dist < a.def.aggroRange) {
             const ang = Phaser.Math.Angle.Between(a.x, a.y, px, py);
-            a.body.setVelocity(Math.cos(ang)*a.def.speed, Math.sin(ang)*a.def.speed);
+            const spdMul = a._shamanBuffed ? 1.2 : 1;
+            a.body.setVelocity(Math.cos(ang)*a.def.speed*spdMul, Math.sin(ang)*a.def.speed*spdMul);
             if (dist < 28 && a.atkCD <= 0) {
               // Sprint invincibility
               if (this.activeBuffs.sprint || this._classSprintActive) { a.atkCD = 0.5; return; }
@@ -8381,17 +8629,17 @@ class GameScene extends Phaser.Scene {
       // 10-15분: 늑대 등장
       weights = { rabbit: 3, penguin: 2, deer: 2, seal: 2, wolf: 3 }; maxCount = 22; spawnInterval = 7000;
     } else if (min < 20) {
-      // 15-20분: 곰 등장
-      weights = { rabbit: 2, deer: 2, wolf: 3, bear: 3, seal: 2 }; maxCount = 28; spawnInterval = 7000;
+      // 15-20분: 곰 + 얼음사냥꾼 등장
+      weights = { rabbit: 2, deer: 2, wolf: 3, bear: 3, seal: 2, ice_hunter: 1 }; maxCount = 28; spawnInterval = 7000;
     } else if (min < 30) {
-      // 20-30분: 보스 레이드 구간
-      weights = { rabbit: 1, deer: 1, wolf: 3, bear: 4, seal: 2 }; maxCount = 34; spawnInterval = 6000;
+      // 20-30분: 분열슬라임 등장
+      weights = { rabbit: 1, deer: 1, wolf: 3, bear: 4, seal: 2, ice_hunter: 2, splitting_slime: 2 }; maxCount = 34; spawnInterval = 6000;
     } else if (min < 45) {
-      // 후반: 강적 위주
-      weights = { wolf: 3, bear: 4, seal: 3, ice_golem: 1, snow_leopard: 2 }; maxCount = 40; spawnInterval = 5000;
+      // 후반: 강적 + 눈보라샤먼
+      weights = { wolf: 3, bear: 4, seal: 3, ice_golem: 1, snow_leopard: 2, ice_hunter: 2, splitting_slime: 2, blizzard_shaman: 1 }; maxCount = 40; spawnInterval = 5000;
     } else {
       // 최후반: 극한
-      weights = { wolf: 2, bear: 5, seal: 4, ice_golem: 2, snow_leopard: 3 }; maxCount = 48; spawnInterval = 4000;
+      weights = { wolf: 2, bear: 5, seal: 4, ice_golem: 2, snow_leopard: 3, ice_hunter: 2, splitting_slime: 2, blizzard_shaman: 2 }; maxCount = 48; spawnInterval = 4000;
     }
     return { weights, maxCount, spawnInterval };
   }
@@ -10299,6 +10547,7 @@ class GameScene extends Phaser.Scene {
     this._updateBuffs(dt);
     this._updateEquipmentDrops(dt);
     this.updateAnimalAI(dt);
+    this._updateIceBolts(dt);
     if (this.synergyManager) this.synergyManager.updateColdImmunity(dt, this);
     this.updateNPCs(dt);
     this.updateCampfireSystem(dt);
