@@ -3219,6 +3219,18 @@ class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.buffDropGroup, (_, bd) => this._collectBuffDrop(bd));
     this.campfireParticleTimer = 0;
 
+    // ═══ BOSS HP BAR (top center UI) ═══
+    this._initBossHPBar();
+    // ═══ MINIMAP ═══
+    this._initMinimap();
+    // ═══ HIT VIGNETTE ═══
+    this._initVignette();
+    // M key for minimap toggle
+    this.input.keyboard.on('keydown-M', () => {
+      this._minimapVisible = !this._minimapVisible;
+      if (this._minimapContainer) this._minimapContainer.setVisible(this._minimapVisible);
+    });
+
     // ── Load Save Data ──
     const loadSave = this.scene.settings.data?.loadSave;
     if (loadSave) {
@@ -4982,6 +4994,7 @@ class GameScene extends Phaser.Scene {
               }
               const actualDmg = a.def.damage * (a._diffDmgMul || 1) * (1 - this.upgradeManager.armorReduction);
               this.playerHP -= actualDmg; a.atkCD = 1.2; playHurt();
+              if (this._triggerHitVignette) this._triggerHitVignette();
               // Thorns
               if (this.upgradeManager.thornsDamage > 0 && a.active) {
                 a.hp -= this.upgradeManager.thornsDamage;
@@ -6647,6 +6660,7 @@ class GameScene extends Phaser.Scene {
       const dist = Phaser.Math.Distance.Between(sb.x, sb.y, this.player.x, this.player.y);
       if (dist < sb.size / 2 + 12) {
         this.playerHP -= sb.damage;
+        if (this._triggerHitVignette) this._triggerHitVignette();
         playHurt();
         this.cameras.main.shake(150, 0.01);
         this.showFloatingText(this.player.x, this.player.y - 20, `-${sb.damage} ☃️`, '#AADDFF');
@@ -6706,10 +6720,8 @@ class GameScene extends Phaser.Scene {
     const cfg = MINIBOSS_DEFS[type];
     if (!cfg) return;
 
-    // 2-second warning then spawn
-    this.cameras.main.flash(300, 200, 50, 50, true);
-    this.showCenterAlert(cfg.alertMsg, '#FF4444');
-    this.cameras.main.shake(400, 0.01);
+    // 2-second warning then spawn with camera effects
+    this._triggerBossEntrance(cfg.name);
 
     this.time.delayedCall(2000, () => {
       // Spawn miniboss
@@ -6816,11 +6828,236 @@ class GameScene extends Phaser.Scene {
     }).setDepth(6).setOrigin(0.5);
     this.animals.add(boss);
 
-    // Epic entrance
+    // Epic entrance with camera effects
     playBossSpawn();
-    this.showCenterAlert(`⚠️ 보스 출현: ${bossName}`, '#FF4444');
-    this.cameras.main.shake(500, 0.015);
-    this.cameras.main.flash(300, 100, 100, 255);
+    this._triggerBossEntrance(bossName);
+  }
+
+  // ═══ BOSS HP BAR SYSTEM ═══
+  _initBossHPBar() {
+    const cam = this.cameras.main;
+    this._bossHPContainer = this.add.container(cam.width / 2, 55).setScrollFactor(0).setDepth(250).setVisible(false);
+    // Boss name text
+    this._bossNameText = this.add.text(0, -18, '', {
+      fontSize: '14px', fontFamily: 'monospace', color: '#FF6666', stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setOrigin(0.5);
+    // HP bar graphics
+    this._bossHPGfx = this.add.graphics();
+    // HP value text
+    this._bossHPText = this.add.text(0, 2, '', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#FFFFFF', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5);
+    this._bossHPContainer.add([this._bossNameText, this._bossHPGfx, this._bossHPText]);
+    this._bossHPFadeOut = false;
+  }
+
+  _updateBossHPBar() {
+    // Find active boss
+    let activeBoss = null;
+    if (this.animals) {
+      this.animals.getChildren().forEach(a => {
+        if (a.active && a.isBoss && a.hp > 0) {
+          if (!activeBoss || (a.isBoss && !a.isMiniboss)) activeBoss = a;
+        }
+      });
+    }
+    if (activeBoss) {
+      this._bossHPContainer.setVisible(true).setAlpha(1);
+      this._bossHPFadeOut = false;
+      const name = activeBoss.def?.name || '보스';
+      this._bossNameText.setText(name);
+      const ratio = Math.max(0, activeBoss.hp / activeBoss.maxHP);
+      const barW = 300, barH = 20;
+      const g = this._bossHPGfx;
+      g.clear();
+      // Background
+      g.lineStyle(2, 0x000000, 1);
+      g.strokeRect(-barW/2, -barH/2, barW, barH);
+      g.fillStyle(0x111111, 0.8);
+      g.fillRect(-barW/2, -barH/2, barW, barH);
+      // HP fill with gradient effect (darker red left, brighter right)
+      const fillW = barW * ratio;
+      if (fillW > 0) {
+        g.fillStyle(0xCC0000, 1);
+        g.fillRect(-barW/2, -barH/2, fillW, barH);
+        // Brighter overlay on right half
+        g.fillStyle(0xFF3333, 0.5);
+        g.fillRect(-barW/2 + fillW * 0.5, -barH/2, fillW * 0.5, barH);
+      }
+      this._bossHPText.setText(`HP ${Math.ceil(activeBoss.hp)} / ${activeBoss.maxHP}`);
+    } else if (this._bossHPContainer.visible && !this._bossHPFadeOut) {
+      this._bossHPFadeOut = true;
+      this.tweens.add({
+        targets: this._bossHPContainer, alpha: 0, duration: 2000,
+        onComplete: () => { this._bossHPContainer.setVisible(false); }
+      });
+    }
+  }
+
+  // ═══ BOSS ENTRANCE CAMERA EFFECT ═══
+  _triggerBossEntrance(bossName) {
+    const cam = this.cameras.main;
+    // Step 1: Zoom in
+    cam.zoomTo(1.3, 500);
+    // Step 2: Red flash
+    this.time.delayedCall(300, () => cam.flash(300, 255, 0, 0));
+    // Step 3: Shake
+    this.time.delayedCall(500, () => cam.shake(200, 0.02));
+    // Step 4: Zoom out
+    this.time.delayedCall(1000, () => cam.zoomTo(1.0, 500));
+    // Step 5: Big boss name text slide-in
+    const nameText = this.add.text(cam.width / 2, cam.height / 2, bossName, {
+      fontSize: '36px', fontFamily: 'monospace', color: '#FF2222',
+      stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(300).setOrigin(0.5).setAlpha(0).setX(cam.width + 200);
+    this.tweens.add({
+      targets: nameText, x: cam.width / 2, alpha: 1, duration: 400, ease: 'Power2',
+      onComplete: () => {
+        this.tweens.add({ targets: nameText, alpha: 0, y: nameText.y - 40, duration: 600, delay: 600, onComplete: () => nameText.destroy() });
+      }
+    });
+  }
+
+  // ═══ MINIMAP SYSTEM ═══
+  _initMinimap() {
+    const cam = this.cameras.main;
+    const size = 100;
+    this._minimapSize = size;
+    this._minimapVisible = cam.width > 500; // hidden on small screens
+    this._minimapContainer = this.add.container(cam.width - size - 10, 10).setScrollFactor(0).setDepth(240).setVisible(this._minimapVisible);
+    this._minimapBg = this.add.graphics();
+    this._minimapBg.fillStyle(0x000000, 0.5);
+    this._minimapBg.fillRect(0, 0, size, size);
+    this._minimapBg.lineStyle(1, 0x666666, 0.8);
+    this._minimapBg.strokeRect(0, 0, size, size);
+    this._minimapDots = this.add.graphics();
+    this._minimapContainer.add([this._minimapBg, this._minimapDots]);
+    // Click to toggle
+    this._minimapBg.setInteractive(new Phaser.Geom.Rectangle(0, 0, size, size), Phaser.Geom.Rectangle.Contains);
+    this._minimapBg.on('pointerdown', () => {
+      this._minimapVisible = false;
+      this._minimapContainer.setVisible(false);
+    });
+    // Pulse timer for boss dot
+    this._minimapPulse = 0;
+  }
+
+  _updateMinimap() {
+    if (!this._minimapVisible || !this._minimapDots) return;
+    const g = this._minimapDots;
+    g.clear();
+    const size = this._minimapSize;
+    const scale = size / WORLD_W;
+    this._minimapPulse = (this._minimapPulse || 0) + 0.3;
+
+    // Player (white dot)
+    if (this.player && this.player.active) {
+      g.fillStyle(0xFFFFFF, 1);
+      g.fillCircle(this.player.x * scale, this.player.y * scale, 3);
+    }
+
+    // Enemies (red dots, max 20) + bosses
+    let enemyCount = 0;
+    if (this.animals) {
+      this.animals.getChildren().forEach(a => {
+        if (!a.active || a.hp <= 0) return;
+        if (a.isBoss) {
+          // Boss: large pulsing red dot
+          const r = 5 + Math.sin(this._minimapPulse) * 2;
+          g.fillStyle(0xFF0000, 1);
+          g.fillCircle(a.x * scale, a.y * scale, r);
+        } else if (enemyCount < 20) {
+          g.fillStyle(0xFF4444, 0.8);
+          g.fillCircle(a.x * scale, a.y * scale, 2);
+          enemyCount++;
+        }
+      });
+    }
+
+    // Campfires/buildings (yellow dots)
+    if (this.buildingSprites) {
+      this.buildingSprites.forEach(b => {
+        if (b && b.active !== false) {
+          g.fillStyle(0xFFDD00, 0.8);
+          g.fillCircle(b.x * scale, b.y * scale, 2);
+        }
+      });
+    }
+
+    // NPCs (yellow dots)
+    if (this.npcsOwned) {
+      this.npcsOwned.forEach(n => {
+        if (n && n.active) {
+          g.fillStyle(0xFFDD00, 0.6);
+          g.fillCircle(n.x * scale, n.y * scale, 2);
+        }
+      });
+    }
+  }
+
+  // ═══ HIT VIGNETTE SYSTEM ═══
+  _initVignette() {
+    const cam = this.cameras.main;
+    this._vignetteGfx = this.add.graphics().setScrollFactor(0).setDepth(190).setAlpha(0);
+    this._vignetteAlpha = 0;
+    this._vignettePulse = 0;
+    this._vignetteHealFlash = 0;
+    this._drawVignette(this._vignetteGfx, cam.width, cam.height, 0xFF0000);
+    // Green heal flash overlay
+    this._healGfx = this.add.graphics().setScrollFactor(0).setDepth(190).setAlpha(0);
+    this._drawVignette(this._healGfx, cam.width, cam.height, 0x00FF00);
+  }
+
+  _drawVignette(gfx, w, h, color) {
+    gfx.clear();
+    const thickness = 60;
+    for (let i = 0; i < thickness; i++) {
+      const a = (1 - i / thickness) * 0.4;
+      gfx.fillStyle(color, a);
+      // Top
+      gfx.fillRect(0, i, w, 1);
+      // Bottom
+      gfx.fillRect(0, h - i - 1, w, 1);
+      // Left
+      gfx.fillRect(i, 0, 1, h);
+      // Right
+      gfx.fillRect(w - i - 1, 0, 1, h);
+    }
+  }
+
+  _triggerHitVignette() {
+    this._vignetteAlpha = 0.7;
+  }
+
+  _triggerHealFlash() {
+    this._vignetteHealFlash = 0.5;
+  }
+
+  _updateVignette(dt) {
+    if (!this._vignetteGfx) return;
+    const hpRatio = this.playerHP / this.playerMaxHP;
+
+    // Hit flash decay
+    if (this._vignetteAlpha > 0) {
+      this._vignetteAlpha = Math.max(0, this._vignetteAlpha - dt * 2);
+    }
+
+    // Low HP persistent pulse
+    let pulseAlpha = 0;
+    if (hpRatio <= 0.3 && hpRatio > 0) {
+      this._vignettePulse += dt * 4;
+      pulseAlpha = 0.15 + Math.sin(this._vignettePulse) * 0.1;
+    }
+
+    this._vignetteGfx.setAlpha(Math.max(this._vignetteAlpha, pulseAlpha));
+
+    // Heal flash decay
+    if (this._vignetteHealFlash > 0) {
+      this._vignetteHealFlash = Math.max(0, this._vignetteHealFlash - dt * 2);
+      this._healGfx.setAlpha(this._vignetteHealFlash);
+    } else {
+      this._healGfx.setAlpha(0);
+    }
   }
 
   // ═══ RHYTHM SYSTEM (15-20초 이벤트) ═══
@@ -6999,9 +7236,8 @@ class GameScene extends Phaser.Scene {
     const bossSpeed = 60 + index * 5;
     const bossName = `❄️ 폭풍왕 Lv.${index + 2}`;
 
-    this.showCenterAlert(`⚠️ ${bossName} 출현!`, '#FF2222');
-    this.cameras.main.shake(500, 0.02);
     playBossSpawn();
+    this._triggerBossEntrance(bossName);
 
     this.time.delayedCall(2000, () => {
       const angle = Math.random() * Math.PI * 2;
@@ -7852,6 +8088,12 @@ class GameScene extends Phaser.Scene {
     }
     // Clean up expired random events
     this._updateRandomEvents();
+
+    // ═══ BOSS HP BAR + MINIMAP + VIGNETTE updates ═══
+    this._updateBossHPBar();
+    this._minimapFrameCount = (this._minimapFrameCount || 0) + 1;
+    if (this._minimapFrameCount % 10 === 0) this._updateMinimap();
+    this._updateVignette(dt);
 
     this.checkQuests();
     this.updateUI();
