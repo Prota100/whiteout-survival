@@ -1092,6 +1092,28 @@ class EquipmentManager {
   }
 }
 
+// ═══ 📜 런 히스토리 매니저 ═══
+class RunHistoryManager {
+  static KEY = 'whiteout_runs';
+  static MAX = 10;
+  constructor() { this._load(); }
+  _load() { try { this.runs = JSON.parse(localStorage.getItem(RunHistoryManager.KEY) || '[]'); } catch(e) { this.runs = []; } }
+  save(runData) {
+    this.runs.unshift(runData);
+    if (this.runs.length > RunHistoryManager.MAX) this.runs.pop();
+    try { localStorage.setItem(RunHistoryManager.KEY, JSON.stringify(this.runs)); } catch(e) {}
+  }
+  getBest() {
+    if (this.runs.length === 0) return null;
+    return {
+      longestSurvival: this.runs.reduce((a, b) => a.survivalTime > b.survivalTime ? a : b),
+      mostKills: this.runs.reduce((a, b) => a.kills > b.kills ? a : b),
+      highestLevel: this.runs.reduce((a, b) => a.level > b.level ? a : b),
+    };
+  }
+  static formatTime(sec) { return `${Math.floor(sec/60)}분 ${Math.floor(sec%60)}초`; }
+}
+
 class UpgradeManager {
   constructor() {
     this.levels = {}; // { DAMAGE_UP: 2, ... }
@@ -2427,9 +2449,10 @@ class TitleScene extends Phaser.Scene {
     const tabs = [
       { id: 'achievements', label: '🏆 성취' },
       { id: 'equipment', label: '📦 장비' },
-      { id: 'quests', label: '📊 퀘스트' }
+      { id: 'quests', label: '📊 퀘스트' },
+      { id: 'runhistory', label: '📜 런 기록' }
     ];
-    const tabW = (pw - 30) / 3;
+    const tabW = (pw - 30) / 4;
     const tabY = py + 52;
     const tabBtns = [];
 
@@ -2592,6 +2615,146 @@ class TitleScene extends Phaser.Scene {
           fontSize: '12px', fontFamily: 'monospace', color: '#AABB88', stroke: '#000', strokeThickness: 1
         }).setOrigin(0.5).setDepth(303);
         contentItems.push(sumT);
+      } else if (activeTab === 'runhistory') {
+        // ═══ 📜 런 기록 탭 ═══
+        const rhm = new RunHistoryManager();
+        const runs = rhm.runs;
+        const CLASS_ICONS = {};
+        Object.entries(PLAYER_CLASSES).forEach(([k,v]) => { CLASS_ICONS[k] = v.icon + ' ' + v.name; });
+        const DIFF_NAMES = { normal: '일반', hard: '하드', hell: '지옥' };
+        const GRADE_ICONS = { common: '⬜', rare: '🟦', epic: '🟪', legendary: '🟨', unique: '🟧' };
+
+        // 🌟 베스트 런 하이라이트
+        if (runs.length > 0) {
+          const best = rhm.getBest();
+          const bestHeaderT = this.add.text(W/2, cy, '🌟 내 베스트 런', {
+            fontSize: '13px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 2, fontStyle: 'bold'
+          }).setOrigin(0.5).setDepth(303);
+          contentItems.push(bestHeaderT);
+          cy += 20;
+
+          const bestCards = [
+            { label: '⏱️최장생존', run: best.longestSurvival, val: RunHistoryManager.formatTime(best.longestSurvival.survivalTime) },
+            { label: '⚔️최다킬', run: best.mostKills, val: best.mostKills.kills + '킬' },
+            { label: '⭐최고레벨', run: best.highestLevel, val: 'Lv.' + best.highestLevel.level },
+          ];
+          const cardW2 = (pw - 40) / 3;
+          bestCards.forEach((bc, ci) => {
+            const bx = px + 15 + ci * (cardW2 + 5);
+            const bg2 = this.add.graphics().setDepth(302);
+            bg2.fillStyle(0x1A2244, 0.9); bg2.fillRoundedRect(bx, cy, cardW2, 36, 4);
+            bg2.lineStyle(1, 0xFFD700, 0.3); bg2.strokeRoundedRect(bx, cy, cardW2, 36, 4);
+            contentItems.push(bg2);
+            const t1 = this.add.text(bx + cardW2/2, cy + 10, bc.label, {
+              fontSize: '9px', fontFamily: 'monospace', color: '#AABBCC', stroke: '#000', strokeThickness: 1
+            }).setOrigin(0.5).setDepth(303);
+            contentItems.push(t1);
+            const t2 = this.add.text(bx + cardW2/2, cy + 26, bc.val, {
+              fontSize: '10px', fontFamily: 'monospace', color: '#FFFFFF', stroke: '#000', strokeThickness: 1, fontStyle: 'bold'
+            }).setOrigin(0.5).setDepth(303);
+            contentItems.push(t2);
+          });
+          cy += 44;
+        }
+
+        // 런 목록
+        const listHeaderT = this.add.text(W/2, cy, `📜 런 기록 (최근 ${runs.length}회)`, {
+          fontSize: '12px', fontFamily: 'monospace', color: '#AADDFF', stroke: '#000', strokeThickness: 1
+        }).setOrigin(0.5).setDepth(303);
+        contentItems.push(listHeaderT);
+        cy += 20;
+
+        if (runs.length === 0) {
+          const emptyT = this.add.text(W/2, cy + 30, '아직 기록이 없습니다\n게임을 플레이해보세요!', {
+            fontSize: '12px', fontFamily: 'monospace', color: '#556677', align: 'center'
+          }).setOrigin(0.5).setDepth(303);
+          contentItems.push(emptyT);
+        }
+
+        // Scrollable run entries
+        let expandedIdx = -1;
+        const renderRuns = () => {
+          // Clear only run items (keep headers)
+          const runItemStart = contentItems.length;
+          let ry = cy;
+          runs.forEach((run, idx) => {
+            if (ry > contentY + contentH - 20) return;
+            const isExpanded = expandedIdx === idx;
+            const classLabel = CLASS_ICONS[run.playerClass] || run.playerClass;
+            const diffLabel = DIFF_NAMES[run.difficulty] || run.difficulty;
+            const timeStr = RunHistoryManager.formatTime(run.survivalTime);
+            const resultIcon = run.isWin ? '✅' : '❌';
+            const resultStr = run.isWin ? '클리어 🏆' : '실패';
+
+            // Run card background
+            const cardH2 = isExpanded ? 80 : 36;
+            const rbg = this.add.graphics().setDepth(302);
+            rbg.fillStyle(run.isWin ? 0x1A2A1A : 0x1A1A2A, 0.9);
+            rbg.fillRoundedRect(leftX, ry, textW, cardH2, 4);
+            rbg.lineStyle(1, run.isWin ? 0xFFD700 : 0x444466, 0.5);
+            rbg.strokeRoundedRect(leftX, ry, textW, cardH2, 4);
+            contentItems.push(rbg);
+
+            // Main line
+            const mainLine = `#${idx+1} ${classLabel} | ${diffLabel} | ${timeStr}`;
+            const mt = this.add.text(leftX + 6, ry + 4, mainLine, {
+              fontSize: '10px', fontFamily: 'monospace', color: '#DDDDEE', stroke: '#000', strokeThickness: 1
+            }).setDepth(303);
+            contentItems.push(mt);
+
+            // Stats line
+            const statsLine2 = `킬 ${run.kills} | Lv.${run.level} | 콤보 ${run.maxCombo} | ${resultIcon} ${resultStr}`;
+            const st = this.add.text(leftX + 6, ry + 18, statsLine2, {
+              fontSize: '9px', fontFamily: 'monospace', color: '#8899AA', stroke: '#000', strokeThickness: 1
+            }).setDepth(303);
+            contentItems.push(st);
+
+            // Expanded details
+            if (isExpanded) {
+              // Equipment
+              const eqParts = [];
+              for (const [slot, item] of Object.entries(run.equippedItems || {})) {
+                if (item) eqParts.push((GRADE_ICONS[item.grade] || '') + (SLOT_ICONS[slot] || slot));
+              }
+              const eqStr = eqParts.length > 0 ? '장비: ' + eqParts.join(' ') : '장비: 없음';
+
+              // Synergies
+              const synStr = (run.synergiesActivated || []).length > 0
+                ? '시너지: ' + run.synergiesActivated.map(s => { const found = typeof SKILL_SYNERGIES !== 'undefined' ? SKILL_SYNERGIES.find(ss => ss.id === s) : null; return found ? found.name : s; }).join(', ')
+                : '';
+
+              // Top upgrades
+              const upCounts = {};
+              (run.upgrades || []).forEach(k => { upCounts[k] = (upCounts[k] || 0) + 1; });
+              const topUp = Object.entries(upCounts).sort((a,b) => b[1] - a[1]).slice(0, 5);
+              const upStr = topUp.map(([k,c]) => { const u = UPGRADES[k]; return u ? `${u.icon}${c > 1 ? 'x'+c : ''}` : k; }).join(' ');
+
+              let detailStr = eqStr;
+              if (synStr) detailStr += '\n' + synStr;
+              if (upStr) detailStr += '\n빌드: ' + upStr;
+
+              const dt2 = this.add.text(leftX + 6, ry + 32, detailStr, {
+                fontSize: '9px', fontFamily: 'monospace', color: '#7788AA', stroke: '#000', strokeThickness: 1,
+                wordWrap: { width: textW - 12 }, lineSpacing: 3
+              }).setDepth(303);
+              contentItems.push(dt2);
+            }
+
+            // Click to expand/collapse
+            const hitArea = this.add.rectangle(leftX + textW/2, ry + cardH2/2, textW, cardH2)
+              .setDepth(304).setOrigin(0.5).setInteractive({ useHandCursor: true }).setAlpha(0.001);
+            hitArea.on('pointerdown', () => {
+              expandedIdx = expandedIdx === idx ? -1 : idx;
+              // Re-render content
+              clearContent();
+              renderContent();
+            });
+            contentItems.push(hitArea);
+
+            ry += cardH2 + 4;
+          });
+        };
+        renderRuns();
       }
     };
 
@@ -3725,6 +3888,8 @@ class GameScene extends Phaser.Scene {
 
     // ═══ 🏆 Achievement & Random Event System ═══
     this.achievementUnlocked = {}; // { id: true } for this session
+    this._currentRunUpgrades = []; // track upgrades chosen this run
+    this._runHistoryManager = new RunHistoryManager();
     this.achievementCheckTimer = 0;
     this.bossKillCount = 0;
     this.gotRareEquip = false;
@@ -7058,6 +7223,9 @@ class GameScene extends Phaser.Scene {
     const upgrade = UPGRADES[key];
     const cat = UPGRADE_CATEGORIES[upgrade.category];
 
+    // Track upgrade for run history
+    if (this._currentRunUpgrades) this._currentRunUpgrades.push(key);
+
     // Sound on selection
     if (upgrade.rarity === 'epic') playEpicCard();
     else playUpgradeSelect();
@@ -8052,6 +8220,10 @@ class GameScene extends Phaser.Scene {
   // ═══ HABBY-STYLE END SCREEN ═══
   _showEndScreen(opts) {
     const { isVictory, survivalTime, totalKills, maxCombo, level, earned, equipBonuses } = opts;
+
+    // ═══ 런 히스토리 저장 ═══
+    this._saveRunHistory(isVictory, survivalTime, totalKills, maxCombo, level, earned);
+
     const cam = this.cameras.main;
     const W = cam.width, H = cam.height;
 
@@ -8148,6 +8320,23 @@ class GameScene extends Phaser.Scene {
       }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
     }
 
+    // ═══ 이번 빌드 업그레이드 요약 ═══
+    let buildSummary = null;
+    if (this._currentRunUpgrades && this._currentRunUpgrades.length > 0) {
+      // Count upgrades and show top 5
+      const counts = {};
+      this._currentRunUpgrades.forEach(k => { counts[k] = (counts[k] || 0) + 1; });
+      const sorted = Object.entries(counts).sort((a,b) => b[1] - a[1]).slice(0, 5);
+      const buildStr = sorted.map(([k, c]) => {
+        const u = UPGRADES[k];
+        return u ? `${u.icon}${u.name}${c > 1 ? 'x'+c : ''}` : k;
+      }).join('  ');
+      buildSummary = this.add.text(px, py + 85, '🔧 빌드: ' + buildStr, {
+        fontSize: '11px', fontFamily: 'monospace', color: '#AADDFF',
+        stroke: '#000', strokeThickness: 2, wordWrap: { width: panelW - 20 }, align: 'center'
+      }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
+    }
+
     // Buttons row 1: retry + title
     const btnW = 90, btnH = 34, btnGap = 8;
     const btnY = py + panelH/2 - 90;
@@ -8214,6 +8403,7 @@ class GameScene extends Phaser.Scene {
 
     // Slide-in + fade animation
     const allElements = [panel, icon, title, stats, retryBg, retryText, titleBg, titleBtnText, shareBg, shareText];
+    if (buildSummary) allElements.splice(4, 0, buildSummary);
     if (newRecordLabel) allElements.splice(3, 0, newRecordLabel);
     allElements.forEach((el, i) => {
       if (el.y !== undefined) el.y -= 40;
@@ -8266,6 +8456,39 @@ class GameScene extends Phaser.Scene {
         }
       });
     }
+  }
+
+  _saveRunHistory(isVictory, survivalTime, totalKills, maxCombo, level, earned) {
+    const now = new Date();
+    const date = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const equippedItems = {};
+    if (this.equipmentManager) {
+      for (const [slot, item] of Object.entries(this.equipmentManager.slots || {})) {
+        if (item) equippedItems[slot] = { itemId: item.itemId, grade: item.grade };
+      }
+    }
+    const synergiesActivated = this.synergyManager ? [...this.synergyManager.activeSynergies] : [];
+    // Achievements unlocked this run (ones not in _savedAchievements at start)
+    const achThisRun = Object.keys(this.achievementUnlocked || {});
+    const runData = {
+      timestamp: Date.now(),
+      date,
+      playerClass: this._playerClass || 'unknown',
+      difficulty: this._difficulty || 'normal',
+      survivalTime: Math.floor(survivalTime),
+      kills: totalKills,
+      maxCombo,
+      level,
+      isWin: !!isVictory,
+      isEndless: !!this._endlessMode,
+      endlessTime: this._endlessMode ? Math.floor(survivalTime) : 0,
+      equippedItems,
+      upgrades: this._currentRunUpgrades || [],
+      synergiesActivated,
+      achievementsUnlocked: achThisRun,
+      metaPointsEarned: earned || 0,
+    };
+    this._runHistoryManager.save(runData);
   }
 
   endGame() {
