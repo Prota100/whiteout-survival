@@ -279,7 +279,8 @@ class MetaManager {
         startHP: 0,
         startTempResist: 0,
         startWood: 0,
-        extraCard: 0
+        extraCard: 0,
+        revival_scroll: 0
       }
     };
   }
@@ -311,13 +312,14 @@ class MetaManager {
       startHP: [100, 200, 400, 800, 1600],
       startTempResist: [100, 200, 400, 800, 1600],
       startWood: [50, 100, 200, 400, 800],
-      extraCard: [500, 1000, 2000]
+      extraCard: [500, 1000, 2000],
+      revival_scroll: [20]
     };
     return costs[type]?.[level] || 9999;
   }
   
   static getMaxLevel(type) {
-    return type === 'extraCard' ? 3 : 5;
+    return type === 'extraCard' ? 3 : type === 'revival_scroll' ? 1 : 5;
   }
   
   static canUpgrade(type) {
@@ -578,6 +580,7 @@ class SynergyManager {
       if (allMet) {
         this.activeSynergies.add(syn.id);
         this.applySynergy(syn, scene);
+        if (scene._questProgress) scene._questProgress.synergy_activated++;
         this.showSynergyPopup(syn, scene);
       }
     });
@@ -620,7 +623,7 @@ class SynergyManager {
   showSynergyPopup(syn, scene) {
     const cam = scene.cameras.main;
     const t = scene.add.text(cam.width / 2, cam.height * 0.4,
-      '✨ ' + syn.name + ' 시너지 발동!', {
+      '✨ ' + syn.name + ' 시너지 발동!', { // track synergy for quest
       fontSize: '28px', fontFamily: 'monospace', color: '#FFD700',
       stroke: '#000', strokeThickness: 5, fontStyle: 'bold',
       shadow: { offsetX: 0, offsetY: 0, color: '#FF8C00', blur: 15, fill: true }
@@ -2227,6 +2230,7 @@ class TitleScene extends Phaser.Scene {
       ],
       util: [
         { key: 'startWood', name: '🪵 시작 나무', desc: 'Lv당 +3 나무', max: 5, icon: '🪵' },
+        { key: 'revival_scroll', name: '💫 부활 주문서', desc: '게임 오버 시 1회 부활', max: 1, icon: '💫' },
       ],
       equip: []
     };
@@ -3450,6 +3454,10 @@ class GameScene extends Phaser.Scene {
     this.questIndex = 0;
     this.questCompleted = [];
     this.currentZone = 'safe';
+    this._visitedZones = new Set(['safe']);
+    this._revivalUsed = false;
+    this._questProgress = { equipment_collected: 0, boss_damage_dealt: 0, synergy_activated: 0, critical_hits: 0, zones_visited: 1 };
+    this._newQuestsDone = new Set();
     this.questSpawnTimer = 0;
 
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
@@ -3986,12 +3994,14 @@ class GameScene extends Phaser.Scene {
       dmg = Math.ceil(dmg * 2);
       a._lastHitCrit = true;
       this.showFloatingText(a.x + 15, a.y - 30, '💥CRITICAL!', '#FFD700');
+      if (this._questProgress) this._questProgress.critical_hits++;
       this._hitStop(120); // strong hitstop for crits
     }
     const isCrit = a._lastHitCrit || false; a._lastHitCrit = false;
     // Boss hitstop
     if (a.isBoss && !isCrit) this._hitStop(80);
     a.hp -= dmg; a.hitFlash = 0.2; a.setTint(0xFF4444); playHit();
+    if (a.isBoss && this._questProgress) this._questProgress.boss_damage_dealt += dmg;
     const fs = isCrit ? '28px' : dmg >= 3 ? '20px' : '16px';
     const c = isCrit ? '#FF2222' : '#FFFFFF';
     const t = this.add.text(a.x + Phaser.Math.Between(-10, 10), a.y - 20, '-'+dmg, {
@@ -5091,6 +5101,7 @@ class GameScene extends Phaser.Scene {
     // Track grade for achievements
     if (ed.grade === 'rare') this.gotRareEquip = true;
     if (ed.grade === 'epic' || ed.grade === 'legendary' || ed.grade === 'unique') this.gotEpicEquip = true;
+    if (this._questProgress) this._questProgress.equipment_collected++;
     const equipped = this.equipmentManager.tryEquip(ed.slot, ed.itemId, ed.grade);
     // Grade-based SFX & visual feedback
     this._playEquipPickupFX(ed.grade);
@@ -5397,6 +5408,7 @@ class GameScene extends Phaser.Scene {
                 this.showFloatingText(px, py - 25, '🛡️ 무효!', '#FFD700');
                 return;
               }
+              if (this._invincibleTimer > 0) { a.atkCD = 1.0; this.showFloatingText(px, py - 25, '💫 무적!', '#FFD700'); return; }
               const actualDmg = a.def.damage * (a._diffDmgMul || 1) * (1 - this.upgradeManager.armorReduction);
               this.playerHP -= actualDmg; a.atkCD = 1.2; playHurt();
               if (this._triggerHitVignette) this._triggerHitVignette();
@@ -7905,6 +7917,16 @@ class GameScene extends Phaser.Scene {
   endGame() {
     // GDD: HP 0 → 마을로 리스폰 3초 (통계 표시)
     if (this.gameOver || this.isRespawning) return;
+    // Revival scroll check
+    const revMeta = MetaManager.load();
+    if (!this._revivalUsed && revMeta.upgrades && revMeta.upgrades.revival_scroll >= 1) {
+      this._revivalUsed = true;
+      this.playerHP = Math.floor(this.playerMaxHP / 2);
+      this.player.setAlpha(0.5);
+      this._invincibleTimer = 10;
+      this._showMilestoneBanner('💫 부활했습니다! (10초 무적)', '#FFD700', 3000);
+      return;
+    }
     this.isRespawning = true;
     playGameOverSound();
 
@@ -7940,6 +7962,12 @@ class GameScene extends Phaser.Scene {
     if (this.gameOver || this.upgradeUIActive || this.isRespawning || this._gamePaused) return;
     const dt = deltaMs / 1000;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    // Revival invincibility timer
+    if (this._invincibleTimer > 0) {
+      this._invincibleTimer -= dt;
+      if (this.player) this.player.setAlpha(0.4 + Math.sin(Date.now() * 0.01) * 0.3);
+      if (this._invincibleTimer <= 0 && this.player) this.player.setAlpha(1);
+    }
 
     // ═══ Class Passive: Warrior Rage Mode ═══
     if (this._playerClass === 'warrior' && this.player && this.player.active) {
@@ -8430,8 +8458,20 @@ class GameScene extends Phaser.Scene {
       if (zoneAlerts[newZone]) {
         this.showZoneAlert(zoneAlerts[newZone]);
       }
-      // Region name banner
+      // Region name banner + zone exploration milestone
       this.showRegionBanner(newZone);
+      if (!this._visitedZones.has(newZone)) {
+        this._visitedZones.add(newZone);
+        this._questProgress.zones_visited = this._visitedZones.size;
+        const rn = REGION_NAMES[newZone];
+        if (rn) this._showMilestoneBanner('🗺️ ' + rn.name + ' 발견!', rn.color, 2000);
+        if (this._visitedZones.size >= 4) {
+          this.time.delayedCall(2200, () => {
+            this._showMilestoneBanner('🏆 탐험가! 모든 지역 방문 — 업그레이드 카드 +1', '#FFD700', 3000);
+            this._pendingUpgrades = (this._pendingUpgrades || 0) + 1;
+          });
+        }
+      }
     }
 
     // ═══ Region Name HUD (좌측 하단) ═══
@@ -8515,21 +8555,69 @@ class GameScene extends Phaser.Scene {
     this._updateVignette(dt);
 
     this.checkQuests();
+    this._checkNewQuests();
     this.updateUI();
   }
 
   // ═══ 🏆 ACHIEVEMENT METHODS ═══
+  // ═══ New Quest System (5 additional quest types) ═══
+  _checkNewQuests() {
+    if (!this._questProgress) return;
+    const NEW_QUESTS = [
+      { id: 'q_equip_collect', text: '장비 3개 수집', target: 3, type: 'equipment_collected', reward: { xp: 200, points: 5 } },
+      { id: 'q_boss_damage', text: '보스에게 500 데미지', target: 500, type: 'boss_damage_dealt', reward: { xp: 300, points: 10 } },
+      { id: 'q_synergy', text: '시너지 1개 발동', target: 1, type: 'synergy_activated', reward: { xp: 150, points: 8 } },
+      { id: 'q_critical', text: '크리티컬 히트 10회', target: 10, type: 'critical_hits', reward: { xp: 100, points: 5 } },
+      { id: 'q_zone_explore', text: '모든 지역 방문', target: 4, type: 'zones_visited', reward: { xp: 200, points: 8 } },
+    ];
+    NEW_QUESTS.forEach(q => {
+      if (this._newQuestsDone.has(q.id)) return;
+      if ((this._questProgress[q.type] || 0) >= q.target) {
+        this._newQuestsDone.add(q.id);
+        this.playerXP = (this.playerXP || 0) + q.reward.xp;
+        const cam = this.cameras.main;
+        const t = this.add.text(cam.width / 2, cam.height * 0.25, '✅ ' + q.text + ' 완료!\n+' + q.reward.xp + ' XP', {
+          fontSize: '18px', fontFamily: 'monospace', color: '#00FF88', stroke: '#000', strokeThickness: 4, align: 'center'
+        }).setScrollFactor(0).setDepth(250).setOrigin(0.5);
+        this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 2500, delay: 500, onComplete: () => t.destroy() });
+        playQuest();
+      }
+    });
+  }
+
   _togglePause() {
     if (this.gameOver) return;
     this._gamePaused = !this._gamePaused;
     if (this._gamePaused) {
       this.physics.pause();
       const cam = this.cameras.main;
-      const overlay = this.add.rectangle(cam.centerX, cam.centerY, cam.width, cam.height, 0x000000, 0.6).setScrollFactor(0).setDepth(500);
-      const txt = this.add.text(cam.centerX, cam.centerY, '⏸ 일시정지\nESC / P 로 계속', {
-        fontSize: '28px', fontFamily: 'monospace', color: '#FFFFFF', align: 'center', stroke: '#000', strokeThickness: 4
-      }).setOrigin(0.5).setScrollFactor(0).setDepth(501);
-      this._pauseOverlay = [overlay, txt];
+      const overlay = this.add.rectangle(cam.centerX, cam.centerY, cam.width, cam.height, 0x000000, 0.7).setScrollFactor(0).setDepth(500);
+      const cardW = Math.min(320, cam.width - 40), cardH = 280;
+      const cx = cam.centerX, cy = cam.centerY;
+      const card = this.add.graphics().setScrollFactor(0).setDepth(501);
+      card.fillStyle(0x0D1117, 0.95); card.fillRoundedRect(cx - cardW/2, cy - cardH/2, cardW, cardH, 12);
+      card.lineStyle(1, 0x334455, 0.6); card.strokeRoundedRect(cx - cardW/2, cy - cardH/2, cardW, cardH, 12);
+      const title = this.add.text(cx, cy - cardH/2 + 30, '⏸️ 일시정지', {
+        fontSize: '24px', fontFamily: 'monospace', color: '#FFFFFF', stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(502);
+      const keys = [
+        'WASD / 방향키 — 이동',
+        'ESC / P      — 일시정지',
+        'M            — 미니맵 토글',
+        '1/2/3/4      — 아이템 사용',
+        '↑↑↓↓←→←→BA — ???'
+      ];
+      const keysText = this.add.text(cx, cy - 20, '⌨️ 단축키:\n' + keys.join('\n'), {
+        fontSize: '12px', fontFamily: 'monospace', color: '#8899AA', stroke: '#000', strokeThickness: 2, lineSpacing: 4, align: 'left'
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(502);
+      const btnBg = this.add.graphics().setScrollFactor(0).setDepth(502);
+      btnBg.fillStyle(0x2255aa, 0.9); btnBg.fillRoundedRect(cx - 60, cy + cardH/2 - 50, 120, 34, 6);
+      const btnText = this.add.text(cx, cy + cardH/2 - 33, '▶ 계속하기', {
+        fontSize: '14px', fontFamily: 'monospace', color: '#FFFFFF'
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(503);
+      const btnHit = this.add.rectangle(cx, cy + cardH/2 - 33, 120, 34, 0, 0).setScrollFactor(0).setDepth(504).setInteractive({ useHandCursor: true });
+      btnHit.on('pointerdown', () => this._togglePause());
+      this._pauseOverlay = [overlay, card, title, keysText, btnBg, btnText, btnHit];
     } else {
       this.physics.resume();
       if (this._pauseOverlay) { this._pauseOverlay.forEach(e => e.destroy()); this._pauseOverlay = null; }
