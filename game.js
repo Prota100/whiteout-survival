@@ -191,6 +191,8 @@ class SaveManager {
         nextColdWaveTime: scene.nextColdWaveTime,
         boss1Spawned: scene.boss1Spawned,
         boss2Spawned: scene.boss2Spawned,
+        act2MinibossSpawned: scene.act2MinibossSpawned,
+        act4MinibossSpawned: scene.act4MinibossSpawned,
         waveNumber: scene.waveNumber,
       };
       localStorage.setItem(SaveManager.SAVE_KEY, JSON.stringify(saveData));
@@ -1836,6 +1838,8 @@ class GameScene extends Phaser.Scene {
     // ═══ Phase 2: Boss System ═══
     this.boss1Spawned = false;
     this.boss2Spawned = false;
+    this.act2MinibossSpawned = false;
+    this.act4MinibossSpawned = false;
 
     // Safe area bottom - compute from DOM
     this.safeBottom = 0;
@@ -2035,6 +2039,8 @@ class GameScene extends Phaser.Scene {
     if (save.nextColdWaveTime != null) this.nextColdWaveTime = save.nextColdWaveTime;
     if (save.boss1Spawned != null) this.boss1Spawned = save.boss1Spawned;
     if (save.boss2Spawned != null) this.boss2Spawned = save.boss2Spawned;
+    if (save.act2MinibossSpawned != null) this.act2MinibossSpawned = save.act2MinibossSpawned;
+    if (save.act4MinibossSpawned != null) this.act4MinibossSpawned = save.act4MinibossSpawned;
     if (save.waveNumber != null) this.waveNumber = save.waveNumber;
     this.currentAct = this.getCurrentAct();
     // NPCs
@@ -2365,8 +2371,21 @@ class GameScene extends Phaser.Scene {
         alpha: 0, scale: { from: 1.2, to: 0 }, duration: Phaser.Math.Between(400, 800),
         ease: 'Quad.Out', onComplete: () => p.destroy() });
     }
+    // Miniboss death: custom message + XP
+    if (a.isMiniboss && a._minibossKillMsg) {
+      this.cameras.main.shake(600, 0.02);
+      this.cameras.main.flash(400, 255, 200, 50, true);
+      if (a._minibossXP) this.gainXP(a._minibossXP);
+      const mbText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 80,
+        a._minibossKillMsg, {
+        fontSize: '28px', fontFamily: 'monospace', color: '#FFD700',
+        stroke: '#000', strokeThickness: 5, fontStyle: 'bold'
+      }).setOrigin(0.5).setDepth(100).setScrollFactor(0);
+      this.tweens.add({ targets: mbText, y: mbText.y - 50, alpha: 0, scale: { from: 1.2, to: 0.5 },
+        duration: 3000, ease: 'Quad.Out', onComplete: () => mbText.destroy() });
+    }
     // Boss death special effects
-    if (a.isBoss) {
+    if (a.isBoss && !a.isMiniboss) {
       this.cameras.main.shake(800, 0.03);
       this.cameras.main.flash(500, 255, 50, 50, true);
       const bossText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 80,
@@ -4524,6 +4543,104 @@ class GameScene extends Phaser.Scene {
   }
 
   // ═══ BOSS SYSTEM ═══
+  spawnActMiniboss(type) {
+    const MINIBOSS_DEFS = {
+      alpha_wolf: {
+        hp: 150, speed: 130, damage: 12,
+        drops: { meat: 5, leather: 3, gold: 20 },
+        size: 26, behavior: 'chase', name: '🐺 알파 울프',
+        aggroRange: 300, color: 0x4444AA, xpReward: 30,
+        isMiniboss: true, sprite: 'wolf', scale: 1.8,
+        escorts: { type: 'wolf', count: 4 },
+        alertMsg: '⚠️ 알파 울프 출현!',
+        killMsg: '🏆 알파 울프 처치! 다음 위협: 25분'
+      },
+      blizzard_bear: {
+        hp: 400, speed: 60, damage: 20,
+        drops: { meat: 10, leather: 6, gold: 40 },
+        size: 36, behavior: 'chase', name: '🐻❄️ 블리자드 베어',
+        aggroRange: 250, color: 0x88CCFF, xpReward: 80,
+        isMiniboss: true, sprite: 'bear', scale: 2.2,
+        escorts: { type: 'bear', count: 3 },
+        alertMsg: '⚠️ 블리자드 베어 출현!',
+        killMsg: '🏆 블리자드 베어 처치! 최종 전투까지 15분'
+      }
+    };
+    const cfg = MINIBOSS_DEFS[type];
+    if (!cfg) return;
+
+    // 2-second warning then spawn
+    this.cameras.main.flash(300, 200, 50, 50, true);
+    this.showCenterAlert(cfg.alertMsg, '#FF4444');
+    this.cameras.main.shake(400, 0.01);
+
+    this.time.delayedCall(2000, () => {
+      // Spawn miniboss
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 200 + Math.random() * 100;
+      const bx = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 80, WORLD_W - 80);
+      const by = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 80, WORLD_H - 80);
+
+      const mb = this.physics.add.sprite(bx, by, cfg.sprite).setCollideWorldBounds(true).setDepth(5);
+      mb.setScale(cfg.scale);
+      mb.setTint(cfg.color);
+      mb.animalType = cfg.sprite;
+      mb.def = { hp: cfg.hp, speed: cfg.speed, damage: cfg.damage, drops: cfg.drops, size: cfg.size * cfg.scale, behavior: cfg.behavior, name: cfg.name, aggroRange: cfg.aggroRange, fleeRange: 0, fleeDistance: 0, color: cfg.color };
+      mb.hp = cfg.hp;
+      mb.maxHP = cfg.hp;
+      mb.wanderTimer = 0;
+      mb.wanderDir = { x: 0, y: 0 };
+      mb.hitFlash = 0;
+      mb.atkCD = 0;
+      mb.fleeTimer = 0;
+      mb.isBoss = true; // reuse boss HP bar rendering & death effects
+      mb.isMiniboss = true;
+      mb.minibossType = type;
+      mb.hpBar = this.add.graphics().setDepth(6);
+      mb.nameLabel = this.add.text(bx, by - cfg.size * cfg.scale - 10, cfg.name, {
+        fontSize: '14px', fontFamily: 'monospace', color: '#FF6644', stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+      }).setDepth(6).setOrigin(0.5);
+      this.animals.add(mb);
+
+      // Override kill to show custom message + XP
+      const scene = this;
+      const origKill = this.killAnimal.bind(this);
+      const minibossKillMsg = cfg.killMsg;
+      const minibossXP = cfg.xpReward;
+      mb._minibossKillMsg = minibossKillMsg;
+      mb._minibossXP = minibossXP;
+
+      // Spawn escort mobs
+      for (let i = 0; i < cfg.escorts.count; i++) {
+        const ea = Math.random() * Math.PI * 2;
+        const ed = 40 + Math.random() * 60;
+        const ex = Phaser.Math.Clamp(bx + Math.cos(ea) * ed, 80, WORLD_W - 80);
+        const ey = Phaser.Math.Clamp(by + Math.sin(ea) * ed, 80, WORLD_H - 80);
+        const esc = this.physics.add.sprite(ex, ey, cfg.escorts.type).setCollideWorldBounds(true).setDepth(4);
+        const escDef = cfg.escorts.type === 'wolf'
+          ? { hp: 25, speed: 120, damage: 6, drops: { meat: 1, leather: 1 }, size: 18, behavior: 'chase', name: '🐺 늑대', aggroRange: 250, fleeRange: 0, fleeDistance: 0, color: 0x666688 }
+          : { hp: 60, speed: 50, damage: 12, drops: { meat: 3, leather: 2 }, size: 26, behavior: 'chase', name: '🐻 곰', aggroRange: 200, fleeRange: 0, fleeDistance: 0, color: 0x8B4513 };
+        esc.animalType = cfg.escorts.type;
+        esc.def = escDef;
+        esc.hp = escDef.hp;
+        esc.maxHP = escDef.hp;
+        esc.wanderTimer = 0;
+        esc.wanderDir = { x: 0, y: 0 };
+        esc.hitFlash = 0;
+        esc.atkCD = 0;
+        esc.fleeTimer = 0;
+        if (escDef.hp > 2) esc.hpBar = this.add.graphics().setDepth(6);
+        esc.nameLabel = this.add.text(ex, ey - escDef.size - 10, escDef.name, {
+          fontSize: '11px', fontFamily: 'monospace', color: '#FFFFFF', stroke: '#000', strokeThickness: 3
+        }).setDepth(6).setOrigin(0.5);
+        this.animals.add(esc);
+      }
+
+      playBossSpawn();
+      this.cameras.main.shake(500, 0.015);
+    });
+  }
+
   spawnBoss(type) {
     const isFinal = type === 'final';
     const bossHP = isFinal ? 4000 : 1000;
@@ -4901,6 +5018,16 @@ class GameScene extends Phaser.Scene {
 
     // ═══ Snowball/Avalanche ═══
     this.updateSnowballs(dt);
+
+    // ═══ Act Miniboss Spawns ═══
+    if (!this.act2MinibossSpawned && this.gameElapsed >= 12 * 60) {
+      this.act2MinibossSpawned = true;
+      this.spawnActMiniboss('alpha_wolf');
+    }
+    if (!this.act4MinibossSpawned && this.gameElapsed >= 40 * 60) {
+      this.act4MinibossSpawned = true;
+      this.spawnActMiniboss('blizzard_bear');
+    }
 
     // ═══ Phase 2: Boss Spawns ═══
     if (!this.boss1Spawned && this.gameElapsed >= 25 * 60) { // 25분
