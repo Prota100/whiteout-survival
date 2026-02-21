@@ -1794,11 +1794,14 @@ class GameScene extends Phaser.Scene {
       if (this.activeRandomEvents.combo_xp.charges <= 0) delete this.activeRandomEvents.combo_xp;
     }
     this.playerXP += amount;
-    while (this.playerXP >= this._getXPRequired(this.playerLevel)) {
+    // Process one level-up at a time to prevent effect spam
+    if (this.playerXP >= this._getXPRequired(this.playerLevel)) {
       this.playerXP -= this._getXPRequired(this.playerLevel);
       this.playerLevel++;
       this.pendingLevelUps++;
     }
+    // Cap pending level-ups to prevent accumulation
+    if (this.pendingLevelUps > 3) this.pendingLevelUps = 3;
     if (this.pendingLevelUps > 0 && !this.upgradeUIActive) {
       this.pendingLevelUps--;
       this.triggerLevelUp();
@@ -1813,17 +1816,10 @@ class GameScene extends Phaser.Scene {
     // Level up sound
     playLevelUp();
 
-    // ═══ ENHANCED LEVEL UP EFFECT (Habby 스타일) ═══
-    // Camera zoom pulse (1.0 → 1.1 → 1.0)
-    const cam = this.cameras.main;
-    const origZoom = cam.zoom;
-    this.tweens.add({ targets: cam, zoom: origZoom * 1.1, duration: 150, ease: 'Quad.Out', yoyo: true,
-      onComplete: () => { cam.zoom = origZoom; } });
-    // White flash (brief 0.1s)
-    cam.flash(100, 255, 255, 255, true);
-    // 1. 화면 전체 황금색 플래시 (2단계)
-    this.cameras.main.flash(600, 255, 200, 0, true);
-    this.cameras.main.shake(400, 0.012);
+    // ═══ LEVEL UP EFFECT (Optimized) ═══
+    // Single flash + shake (reduced from 2 flashes)
+    this.cameras.main.flash(400, 255, 200, 0, true);
+    this.cameras.main.shake(300, 0.01);
 
     // Golden vignette overlay (more dramatic)
     const edgeFlash = this.add.rectangle(this.cameras.main.centerX, this.cameras.main.centerY,
@@ -1860,37 +1856,21 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: bigNum, scale: { from: 0.5, to: 3 }, alpha: 0, duration: 1200,
       ease: 'Quad.Out', onComplete: () => bigNum.destroy() });
 
-    // 3. 파티클 폭발 (3 rings, colorful & varied sizes)
-    const _lvUpColors = [0xFFFFFF, 0xFFD700, 0xFF6B35, 0x44DDFF, 0xFF44AA, 0x44FF88, 0xAA66FF, 0xFFAA00];
-    for (let ring = 0; ring < 3; ring++) {
-      const count = ring === 0 ? 24 : ring === 1 ? 16 : 10;
-      const radius = ring === 0 ? 100 : ring === 1 ? 60 : 35;
-      const delay = ring * 100;
-      for (let i = 0; i < count; i++) {
-        const ang = (Math.PI * 2 / count) * i + ring * 0.3 + Math.random() * 0.2;
-        const size = Phaser.Math.FloatBetween(ring === 0 ? 3 : 2, ring === 0 ? 8 : 5);
-        const p = this.add.circle(this.player.x, this.player.y, size, Phaser.Utils.Array.GetRandom(_lvUpColors))
-          .setDepth(15).setAlpha(0.9);
-        const r2 = radius + Phaser.Math.Between(-15, 15);
-        this.tweens.add({ targets: p, delay,
-          x: this.player.x + Math.cos(ang) * r2,
-          y: this.player.y + Math.sin(ang) * r2,
-          alpha: 0, scale: { from: Phaser.Math.FloatBetween(1.5, 3), to: 0 }, duration: 800 + Math.random() * 400, ease: 'Quad.Out',
-          onComplete: () => p.destroy() });
-      }
-    }
-
-    // Sparkle trail particles
-    for (let i = 0; i < 10; i++) {
-      this.time.delayedCall(i * 60, () => {
-        const sp = this.add.image(
-          this.player.x + Phaser.Math.Between(-50, 50),
-          this.player.y + Phaser.Math.Between(-50, 50),
-          'sparkle'
-        ).setScrollFactor(1).setDepth(16).setScale(2).setTint(0xFFD700);
-        this.tweens.add({ targets: sp, alpha: 0, scale: 0, y: sp.y - 40,
-          duration: 600 + Math.random() * 400, onComplete: () => sp.destroy() });
-      });
+    // 3. 파티클 폭발 (1 ring only - optimized from 3 rings)
+    const _lvUpColors = [0xFFFFFF, 0xFFD700, 0xFF6B35, 0x44DDFF];
+    const count = 16;
+    const radius = 80;
+    for (let i = 0; i < count; i++) {
+      const ang = (Math.PI * 2 / count) * i + Math.random() * 0.2;
+      const size = Phaser.Math.FloatBetween(3, 6);
+      const p = this.add.circle(this.player.x, this.player.y, size, Phaser.Utils.Array.GetRandom(_lvUpColors))
+        .setDepth(15).setAlpha(0.9);
+      const r2 = radius + Phaser.Math.Between(-10, 10);
+      this.tweens.add({ targets: p,
+        x: this.player.x + Math.cos(ang) * r2,
+        y: this.player.y + Math.sin(ang) * r2,
+        alpha: 0, scale: { from: 2, to: 0 }, duration: 600, ease: 'Quad.Out',
+        onComplete: () => p.destroy() });
     }
 
     // Show upgrade card selection
