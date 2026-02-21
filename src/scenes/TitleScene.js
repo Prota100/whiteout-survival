@@ -443,7 +443,9 @@ class TitleScene extends Phaser.Scene {
       stroke: '#000', strokeThickness: 2, fontStyle: 'bold'
     }).setOrigin(0.5);
     
-    const hitArea = this.add.rectangle(x, y, w, h, 0x000000, 0).setInteractive({ useHandCursor: true });
+    bg.setDepth(30);
+    txt.setDepth(31);
+    const hitArea = this.add.rectangle(x, y, w, h, 0x000000, 0).setInteractive({ useHandCursor: true }).setDepth(32);
     hitArea.on('pointerover', () => {
       bg.clear();
       if (isOrange) {

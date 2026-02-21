@@ -824,7 +824,8 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnAnimal(type) {
-    const def = ANIMALS[type], m = 60;
+    const def = ANIMALS[type]; if (!def) return;
+    const m = 60;
     let x = Phaser.Math.Between(m, WORLD_W-m), y = Phaser.Math.Between(m, WORLD_H-m);
     if (Phaser.Math.Distance.Between(x, y, this.player?.x || WORLD_W/2, this.player?.y || WORLD_H/2) < 200)
       { x = Phaser.Math.Between(m, WORLD_W-m); y = Phaser.Math.Between(m, WORLD_H-m); }
@@ -2669,6 +2670,10 @@ class GameScene extends Phaser.Scene {
             a.fleeTimer = 2;
           } else if (a.fleeTimer > 0) {
             a.fleeTimer -= dt;
+            if (a.body && a.body.velocity.length() < 0.01) {
+              const escAng = Phaser.Math.FloatBetween(0, Math.PI * 2);
+              a.body.setVelocity(Math.cos(escAng) * a.def.speed * 0.4, Math.sin(escAng) * a.def.speed * 0.4);
+            }
           } else if (dist < a.def.aggroRange) {
             // Slowly wander away from player
             const ang = Phaser.Math.Angle.Between(px, py, a.x, a.y);
@@ -2691,6 +2696,10 @@ class GameScene extends Phaser.Scene {
             a.fleeTimer -= dt;
             if (a.body && a.body.velocity.length() > 0.01) {
               a.body.velocity.normalize().scale(a.def.speed * (a.fleeTimer / 2));
+            } else {
+              // Rabbit was stuck (e.g. hit boundary) — give random escape velocity
+              const escAng = Phaser.Math.FloatBetween(0, Math.PI * 2);
+              a.body.setVelocity(Math.cos(escAng) * a.def.speed * 0.5, Math.sin(escAng) * a.def.speed * 0.5);
             }
           } else this.wander(a, dt, 0.3);
         } else if (a.def.behavior === 'chase') {
