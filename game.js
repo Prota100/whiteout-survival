@@ -777,7 +777,7 @@ class RecordManager {
     return {
       bestSurvivalTime: 0, bestKills: 0, bestLevel: 0, bestCombo: 0,
       totalPlays: 0, totalKills: 0, totalPlayTime: 0, wins: 0, achievementsUnlocked: 0,
-      longestEndlessSurvival: 0
+      longestEndlessSurvival: 0, totalQuestsCompleted: 0
     };
   }
 
@@ -973,6 +973,7 @@ class EquipmentManager {
     }
     this.slots[slot] = { itemId, grade };
     this.save();
+    EquipmentManager.recordDiscovered(slot, itemId);
     return true;
   }
 
@@ -1020,6 +1021,7 @@ class EquipmentManager {
   addToInventory(slot, itemId, grade) {
     this.inventory[slot].push({ itemId, grade });
     this.save();
+    EquipmentManager.recordDiscovered(slot, itemId);
   }
 
   // Count items of a specific grade in a slot's inventory
@@ -1065,6 +1067,28 @@ class EquipmentManager {
     this.slots = { weapon:null, armor:null, boots:null, helmet:null, ring:null };
     this.inventory = { weapon:[], armor:[], boots:[], helmet:[], ring:[] };
     try { localStorage.removeItem(EquipmentManager.STORAGE_KEY); } catch(e) {}
+  }
+
+  // ═══ 📦 장비 도감 (발견 기록) ═══
+  static DISCOVERED_KEY = 'whiteout_discovered';
+
+  static loadDiscovered() {
+    try {
+      return JSON.parse(localStorage.getItem(EquipmentManager.DISCOVERED_KEY) || '{}');
+    } catch(e) { return {}; }
+  }
+
+  static saveDiscovered(data) {
+    try { localStorage.setItem(EquipmentManager.DISCOVERED_KEY, JSON.stringify(data)); } catch(e) {}
+  }
+
+  static recordDiscovered(slot, itemId) {
+    const disc = EquipmentManager.loadDiscovered();
+    if (!disc[slot]) disc[slot] = [];
+    if (!disc[slot].includes(itemId)) {
+      disc[slot].push(itemId);
+      EquipmentManager.saveDiscovered(disc);
+    }
   }
 }
 
@@ -1650,21 +1674,32 @@ class TitleScene extends Phaser.Scene {
       this._showStatsPopup();
     });
 
+    // ═══ 📖 도감 버튼 ═══
+    const collBtnY = statsBtnY + btnH + 20;
+    this._createButton(W / 2, collBtnY, btnW, btnH, '📖 도감', 0x3A4455, () => {
+      this._showCollectionScreen();
+    });
+
     // ═══ 🏅 내 기록 (타이틀 하단) ═══
     const rec = RecordManager.load();
-    const recordY = statsBtnY + btnH + 24;
-    const recordBoxH = 60;
+    const recordY = collBtnY + btnH + 24;
+    const recordBoxH = 76;
     const recordGfx = this.add.graphics().setDepth(10);
     recordGfx.fillStyle(0x0A0E1A, 0.7);
     recordGfx.fillRoundedRect(W/2 - btnW/2 - 10, recordY - 8, btnW + 20, recordBoxH, 8);
 
     if (rec.totalPlays > 0) {
       const bestTimeStr = RecordManager.formatTime(rec.bestSurvivalTime);
+      let achCount = 0;
+      try { achCount = Object.keys(JSON.parse(localStorage.getItem('achievements_whiteout') || '{}')).length; } catch(e) {}
       this.add.text(W / 2, recordY + 4, '🏅 내 기록', {
         fontSize: '13px', fontFamily: 'monospace', color: '#FFD700'
       }).setOrigin(0.5, 0).setDepth(11);
       this.add.text(W / 2, recordY + 22, `최장 ${bestTimeStr} | 최다 ${rec.bestKills}킬 | 클리어 ${rec.wins}회 | ${rec.totalPlays}판`, {
         fontSize: '11px', fontFamily: 'monospace', color: '#8899bb'
+      }).setOrigin(0.5, 0).setDepth(11);
+      this.add.text(W / 2, recordY + 38, `🏆 성취: ${achCount} / ${ACHIEVEMENTS.length}`, {
+        fontSize: '11px', fontFamily: 'monospace', color: '#AABB88'
       }).setOrigin(0.5, 0).setDepth(11);
     } else {
       this.add.text(W / 2, recordY + 18, '🏅 아직 기록 없음', {
@@ -2356,6 +2391,226 @@ class TitleScene extends Phaser.Scene {
     allElements.push(closeHit);
   }
   
+  // ═══════════════════════════════════════════════════════════════════
+  // 📖 도감 (컬렉션) 화면
+  // ═══════════════════════════════════════════════════════════════════
+  _showCollectionScreen() {
+    const W = this.scale.width, H = this.scale.height;
+    const container = [];
+    let activeTab = 'achievements';
+
+    // Overlay
+    const ov = this.add.graphics().setDepth(300);
+    ov.fillStyle(0x000000, 0.75); ov.fillRect(0, 0, W, H);
+    container.push(ov);
+    const ovHit = this.add.rectangle(W/2, H/2, W, H).setDepth(300).setOrigin(0.5).setInteractive().setAlpha(0.001);
+    container.push(ovHit);
+
+    // Panel
+    const pw = Math.min(360, W - 20), ph = Math.min(520, H - 40);
+    const px = W/2 - pw/2, py = H/2 - ph/2;
+    const panel = this.add.graphics().setDepth(301);
+    panel.fillStyle(0x0E1225, 0.97);
+    panel.fillRoundedRect(px, py, pw, ph, 16);
+    panel.lineStyle(2, 0x4466aa, 0.6);
+    panel.strokeRoundedRect(px, py, pw, ph, 16);
+    container.push(panel);
+
+    // Title
+    const titleT = this.add.text(W/2, py + 24, '📖 도감', {
+      fontSize: '22px', fontFamily: 'monospace', color: '#e0e8ff',
+      stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(302);
+    container.push(titleT);
+
+    // Tab buttons
+    const tabs = [
+      { id: 'achievements', label: '🏆 성취' },
+      { id: 'equipment', label: '📦 장비' },
+      { id: 'quests', label: '📊 퀘스트' }
+    ];
+    const tabW = (pw - 30) / 3;
+    const tabY = py + 52;
+    const tabBtns = [];
+
+    // Content area
+    const contentY = tabY + 36;
+    const contentH = ph - 130;
+    let contentItems = [];
+
+    const clearContent = () => { contentItems.forEach(el => el.destroy()); contentItems = []; };
+
+    const renderTabs = () => {
+      tabBtns.forEach(t => t.destroy());
+      tabBtns.length = 0;
+      tabs.forEach((tab, i) => {
+        const tx = px + 15 + i * tabW + tabW/2;
+        const isActive = activeTab === tab.id;
+        const bg = this.add.graphics().setDepth(302);
+        bg.fillStyle(isActive ? 0x2244aa : 0x1A1E2E, 0.9);
+        bg.fillRoundedRect(tx - tabW/2, tabY, tabW - 4, 30, 6);
+        tabBtns.push(bg);
+        const lbl = this.add.text(tx, tabY + 15, tab.label, {
+          fontSize: '12px', fontFamily: 'monospace', color: isActive ? '#ffffff' : '#667788',
+          stroke: '#000', strokeThickness: 1
+        }).setOrigin(0.5).setDepth(303).setInteractive({ useHandCursor: true });
+        lbl.on('pointerdown', () => { activeTab = tab.id; renderTabs(); renderContent(); });
+        tabBtns.push(lbl);
+      });
+    };
+
+    const SLOT_ICONS = { weapon: '⚔️', armor: '🛡️', boots: '👟', helmet: '🎩', ring: '💍' };
+    const SLOT_NAMES = { weapon: '무기', armor: '방어구', boots: '장화', helmet: '모자', ring: '반지' };
+    const HIDDEN_IDS = ['secret_hidden_boss', 'secret_konami', 'secret_survive_zone'];
+
+    const renderContent = () => {
+      clearContent();
+      const leftX = px + 16;
+      const textW = pw - 32;
+      let cy = contentY + 8;
+
+      if (activeTab === 'achievements') {
+        // Load achievements
+        let saved = {};
+        try { saved = JSON.parse(localStorage.getItem('achievements_whiteout') || '{}'); } catch(e) {}
+        const achCount = Object.keys(saved).length;
+        const total = ACHIEVEMENTS.length;
+        const pct = total > 0 ? Math.round(achCount / total * 100) : 0;
+
+        const header = this.add.text(W/2, cy, `달성: ${achCount} / ${total} (${pct}%)`, {
+          fontSize: '14px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(303);
+        contentItems.push(header);
+        cy += 26;
+
+        // Progress bar
+        const barW = pw - 60, barH = 8;
+        const barG = this.add.graphics().setDepth(303);
+        barG.fillStyle(0x222244, 1); barG.fillRoundedRect(W/2 - barW/2, cy, barW, barH, 4);
+        barG.fillStyle(0x44AA44, 1); barG.fillRoundedRect(W/2 - barW/2, cy, barW * (achCount/total), barH, 4);
+        contentItems.push(barG);
+        cy += 20;
+
+        for (const ach of ACHIEVEMENTS) {
+          const isHidden = HIDDEN_IDS.includes(ach.id);
+          const achieved = !!saved[ach.id];
+          let line, color;
+          if (achieved) {
+            line = `${ach.icon} ${ach.name}  ${ach.desc}  ✅`;
+            color = '#88DDAA';
+          } else if (isHidden) {
+            line = `🔒 ???  비밀 성취  🔒`;
+            color = '#445566';
+          } else {
+            line = `${ach.icon} ${ach.name}  ${ach.desc}  ⬜`;
+            color = '#667788';
+          }
+          const t = this.add.text(leftX, cy, line, {
+            fontSize: '11px', fontFamily: 'monospace', color, wordWrap: { width: textW }
+          }).setDepth(303);
+          contentItems.push(t);
+          cy += 20;
+          if (cy > contentY + contentH - 10) break;
+        }
+      } else if (activeTab === 'equipment') {
+        const disc = EquipmentManager.loadDiscovered();
+        // Also scan current equipment manager data from localStorage
+        let currentSlots = {};
+        try {
+          const eqRaw = localStorage.getItem(EquipmentManager.STORAGE_KEY);
+          if (eqRaw) { const eqData = JSON.parse(eqRaw); Object.keys(SLOT_ICONS).forEach(s => { if (eqData[s]) currentSlots[s] = eqData[s].itemId; }); }
+        } catch(e) {}
+
+        for (const slot of Object.keys(EQUIPMENT_TABLE)) {
+          const items = EQUIPMENT_TABLE[slot];
+          const found = disc[slot] || [];
+          const icon = SLOT_ICONS[slot] || '';
+          const name = SLOT_NAMES[slot] || slot;
+
+          const headerT = this.add.text(leftX, cy, `${icon} ${name} (${found.length}/${items.length})`, {
+            fontSize: '13px', fontFamily: 'monospace', color: '#AABBDD', stroke: '#000', strokeThickness: 1
+          }).setDepth(303);
+          contentItems.push(headerT);
+          cy += 18;
+
+          let itemLine = '';
+          for (const item of items) {
+            if (found.includes(item.id)) {
+              const isEquipped = currentSlots[slot] === item.id;
+              itemLine += `${isEquipped ? '★' : ''}${item.icon}${item.name}  `;
+            } else {
+              itemLine += '???  ';
+            }
+          }
+          const itemT = this.add.text(leftX + 8, cy, itemLine.trim(), {
+            fontSize: '11px', fontFamily: 'monospace', color: '#8899AA', wordWrap: { width: textW - 16 }
+          }).setDepth(303);
+          contentItems.push(itemT);
+          cy += Math.max(20, itemT.height + 6);
+          if (cy > contentY + contentH - 10) break;
+        }
+
+        // Total count
+        let totalFound = 0, totalAll = 0;
+        for (const slot of Object.keys(EQUIPMENT_TABLE)) {
+          totalAll += EQUIPMENT_TABLE[slot].length;
+          totalFound += (disc[slot] || []).length;
+        }
+        if (cy < contentY + contentH - 20) {
+          const sumT = this.add.text(W/2, cy + 8, `전체: ${totalFound} / ${totalAll} 발견`, {
+            fontSize: '12px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 1
+          }).setOrigin(0.5).setDepth(303);
+          contentItems.push(sumT);
+        }
+      } else if (activeTab === 'quests') {
+        const rec = RecordManager.load();
+        const totalCompleted = rec.totalQuestsCompleted || 0;
+
+        // Show all quests with status
+        const headerT = this.add.text(W/2, cy, '퀘스트 목록', {
+          fontSize: '14px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(303);
+        contentItems.push(headerT);
+        cy += 26;
+
+        for (let i = 0; i < QUESTS.length; i++) {
+          const q = QUESTS[i];
+          const icon = i < totalCompleted ? '✅' : (i === totalCompleted ? '▶' : '□');
+          const color = i < totalCompleted ? '#88DDAA' : (i === totalCompleted ? '#FFFFFF' : '#556677');
+          const line = `${icon} ${q.name}  ${q.desc}`;
+          const t = this.add.text(leftX, cy, line, {
+            fontSize: '11px', fontFamily: 'monospace', color, wordWrap: { width: textW }
+          }).setDepth(303);
+          contentItems.push(t);
+          cy += 20;
+          if (cy > contentY + contentH - 40) break;
+        }
+
+        // Summary
+        cy = Math.max(cy, contentY + contentH - 30);
+        const sumT = this.add.text(W/2, cy, `전체 퀘스트 완료 누계: ${totalCompleted}회`, {
+          fontSize: '12px', fontFamily: 'monospace', color: '#AABB88', stroke: '#000', strokeThickness: 1
+        }).setOrigin(0.5).setDepth(303);
+        contentItems.push(sumT);
+      }
+    };
+
+    // Close button
+    const closeBtn = this.add.text(W/2, py + ph - 28, '✕ 닫기', {
+      fontSize: '16px', fontFamily: 'monospace', color: '#aabbcc',
+      stroke: '#000', strokeThickness: 2, backgroundColor: '#2A2E3E',
+      padding: { x: 20, y: 8 }
+    }).setOrigin(0.5).setDepth(303).setInteractive({ useHandCursor: true });
+    container.push(closeBtn);
+
+    const cleanup = () => { clearContent(); tabBtns.forEach(t => t.destroy()); container.forEach(el => el.destroy()); };
+    closeBtn.on('pointerdown', cleanup);
+    ovHit.on('pointerdown', cleanup);
+
+    renderTabs();
+    renderContent();
+  }
+
   _showStatsPopup() {
     const W = this.scale.width, H = this.scale.height;
     const rec = RecordManager.load();
@@ -5943,6 +6198,8 @@ class GameScene extends Phaser.Scene {
         if (q.rewardEffect.maxHPBonus) { this.playerMaxHP += q.rewardEffect.maxHPBonus; this.playerHP += q.rewardEffect.maxHPBonus; }
       }
       this.questCompleted.push(q.id); this.questIndex++; playQuest();
+      // 퀘스트 완료 누계 기록
+      try { const _r = RecordManager.load(); _r.totalQuestsCompleted = (_r.totalQuestsCompleted||0) + 1; RecordManager.save(_r); } catch(e) {}
       const cam = this.cameras.main;
       const qText = this.add.text(cam.width/2, cam.height * 0.3, '🎉 퀘스트 완료!\n'+q.name, {
         fontSize:'22px',fontFamily:'monospace',color:'#FFD700',stroke:'#000',strokeThickness:4,align:'center',lineSpacing:4
