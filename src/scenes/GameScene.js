@@ -1041,7 +1041,13 @@ class GameScene extends Phaser.Scene {
     if (a.hp <= 0) this.killAnimal(a);
   }
 
-  killAnimal(a) { if (!a || !a.active) return; playKill(); this._hitStop(40); // kill hitstop
+  killAnimal(a) { 
+    console.log('[DEBUG] killAnimal START', a?.animalType, 'active:', a?.active);
+    if (!a || !a.active) { console.log('[DEBUG] killAnimal EARLY RETURN'); return; }
+    console.log('[DEBUG] killAnimal: playKill');
+    playKill(); 
+    console.log('[DEBUG] killAnimal: _hitStop');
+    this._hitStop(40); // kill hitstop
     // ═══ Type-specific death effects ═══
     if (a.animalType === 'ice_golem') {
       // Ice shard explosion + shockwave
@@ -1301,6 +1307,7 @@ class GameScene extends Phaser.Scene {
     // Secret event: snow leopard pack trigger
     this.onEnemyKilled_secretCheck();
     this._applyStreakBuff(a.x, a.y);
+    console.log('[DEBUG] killAnimal: before gainXP, type:', a?.animalType);
 
     // XP gain on kill with combo bonus
     let _xpAmt = XP_SOURCES[a.animalType] || 3;
@@ -1823,6 +1830,7 @@ class GameScene extends Phaser.Scene {
       this.pendingLevelUps--;
       this.triggerLevelUp();
     }
+    console.log('[DEBUG] gainXP END, pending:', this.pendingLevelUps);
   }
 
   triggerLevelUp() {
