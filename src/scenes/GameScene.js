@@ -2688,7 +2688,11 @@ class GameScene extends Phaser.Scene {
             a.fleeTimer = 2;
           } else if (a.fleeTimer > 0) {
             a.fleeTimer -= dt;
-            a.body.velocity.normalize().scale(a.def.speed * (a.fleeTimer / 2));
+            if (a.body && a.body.velocity.length() > 0.01) {
+              a.body.velocity.normalize().scale(a.def.speed * (a.fleeTimer / 2));
+            } else if (a.fleeTimer <= 0) {
+              a.fleeTimer = 0;
+            }
           } else this.wander(a, dt, 0.3);
         } else if (a.def.behavior === 'chase') {
           // Snow leopard dash ability
