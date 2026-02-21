@@ -147,6 +147,37 @@ function playBlizzardStart(){
 // Fire ambient (keep Web Audio procedural for looping crackle)
 function startFire(){if(!audioCtx||!soundEnabled||fireAmbSrc)return;const bs=Math.floor(audioCtx.sampleRate*2),b=audioCtx.createBuffer(1,bs,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<bs;i++){d[i]=(Math.random()*2-1)*0.03;if(Math.random()<0.002)d[i]*=8}const s=audioCtx.createBufferSource(),g=audioCtx.createGain();s.buffer=b;s.loop=true;g.gain.value=0.12;s.connect(g).connect(audioCtx.destination);s.start();fireAmbSrc={s,g}}
 function stopFire(){if(fireAmbSrc){try{fireAmbSrc.s.stop()}catch(e){}fireAmbSrc=null}}
+// ═══ Pitched SFX helper ═══
+function _playSFXPitched(name, vol, pitchRate) {
+  if (!audioCtx || !soundEnabled || !_sfxCache[name]) return;
+  const src = audioCtx.createBufferSource();
+  const gain = audioCtx.createGain();
+  src.buffer = _sfxCache[name];
+  src.playbackRate.value = pitchRate || 1;
+  gain.gain.value = Math.min(0.5, Math.max(0.05, vol));
+  src.connect(gain).connect(audioCtx.destination);
+  src.start(0);
+  return src;
+}
+function playColdWarning() { _playSFXPitched('hurt', 0.3, 0.6); }
+function playClassSkill() { _playSFXPitched('slash', 0.35, 1.3); }
+function playHellSelect() { _playSFXPitched('death', 0.35, 0.5); }
+
+// ═══ Game Tips ═══
+const GAME_TIPS = [
+  "💡 같은 등급 장비 3개를 모으면 합성할 수 있어요!",
+  "💡 한파가 심할 때는 캠프파이어 근처에 있으면 HP가 회복돼요",
+  "💡 콤보 20킬 이상이면 광전사 모드 발동!",
+  "💡 스킬 시너지를 노려보세요. 조합에 따라 숨겨진 효과가 있어요!",
+  "💡 지옥 난이도 클리어 시 50포인트 보너스!",
+  "💡 나무와 돌을 모아 건물을 지으면 생존에 유리해요",
+  "💡 레벨업 시 카드를 신중하게 골라보세요!",
+];
+
+// ═══ Mobile helpers ═══
+function isMobileLayout() { return window.innerWidth < 768; }
+function mobileFS(desktop, mobile) { return isMobileLayout() ? mobile : desktop; }
+
 // ═══ END SOUND ═══
 
 // ═══ 💾 SAVE MANAGER ═══
@@ -1272,6 +1303,25 @@ class TitleScene extends Phaser.Scene {
     
     this.snowGfx = this.add.graphics().setDepth(10);
     
+    // ═══ Game Tips (rotating) ═══
+    this._tipIndex = 0;
+    this._tipText = this.add.text(W / 2, H * 0.94, GAME_TIPS[0], {
+      fontSize: isMobileLayout() ? '10px' : '12px', fontFamily: 'monospace', color: '#667788',
+      wordWrap: { width: W * 0.85 }, align: 'center'
+    }).setOrigin(0.5).setDepth(20).setAlpha(0.8);
+    this._tipTimer = this.time.addEvent({
+      delay: 5000, loop: true,
+      callback: () => {
+        this._tipIndex = (this._tipIndex + 1) % GAME_TIPS.length;
+        this.tweens.add({ targets: this._tipText, alpha: 0, duration: 300, onComplete: () => {
+          if (this._tipText && this._tipText.active) {
+            this._tipText.setText(GAME_TIPS[this._tipIndex]);
+            this.tweens.add({ targets: this._tipText, alpha: 0.8, duration: 300 });
+          }
+        }});
+      }
+    });
+    
     // Title text
     this.add.text(W / 2, H * 0.25, '❄️ 화이트아웃 서바이벌', {
       fontSize: Math.min(42, W * 0.06) + 'px',
@@ -1704,7 +1754,7 @@ class TitleScene extends Phaser.Scene {
       diffTxtArr.push(t);
       const hit = this.add.rectangle(dx, diffY, diffBtnW, diffBtnH, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
       allElements.push(hit);
-      hit.on('pointerdown', () => { selectedDifficulty = dk; updateDiffSelection(); });
+      hit.on('pointerdown', () => { selectedDifficulty = dk; updateDiffSelection(); if (dk === 'hell') playHellSelect(); });
     });
 
     updateDiffSelection();
@@ -2944,6 +2994,7 @@ class GameScene extends Phaser.Scene {
 
     // ═══ Phase 2: Boss System ═══
     this.boss1Spawned = false;
+    this._boss1Warned = false;
     this.boss2Spawned = false;
     this.act2MinibossSpawned = false;
     this.act4MinibossSpawned = false;
@@ -3066,8 +3117,9 @@ class GameScene extends Phaser.Scene {
       // If save requested but not found → safe fallback (no crash)
     }
     
-    // ── Tutorial Overlay (새 게임 시작 시 3초 표시) ──
+    // ── Tutorial Overlay (새 게임 시작 시 카운트다운 + 가이드) ──
     if (!loadSave) {
+      this._showStartCountdown();
       this._showTutorialOverlay();
 
       // ═══ FTUE: Spawn 2 rabbits near player for early kill ═══
@@ -3901,6 +3953,37 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ═══ Start Countdown (3-2-1-시작!) ═══
+  _showStartCountdown() {
+    this._countdownActive = true;
+    this.gameOver = true; // freeze movement during countdown
+    const cam = this.cameras.main;
+    const nums = ['3', '2', '1', '시작!'];
+    const colors = ['#FFFFFF', '#FFD700', '#FF6644', '#44FF88'];
+    let idx = 0;
+    const countText = this.add.text(cam.width / 2, cam.height / 2, '', {
+      fontSize: '64px', fontFamily: 'monospace', color: '#FFFFFF',
+      stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(400).setAlpha(0);
+
+    const showNext = () => {
+      if (idx >= nums.length) {
+        countText.destroy();
+        this._countdownActive = false;
+        this.gameOver = false;
+        return;
+      }
+      countText.setText(nums[idx]).setStyle({ ...countText.style, color: colors[idx] });
+      countText.setScale(1.5).setAlpha(1);
+      this.tweens.add({
+        targets: countText, scale: 1, alpha: idx === nums.length - 1 ? 0 : 0.3,
+        duration: idx === nums.length - 1 ? 400 : 350, ease: 'Cubic.Out',
+        onComplete: () => { idx++; this.time.delayedCall(idx >= nums.length ? 0 : 50, showNext); }
+      });
+    };
+    this.time.delayedCall(200, showNext);
+  }
+
   // ═══ Tutorial Hints ═══
   _updateTutorial() {
     if (this.tutorialShown) return;
@@ -4547,20 +4630,27 @@ class GameScene extends Phaser.Scene {
   _createEquipHUD() {
     const W = this.scale.width;
     const H = this.scale.height;
+    const mob = isMobileLayout();
+    const slotSize = mob ? 32 : 40;
+    const slotGap = mob ? 36 : 45;
+    this._equipSlotSize = slotSize;
+    this._equipSlotGap = slotGap;
     this._equipHudGfx = this.add.graphics().setScrollFactor(0).setDepth(105);
     this._equipHudTexts = [];
     this._equipHudTooltip = null;
     const slotKeys = ['weapon','armor','boots','helmet','ring'];
-    const startX = W - 230;
-    const startY = H - 50;
+    const startX = W - (5 * slotGap + 10);
+    const startY = H - (mob ? 40 : 50);
+    this._equipStartX = startX;
+    this._equipStartY = startY;
     for (let i = 0; i < 5; i++) {
-      const sx = startX + i * 45;
+      const sx = startX + i * slotGap;
       const txt = this.add.text(sx, startY, '', {
-        fontSize: '18px', fontFamily: 'monospace'
+        fontSize: mob ? '14px' : '18px', fontFamily: 'monospace'
       }).setScrollFactor(0).setDepth(106).setOrigin(0.5);
       this._equipHudTexts.push(txt);
       // Click handler for tooltip
-      const hit = this.add.rectangle(sx, startY, 40, 40, 0, 0)
+      const hit = this.add.rectangle(sx, startY, Math.max(44, slotSize), Math.max(44, slotSize), 0, 0)
         .setScrollFactor(0).setDepth(107).setInteractive();
       const slotKey = slotKeys[i];
       hit.on('pointerdown', () => this._showEquipTooltip(slotKey, sx, startY - 50));
@@ -4570,29 +4660,30 @@ class GameScene extends Phaser.Scene {
 
   _updateEquipHUD() {
     if (!this._equipHudGfx) return;
-    const W = this.scale.width;
-    const H = this.scale.height;
     this._equipHudGfx.clear();
     const slotKeys = ['weapon','armor','boots','helmet','ring'];
-    const startX = W - 230;
-    const startY = H - 50;
+    const startX = this._equipStartX || (this.scale.width - 230);
+    const startY = this._equipStartY || (this.scale.height - 50);
+    const slotGap = this._equipSlotGap || 45;
+    const ss = this._equipSlotSize || 40;
+    const half = ss / 2;
     for (let i = 0; i < 5; i++) {
-      const sx = startX + i * 45;
+      const sx = startX + i * slotGap;
       const slot = slotKeys[i];
       const eq = this.equipmentManager.slots[slot];
       if (eq) {
         const color = Phaser.Display.Color.HexStringToColor(EQUIP_GRADE_COLORS[eq.grade]).color;
         this._equipHudGfx.fillStyle(0x222244, 0.9);
-        this._equipHudGfx.fillRoundedRect(sx - 20, startY - 20, 40, 40, 6);
+        this._equipHudGfx.fillRoundedRect(sx - half, startY - half, ss, ss, 6);
         this._equipHudGfx.lineStyle(2, color, 1);
-        this._equipHudGfx.strokeRoundedRect(sx - 20, startY - 20, 40, 40, 6);
+        this._equipHudGfx.strokeRoundedRect(sx - half, startY - half, ss, ss, 6);
         const def = this.equipmentManager.getItemDef(slot);
         this._equipHudTexts[i].setText(def ? def.icon : EQUIP_SLOT_ICONS[slot]);
       } else {
         this._equipHudGfx.fillStyle(0x333344, 0.5);
-        this._equipHudGfx.fillRoundedRect(sx - 20, startY - 20, 40, 40, 6);
+        this._equipHudGfx.fillRoundedRect(sx - half, startY - half, ss, ss, 6);
         this._equipHudGfx.lineStyle(1, 0x555566, 0.5);
-        this._equipHudGfx.strokeRoundedRect(sx - 20, startY - 20, 40, 40, 6);
+        this._equipHudGfx.strokeRoundedRect(sx - half, startY - half, ss, ss, 6);
         this._equipHudTexts[i].setText(EQUIP_SLOT_ICONS[slot]).setAlpha(0.3);
       }
     }
@@ -6230,6 +6321,7 @@ class GameScene extends Phaser.Scene {
     const warnTime = next.startMs - 60 * 1000;
     if (!this.blizzardWarned && elapsed >= warnTime && elapsed < next.startMs) {
       this.blizzardWarned = true;
+      playColdWarning();
       this.startBlizzardWarning(next.startMs - elapsed);
     }
 
@@ -6966,6 +7058,7 @@ class GameScene extends Phaser.Scene {
       const nearEnemies = this.animals.getChildren().filter(a => a.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y) < 100);
       if (nearEnemies.length > 0) {
         this._classRoarCD = 15; // 15s cooldown
+        playClassSkill();
         this.showFloatingText(this.player.x, this.player.y - 40, '🪓 포효!', '#FF4444');
         const roarFx = this.add.circle(this.player.x, this.player.y, 10, 0xFF4444, 0.4).setDepth(15);
         this.tweens.add({ targets: roarFx, scale: 10, alpha: 0, duration: 500, onComplete: () => roarFx.destroy() });
@@ -6980,6 +7073,7 @@ class GameScene extends Phaser.Scene {
       const anyEnemy = this.animals.getChildren().some(a => a.active);
       if (anyEnemy) {
         this._classBlizzardCD = 30;
+        playClassSkill();
         this.showFloatingText(this.player.x, this.player.y - 40, '🧊 얼음 폭풍!', '#88CCFF');
         this.cameras.main.flash(300, 100, 180, 255);
         this.animals.getChildren().forEach(a => {
@@ -6999,6 +7093,7 @@ class GameScene extends Phaser.Scene {
         this.playerBaseSpeed *= 3;
         this.playerSpeed = this.playerBaseSpeed;
         this.player.setTint(0x44FF44);
+        playClassSkill();
         this.showFloatingText(this.player.x, this.player.y - 40, '🏃 질주!', '#44FF44');
       }
     }
@@ -7192,6 +7287,12 @@ class GameScene extends Phaser.Scene {
     }
 
     // ═══ Phase 2: Boss Spawns ═══
+    // Boss approach warning at 24:50
+    if (!this.boss1Spawned && !this._boss1Warned && this.gameElapsed >= 24 * 60 + 50) {
+      this._boss1Warned = true;
+      playBossSpawn();
+      this.showCenterAlert('⚠️ 10초 후 보스 등장!', '#FF2222');
+    }
     if (!this.boss1Spawned && this.gameElapsed >= 25 * 60) { // 25분
       this.boss1Spawned = true;
       this.spawnBoss('first');
