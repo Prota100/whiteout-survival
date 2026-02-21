@@ -1594,17 +1594,19 @@ class TitleScene extends Phaser.Scene {
     // Spawn initial animals
     for (let i = 0; i < 3; i++) this._spawnTitleAnimal(true);
     
-    // ═══ Snow particles (강화) ═══
+    // ═══ Snow particles (강화 v2 - more natural) ═══
     this.snowParticles = [];
     for (let i = 0; i < 200; i++) {
       this.snowParticles.push({
         x: Math.random() * W,
         y: Math.random() * H,
-        size: 1 + Math.random() * 3.5,
-        speedX: -0.4 - Math.random() * 0.7,
-        speedY: 0.6 + Math.random() * 2.0,
-        alpha: 0.3 + Math.random() * 0.7,
-        wobble: Math.random() * Math.PI * 2
+        size: 0.5 + Math.random() * 4,
+        speedX: -0.2 - Math.random() * 0.8,
+        speedY: 0.3 + Math.random() * 2.5,
+        alpha: 0.15 + Math.random() * 0.65,
+        wobble: Math.random() * Math.PI * 2,
+        wobbleSpeed: 0.5 + Math.random() * 1.5,
+        wobbleAmp: 0.3 + Math.random() * 0.8
       });
     }
     
@@ -3127,11 +3129,12 @@ class TitleScene extends Phaser.Scene {
     this.snowParticles.forEach(p => {
       p.x += p.speedX;
       p.y += p.speedY;
-      p.wobble += 0.02;
-      p.x += Math.sin(p.wobble) * 0.3;
-      if (p.y > H + 10) { p.y = -10; p.x = Math.random() * W; }
+      p.wobble += 0.02 * (p.wobbleSpeed || 1);
+      p.x += Math.sin(p.wobble) * (p.wobbleAmp || 0.3);
+      if (p.y > H + 10) { p.y = -10; p.x = Math.random() * W; p.size = 0.5 + Math.random() * 4; }
       if (p.x < -10) { p.x = W + 10; }
-      this.snowGfx.fillStyle(0xffffff, p.alpha * (0.7 + Math.sin(this.elapsed + p.wobble) * 0.3));
+      const _sAlpha = p.alpha * (0.6 + Math.sin(this.elapsed * 0.8 + p.wobble) * 0.4);
+      this.snowGfx.fillStyle(0xffffff, Math.max(0.05, _sAlpha));
       this.snowGfx.fillCircle(p.x, p.y, p.size);
     });
   }
@@ -4280,6 +4283,32 @@ class GameScene extends Phaser.Scene {
 
     // ═══ BOSS HP BAR (top center UI) ═══
     this._initBossHPBar();
+    // ═══ Ice Crystal Border Overlay ═══
+    this._iceBorderGfx = this.add.graphics().setScrollFactor(0).setDepth(95);
+    const _iceCam = this.cameras.main;
+    const _iceW = _iceCam.width, _iceH = _iceCam.height;
+    this._iceBorderGfx.fillStyle(0x88CCFF, 0.06);
+    // Top-left corner frost
+    this._iceBorderGfx.fillTriangle(0, 0, 60, 0, 0, 60);
+    this._iceBorderGfx.fillTriangle(0, 0, 40, 0, 0, 40);
+    // Top-right corner frost
+    this._iceBorderGfx.fillTriangle(_iceW, 0, _iceW - 60, 0, _iceW, 60);
+    this._iceBorderGfx.fillTriangle(_iceW, 0, _iceW - 40, 0, _iceW, 40);
+    // Bottom-left corner frost
+    this._iceBorderGfx.fillTriangle(0, _iceH, 50, _iceH, 0, _iceH - 50);
+    // Bottom-right corner frost
+    this._iceBorderGfx.fillTriangle(_iceW, _iceH, _iceW - 50, _iceH, _iceW, _iceH - 50);
+    // Subtle top/bottom edge frost lines
+    this._iceBorderGfx.fillStyle(0x88CCFF, 0.03);
+    this._iceBorderGfx.fillRect(0, 0, _iceW, 3);
+    this._iceBorderGfx.fillRect(0, _iceH - 3, _iceW, 3);
+    this._iceBorderGfx.fillRect(0, 0, 3, _iceH);
+    this._iceBorderGfx.fillRect(_iceW - 3, 0, 3, _iceH);
+
+    // ═══ Day/Night color temp overlay ═══
+    this._dayNightOverlay = this.add.rectangle(_iceW/2, _iceH/2, _iceW, _iceH, 0xFFDDAA, 0)
+      .setScrollFactor(0).setDepth(94).setBlendMode(Phaser.BlendModes.ADD);
+
     // ═══ MINIMAP ═══
     this._initMinimap();
     // ═══ HIT VIGNETTE ═══
@@ -4754,6 +4783,14 @@ class GameScene extends Phaser.Scene {
       this.showFloatingText(a.x + 15, a.y - 30, '💥CRITICAL!', '#FFD700');
       if (this._questProgress) this._questProgress.critical_hits++;
       this._hitStop(120); // strong hitstop for crits
+      // ═══ CRIT! yellow text effect ═══
+      const critText = this.add.text(a.x, a.y - 50, 'CRIT!', {
+        fontSize: '36px', fontFamily: 'monospace', color: '#FFFF00',
+        stroke: '#FF8800', strokeThickness: 5, fontStyle: 'bold'
+      }).setDepth(20).setOrigin(0.5).setScale(0.3).setAlpha(0);
+      this.tweens.add({ targets: critText, scale: 1.8, alpha: 1, duration: 150, ease: 'Back.Out',
+        onComplete: () => this.tweens.add({ targets: critText, scale: 1, alpha: 0, y: critText.y - 40,
+          duration: 500, onComplete: () => critText.destroy() }) });
     }
     const isCrit = a._lastHitCrit || false; a._lastHitCrit = false;
     // Boss hitstop (every 5th hit to avoid annoyance)
@@ -5082,15 +5119,25 @@ class GameScene extends Phaser.Scene {
       this.playerHP = Math.min(this.playerMaxHP, this.playerHP + this.upgradeManager.lifestealAmount);
       this.showFloatingText(a.x, a.y - 10, '+' + this.upgradeManager.lifestealAmount + '❤️', '#FF8888');
     }
-    for (let i = 0; i < 8; i++) {
-      const p = this.add.image(a.x, a.y, 'snowflake').setDepth(15).setTint(0xFFDDDD).setScale(1.5);
-      this.tweens.add({ targets: p, x: a.x + Phaser.Math.Between(-40, 40), y: a.y + Phaser.Math.Between(-40, 40),
-        alpha: 0, scale: 0, duration: 400, ease: 'Quad.Out', onComplete: () => p.destroy() });
+    // ═══ Color-coded death particles: normal=white, elite=orange, boss=red ═══
+    const _deathColor = a.isBoss ? 0xFF2222 : a._isElite ? 0xFF8800 : 0xFFFFFF;
+    const _deathColors = a.isBoss ? [0xFF0000, 0xFF4444, 0xFF6666, 0xFFAAAA]
+      : a._isElite ? [0xFF8800, 0xFFAA00, 0xFFCC44, 0xFFDD88]
+      : [0xFFFFFF, 0xDDEEFF, 0xCCDDFF, 0xAABBDD];
+    const _deathCount = a.isBoss ? 16 : a._isElite ? 12 : 8;
+    for (let i = 0; i < _deathCount; i++) {
+      const _dc = Phaser.Utils.Array.GetRandom(_deathColors);
+      const _sz = Phaser.Math.FloatBetween(0.8, a.isBoss ? 2.5 : 1.5);
+      const p = this.add.circle(a.x, a.y, 4, _dc).setDepth(15).setScale(_sz).setAlpha(0.9);
+      this.tweens.add({ targets: p, x: a.x + Phaser.Math.Between(-50, 50), y: a.y + Phaser.Math.Between(-50, 50),
+        alpha: 0, scale: 0, duration: 400 + Math.random() * 200, ease: 'Quad.Out', onComplete: () => p.destroy() });
     }
     const kt = this.add.text(a.x, a.y - 25, '💀 ' + def.name, {
       fontSize: '14px', fontFamily: 'monospace', color: '#FFDD44', stroke: '#000', strokeThickness: 3
-    }).setDepth(15).setOrigin(0.5);
-    this.tweens.add({ targets: kt, y: kt.y - 30, alpha: 0, duration: 800, onComplete: () => kt.destroy() });
+    }).setDepth(15).setOrigin(0.5).setScale(0.3);
+    // ═══ Kill text pop animation ═══
+    this.tweens.add({ targets: kt, scale: 1.3, duration: 120, ease: 'Back.Out',
+      onComplete: () => this.tweens.add({ targets: kt, scale: 1, y: kt.y - 30, alpha: 0, duration: 700, onComplete: () => kt.destroy() }) });
     if (a.hpBar) a.hpBar.destroy();
     if (a.nameLabel) a.nameLabel.destroy();
     a.destroy();
@@ -5116,6 +5163,11 @@ class GameScene extends Phaser.Scene {
     }
     // Pulse effect
     this.tweens.add({ targets: this.killComboText, scale: { from: 1.3, to: 1 }, duration: 200 });
+
+    // ═══ Screen shake for 10+ combo ═══
+    if (this.killCombo >= 10) {
+      this.cameras.main.shake(100, 0.005 + Math.min(0.01, this.killCombo * 0.001));
+    }
 
     // Big combo milestone popup (10, 20, 30...)
     if (this.killCombo >= 10 && this.killCombo % 10 === 0) {
@@ -5394,6 +5446,9 @@ class GameScene extends Phaser.Scene {
     }).setDepth(15).setOrigin(0.5);
     this.tweens.add({ targets: t, y: t.y - 25, alpha: 0, scale: { from: 1.2, to: 0.8 },
       duration: 500, ease: 'Quad.Out', onComplete: () => t.destroy() });
+    // ═══ Radial glow on collection ═══
+    const _collectGlow = this.add.circle(drop.x, drop.y, 8, 0xFFDD44, 0.5).setDepth(14);
+    this.tweens.add({ targets: _collectGlow, scale: 3, alpha: 0, duration: 300, onComplete: () => _collectGlow.destroy() });
     drop.destroy();
   }
 
@@ -5483,21 +5538,22 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: bigNum, scale: { from: 0.5, to: 3 }, alpha: 0, duration: 1200,
       ease: 'Quad.Out', onComplete: () => bigNum.destroy() });
 
-    // 3. 파티클 폭발 (3 rings, more particles)
+    // 3. 파티클 폭발 (3 rings, colorful & varied sizes)
+    const _lvUpColors = [0xFFFFFF, 0xFFD700, 0xFF6B35, 0x44DDFF, 0xFF44AA, 0x44FF88, 0xAA66FF, 0xFFAA00];
     for (let ring = 0; ring < 3; ring++) {
-      const count = ring === 0 ? 20 : ring === 1 ? 12 : 8;
-      const radius = ring === 0 ? 90 : ring === 1 ? 55 : 30;
-      const delay = ring * 80;
+      const count = ring === 0 ? 24 : ring === 1 ? 16 : 10;
+      const radius = ring === 0 ? 100 : ring === 1 ? 60 : 35;
+      const delay = ring * 100;
       for (let i = 0; i < count; i++) {
-        const ang = (Math.PI * 2 / count) * i + ring * 0.3;
-        const colors = [0xFFFFFF, 0xFFD700, 0xFFF8DC, 0xFFAA00, 0xFF6B35];
-        const size = ring === 0 ? 6 : ring === 1 ? 4 : 3;
-        const p = this.add.circle(this.player.x, this.player.y, size, Phaser.Utils.Array.GetRandom(colors))
+        const ang = (Math.PI * 2 / count) * i + ring * 0.3 + Math.random() * 0.2;
+        const size = Phaser.Math.FloatBetween(ring === 0 ? 3 : 2, ring === 0 ? 8 : 5);
+        const p = this.add.circle(this.player.x, this.player.y, size, Phaser.Utils.Array.GetRandom(_lvUpColors))
           .setDepth(15).setAlpha(0.9);
+        const r2 = radius + Phaser.Math.Between(-15, 15);
         this.tweens.add({ targets: p, delay,
-          x: this.player.x + Math.cos(ang) * radius,
-          y: this.player.y + Math.sin(ang) * radius,
-          alpha: 0, scale: { from: 2, to: 0 }, duration: 1000, ease: 'Quad.Out',
+          x: this.player.x + Math.cos(ang) * r2,
+          y: this.player.y + Math.sin(ang) * r2,
+          alpha: 0, scale: { from: Phaser.Math.FloatBetween(1.5, 3), to: 0 }, duration: 800 + Math.random() * 400, ease: 'Quad.Out',
           onComplete: () => p.destroy() });
       }
     }
@@ -7100,6 +7156,10 @@ class GameScene extends Phaser.Scene {
     
     const hpR = Math.max(0, Math.min(1, this.playerHP/this.playerMaxHP));
     d.hpFill.style.width = (hpR*100)+'%';
+    // Smooth gradient HP bar: green→yellow→red
+    const _hpG = hpR > 0.5 ? 255 : Math.round(255 * (hpR / 0.5));
+    const _hpR2 = hpR < 0.5 ? 255 : Math.round(255 * ((1 - hpR) / 0.5));
+    d.hpFill.style.background = `rgb(${_hpR2},${_hpG},0)`;
     d.hpFill.className = hpR > 0.6 ? 'bar-f hp-safe' : hpR > 0.3 ? 'bar-f hp-warn' : 'bar-f hp-danger';
     d.hpText.textContent = Math.ceil(Math.max(0,this.playerHP))+'/'+this.playerMaxHP;
     // HP flash effect on big change
@@ -7642,6 +7702,12 @@ class GameScene extends Phaser.Scene {
     this.synergyManager.checkSynergies(this.upgradeManager, this);
     this.synergyManager.renderHUD(this);
 
+    // ═══ Selection confirmation flash ═══
+    this.cameras.main.flash(200, 255, 255, 255, true);
+    const selFlash = this.add.rectangle(cx, cy, 200, 300, 0xFFFFFF, 0.9)
+      .setScrollFactor(0).setDepth(315);
+    this.tweens.add({ targets: selFlash, alpha: 0, scale: 1.5, duration: 300, onComplete: () => selFlash.destroy() });
+
     // Selection burst effect
     for (let i = 0; i < 12; i++) {
       const ang = (i / 12) * Math.PI * 2;
@@ -7847,6 +7913,12 @@ class GameScene extends Phaser.Scene {
 
     this.showCenterAlert(`❄️ 한파 ${this.blizzardIndex}/${BLIZZARD_SCHEDULE.length} 시작!`, '#4488FF');
     this.cameras.main.shake(300, 0.008);
+    // ═══ Blue pulse border for cold wave ═══
+    const _cwBorder = this.add.graphics().setScrollFactor(0).setDepth(298);
+    let _cwP = { a: 0 };
+    this.tweens.add({ targets: _cwP, a: 0.5, duration: 400, yoyo: true, repeat: 3,
+      onUpdate: () => { _cwBorder.clear(); _cwBorder.lineStyle(6, 0x4488FF, _cwP.a); _cwBorder.strokeRect(0, 0, this.cameras.main.width, this.cameras.main.height); },
+      onComplete: () => _cwBorder.destroy() });
 
     // End timer
     this.time.delayedCall(config.duration, () => {
@@ -7929,8 +8001,10 @@ class GameScene extends Phaser.Scene {
       this._snowParticles.push({
         x: Math.random() * W, y: Math.random() * H,
         speed: 80 + Math.random() * 150,
-        drift: (-30 - Math.random() * 40) * zoneDriftMul, // extreme: horizontal blizzard
-        size: (1 + Math.random() * 3) * zoneSizeMul
+        drift: (-30 - Math.random() * 40) * zoneDriftMul,
+        size: (0.5 + Math.random() * 3.5) * zoneSizeMul,
+        wobble: Math.random() * Math.PI * 2,
+        wobbleAmp: 0.3 + Math.random() * 0.6
       });
     }
     // Remove excess
@@ -7940,9 +8014,12 @@ class GameScene extends Phaser.Scene {
       this._snowParticles.forEach(p => {
         p.y += p.speed * dt;
         p.x += p.drift * dt;
+        p.wobble = (p.wobble || 0) + dt * 2;
+        p.x += Math.sin(p.wobble) * (p.wobbleAmp || 0.3);
         if (p.y > H + 10) { p.y = -10; p.x = Math.random() * W; }
         if (p.x < -10) p.x = W + 10;
-        this.coldWaveOverlay.fillStyle(0xFFFFFF, snowAlpha);
+        const _spa = snowAlpha * (0.6 + Math.sin(p.wobble * 0.5) * 0.4);
+        this.coldWaveOverlay.fillStyle(0xFFFFFF, Math.max(0.02, _spa));
         this.coldWaveOverlay.fillCircle(p.x, p.y, p.size);
       });
     }
@@ -8385,12 +8462,18 @@ class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     // Step 1: Zoom in
     cam.zoomTo(1.3, 500);
-    // Step 2: Red flash
-    this.time.delayedCall(300, () => cam.flash(300, 255, 0, 0));
-    // Step 3: Shake
-    this.time.delayedCall(500, () => cam.shake(200, 0.02));
+    // Step 2: Double red flash + heavy shake
+    this.time.delayedCall(200, () => cam.flash(400, 255, 0, 0));
+    this.time.delayedCall(400, () => cam.shake(500, 0.035));
+    this.time.delayedCall(600, () => cam.flash(200, 255, 50, 50));
+    // Step 3: Red border pulse
+    const borderGfx = this.add.graphics().setScrollFactor(0).setDepth(299);
+    let _bp = { a: 0 };
+    this.tweens.add({ targets: _bp, a: 0.6, duration: 300, yoyo: true, repeat: 2,
+      onUpdate: () => { borderGfx.clear(); borderGfx.lineStyle(8, 0xFF0000, _bp.a); borderGfx.strokeRect(0, 0, cam.width, cam.height); },
+      onComplete: () => borderGfx.destroy() });
     // Step 4: Zoom out
-    this.time.delayedCall(1000, () => cam.zoomTo(1.0, 500));
+    this.time.delayedCall(1200, () => cam.zoomTo(1.0, 500));
     // Step 5: Big boss name text slide-in
     const nameText = this.add.text(cam.width / 2, cam.height / 2, bossName, {
       fontSize: '36px', fontFamily: 'monospace', color: '#FF2222',
@@ -9961,6 +10044,9 @@ class GameScene extends Phaser.Scene {
     if (newZone !== this.currentZone) {
       const oldZone = this.currentZone;
       this.currentZone = newZone;
+      // ═══ Zone-specific background color ═══
+      const _zoneBgColors = { safe: '#0A0E1A', normal: '#0C1020', danger: '#10081A', extreme: '#1A0508' };
+      this.cameras.main.setBackgroundColor(_zoneBgColors[newZone] || '#0A0E1A');
       const zoneAlerts = {
         normal: '주의 구역 진입',
         danger: '⚠️ 위험 구역 진입',
@@ -9996,6 +10082,12 @@ class GameScene extends Phaser.Scene {
     if (rInfo) {
       this._regionHudText.setText(rInfo.name);
       this._regionHudText.setColor(rInfo.color);
+    }
+
+    // ═══ Day/Night color temperature (warm up after 20min) ═══
+    if (this._dayNightOverlay && this.gameElapsed > 1200) {
+      const _dnAlpha = Math.min(0.04, (this.gameElapsed - 1200) / 6000 * 0.04);
+      this._dayNightOverlay.setAlpha(_dnAlpha);
     }
 
     // ═══ NPC Proximity Speech Bubbles ═══
@@ -10587,6 +10679,22 @@ class GameScene extends Phaser.Scene {
         break;
       case 'damage_reduce':
         this.activeRandomEvents.damage_reduce = { endTime: this.gameElapsed + (evt.duration || 30) };
+        // ═══ Shield bubble effect ═══
+        if (this.player && this.player.active) {
+          const _shieldBubble = this.add.circle(this.player.x, this.player.y, 30, 0x4488FF, 0.15).setDepth(14);
+          const _shieldRing = this.add.circle(this.player.x, this.player.y, 30, 0x4488FF, 0).setDepth(14);
+          _shieldRing.setStrokeStyle(2, 0x66AAFF, 0.6);
+          this.tweens.add({ targets: [_shieldBubble, _shieldRing], scale: { from: 0.5, to: 1.2 }, duration: 400, ease: 'Back.Out' });
+          this.tweens.add({ targets: _shieldBubble, alpha: { from: 0.3, to: 0.05 }, yoyo: true, repeat: -1, duration: 1000 });
+          // Follow player
+          const _shieldUpdate = this.time.addEvent({ delay: 16, loop: true, callback: () => {
+            if (!this.player || !this.player.active || this.gameElapsed >= this.activeRandomEvents.damage_reduce?.endTime) {
+              _shieldBubble.destroy(); _shieldRing.destroy(); _shieldUpdate.remove(); return;
+            }
+            _shieldBubble.setPosition(this.player.x, this.player.y);
+            _shieldRing.setPosition(this.player.x, this.player.y);
+          }});
+        }
         break;
       case 'combo_xp':
         this.activeRandomEvents.combo_xp = { charges: evt.charges || 10 };
