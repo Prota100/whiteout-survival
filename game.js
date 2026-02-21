@@ -187,7 +187,7 @@ class SaveManager {
   static save(scene) {
     try {
       const saveData = {
-        version: '1.0',
+        version: '2.0',
         timestamp: Date.now(),
         player: {
           x: scene.player ? scene.player.x : WORLD_W / 2,
@@ -270,7 +270,7 @@ class MetaManager {
   
   static getDefault() {
     return {
-      version: '1.0',
+      version: '2.0',
       totalPoints: 0,
       spentPoints: 0,
       bestTime: 0,
@@ -1610,7 +1610,7 @@ class TitleScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Version text (Easter egg: 5 rapid clicks)
-    const versionText = this.add.text(W - 10, H - 10, 'v1.0', {
+    const versionText = this.add.text(W - 10, H - 10, 'v2.0', {
       fontSize: '11px', fontFamily: 'monospace', color: '#445566', alpha: 0.6
     }).setOrigin(1, 1).setDepth(20).setInteractive();
     let _vClickCount = 0, _vClickTimer = 0;
@@ -1683,45 +1683,47 @@ class TitleScene extends Phaser.Scene {
       }
     });
     
-    // "영구 강화" button
-    const metaBtnY = newBtnY + btnH + 20;
+    // ═══ 2열 그리드 버튼 배치 ═══
     const meta = MetaManager.load();
     const hasPoints = MetaManager.getAvailablePoints() > 0;
-    this._createButton(W / 2, metaBtnY, btnW, btnH, `🔮 영구 강화${hasPoints ? ' ✨' : ''}`, hasPoints ? 0xaa44aa : 0x444466, () => {
+    const skinCount = SkinManager.getUnlockedCount();
+    const gridBtnW = Math.min(120, (W - 40) / 2 - 5);
+    const gridBtnH = 42;
+    const gridGap = 10;
+    const gridStartY = newBtnY + btnH + 24;
+    const gridLeft = W / 2 - gridBtnW - gridGap / 2;
+    const gridRight = W / 2 + gridGap / 2;
+
+    // Row 1: 영구 강화, 📖 도감
+    this._createButton(gridLeft + gridBtnW / 2, gridStartY, gridBtnW, gridBtnH, `🔮 영구 강화${hasPoints ? ' ✨' : ''}`, hasPoints ? 0xaa44aa : 0x444466, () => {
       this._showMetaUpgradeUI();
     });
-    
-    // Show best time if exists
-    if (meta.bestTime > 0) {
-      const bestMin = Math.floor(meta.bestTime / 60);
-      const bestSec = Math.floor(meta.bestTime % 60);
-      this.add.text(W / 2, metaBtnY + btnH / 2 + 16, `🏆 최고 기록: ${bestMin}분 ${bestSec}초 | 총 ${meta.totalRuns}회`, {
-        fontSize: '12px', fontFamily: 'monospace', color: '#aa88cc'
-      }).setOrigin(0.5);
-    }
-    
-    // ═══ 🎨 스킨 버튼 ═══
-    const skinBtnY = metaBtnY + btnH + (meta.bestTime > 0 ? 36 : 20);
-    const skinCount = SkinManager.getUnlockedCount();
-    this._createButton(W / 2, skinBtnY, btnW, btnH, `🎨 스킨 (${skinCount}/${PLAYER_SKINS.length})`, 0x445544, () => {
-      this._showSkinPopup();
-    });
-
-    // ═══ 📊 통계 버튼 ═══
-    const statsBtnY = skinBtnY + btnH + 20;
-    this._createButton(W / 2, statsBtnY, btnW, btnH, '📊 통계', 0x334455, () => {
-      this._showStatsPopup();
-    });
-
-    // ═══ 📖 도감 버튼 ═══
-    const collBtnY = statsBtnY + btnH + 20;
-    this._createButton(W / 2, collBtnY, btnW, btnH, '📖 도감', 0x3A4455, () => {
+    this._createButton(gridRight + gridBtnW / 2, gridStartY, gridBtnW, gridBtnH, '📖 도감', 0x3A4455, () => {
       this._showCollectionScreen();
     });
 
+    // Row 2: 📊 통계, 🎨 스킨
+    const gridRow2Y = gridStartY + gridBtnH + gridGap;
+    this._createButton(gridLeft + gridBtnW / 2, gridRow2Y, gridBtnW, gridBtnH, '📊 통계', 0x334455, () => {
+      this._showStatsPopup();
+    });
+    this._createButton(gridRight + gridBtnW / 2, gridRow2Y, gridBtnW, gridBtnH, `🎨 스킨 (${skinCount})`, 0x445544, () => {
+      this._showSkinPopup();
+    });
+    
+    // Show best time if exists
+    const afterGridY = gridRow2Y + gridBtnH / 2 + 16;
+    if (meta.bestTime > 0) {
+      const bestMin = Math.floor(meta.bestTime / 60);
+      const bestSec = Math.floor(meta.bestTime % 60);
+      this.add.text(W / 2, afterGridY, `🏆 최고 기록: ${bestMin}분 ${bestSec}초 | 총 ${meta.totalRuns}회`, {
+        fontSize: '12px', fontFamily: 'monospace', color: '#aa88cc'
+      }).setOrigin(0.5);
+    }
+
     // ═══ 🏅 내 기록 (타이틀 하단) ═══
     const rec = RecordManager.load();
-    const recordY = collBtnY + btnH + 24;
+    const recordY = (meta.bestTime > 0 ? afterGridY + 20 : gridRow2Y + gridBtnH / 2 + 20);
     const recordBoxH = 76;
     const recordGfx = this.add.graphics().setDepth(10);
     recordGfx.fillStyle(0x0A0E1A, 0.7);
@@ -1784,7 +1786,7 @@ class TitleScene extends Phaser.Scene {
     }
 
     // Version
-    this.add.text(W - 10, H - 10, 'v1.1', {
+    this.add.text(W - 10, H - 10, 'v2.0', {
       fontSize: '11px', fontFamily: 'monospace', color: '#334'
     }).setOrigin(1, 1);
     
@@ -2046,10 +2048,16 @@ class TitleScene extends Phaser.Scene {
     allElements.push(overlay);
 
     // Title
-    const titleTxt = this.add.text(W/2, H*0.12, '⚔️ 클래스를 선택하세요', {
+    const titleTxt = this.add.text(W/2, H*0.10, '⚔️ 클래스를 선택하세요', {
       fontSize: Math.min(28, W*0.05)+'px', fontFamily:'monospace', color:'#e0e8ff', stroke:'#000', strokeThickness:3
     }).setOrigin(0.5).setDepth(201);
     allElements.push(titleTxt);
+
+    // FTUE hint
+    const hintTop = this.add.text(W/2, H*0.16, '⚡ 클래스를 선택하면 게임이 시작됩니다', {
+      fontSize: Math.min(13, W*0.025)+'px', fontFamily:'monospace', color:'#667788'
+    }).setOrigin(0.5).setDepth(201);
+    allElements.push(hintTop);
 
     let selectedClass = localStorage.getItem('whiteout_class') || 'warrior';
     let selectedDifficulty = localStorage.getItem('whiteout_difficulty') || 'normal';
@@ -2206,15 +2214,32 @@ class TitleScene extends Phaser.Scene {
 
     updateDiffSelection();
 
-    // ═══ 무한 모드 토글 ═══
+    // ═══ 고급 설정 (접기/펼치기) ═══
     let endlessMode = localStorage.getItem('whiteout_endless') === 'true';
-    const endlessY = diffY + diffBtnH/2 + 40;
+    const rec = RecordManager.load();
+    const ngPlusUnlocked = rec.wins > 0;
+    let ngPlusMode = false;
+    let bossRushMode = false;
+    let advancedOpen = false;
+    const advBtnY = diffY + diffBtnH/2 + 36;
+    const advElements = []; // elements shown only when expanded
+
+    // "⚙️ 고급 설정" toggle button
+    const advToggleTxt = this.add.text(W/2, advBtnY, '⚙️ 고급 설정 ▼', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#8899bb'
+    }).setOrigin(0.5).setDepth(202);
+    allElements.push(advToggleTxt);
+    const advToggleHit = this.add.rectangle(W/2, advBtnY, 200, 28, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
+    allElements.push(advToggleHit);
+
+    // Create advanced toggle elements (hidden initially)
+    const endlessY = advBtnY + 30;
     const endlessGfx = this.add.graphics().setDepth(201);
-    allElements.push(endlessGfx);
-    const endlessTxt = this.add.text(W/2 + 14, endlessY, '♾️ 무한 모드 (60분 이후 계속 진행)', {
-      fontSize: '12px', fontFamily: 'monospace', color: '#CCDDEE'
+    advElements.push(endlessGfx); allElements.push(endlessGfx);
+    const endlessTxt = this.add.text(W/2 + 14, endlessY, '♾️ 무한 모드 (60분 이후 계속)', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#888899'
     }).setOrigin(0, 0.5).setDepth(202);
-    allElements.push(endlessTxt);
+    advElements.push(endlessTxt); allElements.push(endlessTxt);
 
     const drawEndlessToggle = () => {
       endlessGfx.clear();
@@ -2223,84 +2248,67 @@ class TitleScene extends Phaser.Scene {
       endlessGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
       endlessGfx.lineStyle(1, endlessMode ? 0x66DD66 : 0x555566, 1);
       endlessGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
-      if (endlessMode) {
-        endlessTxt.setColor('#44FF44');
-      } else {
-        endlessTxt.setColor('#888899');
-      }
+      endlessTxt.setColor(endlessMode ? '#44FF44' : '#888899');
     };
-    drawEndlessToggle();
-
     const endlessHit = this.add.rectangle(W/2 + 60, endlessY, 200, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
-    allElements.push(endlessHit);
+    advElements.push(endlessHit); allElements.push(endlessHit);
     endlessHit.on('pointerdown', () => { endlessMode = !endlessMode; drawEndlessToggle(); });
 
-    // ═══ NEW GAME+ 토글 ═══
-    const rec = RecordManager.load();
-    const ngPlusUnlocked = rec.wins > 0;
-    let ngPlusMode = false;
     const ngPlusY = endlessY + 28;
     const ngPlusGfx = this.add.graphics().setDepth(201);
-    allElements.push(ngPlusGfx);
+    advElements.push(ngPlusGfx); allElements.push(ngPlusGfx);
     const ngPlusLevel = rec.ngPlusClears || 0;
-    const ngPlusLabel = ngPlusLevel > 0 ? `⭐ NEW GAME+ (NG+${ngPlusLevel + 1})` : '⭐ NEW GAME+';
-    const ngPlusTxt = this.add.text(W/2 + 14, ngPlusY, ngPlusLabel, {
-      fontSize: '12px', fontFamily: 'monospace', color: ngPlusUnlocked ? '#CCDDEE' : '#555566'
+    const ngPlusLabel = ngPlusLevel > 0 ? `⭐ NG+ (Lv${ngPlusLevel + 1})` : '⭐ NEW GAME+';
+    const ngPlusTxt = this.add.text(W/2 + 14, ngPlusY, ngPlusLabel + (ngPlusUnlocked ? '' : ' 🔒'), {
+      fontSize: '12px', fontFamily: 'monospace', color: ngPlusUnlocked ? '#888899' : '#555566'
     }).setOrigin(0, 0.5).setDepth(202);
-    allElements.push(ngPlusTxt);
+    advElements.push(ngPlusTxt); allElements.push(ngPlusTxt);
 
     const drawNgPlusToggle = () => {
       ngPlusGfx.clear();
       const cbx = W/2 - 8, cby = ngPlusY - 8;
       if (!ngPlusUnlocked) {
-        ngPlusGfx.fillStyle(0x222233, 0.5);
-        ngPlusGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
-        ngPlusGfx.lineStyle(1, 0x333344, 0.5);
-        ngPlusGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
-        ngPlusTxt.setColor('#555566');
+        ngPlusGfx.fillStyle(0x222233, 0.5); ngPlusGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
+        ngPlusGfx.lineStyle(1, 0x333344, 0.5); ngPlusGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
       } else {
-        ngPlusGfx.fillStyle(ngPlusMode ? 0xFFD700 : 0x333344, 0.9);
-        ngPlusGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
-        ngPlusGfx.lineStyle(1, ngPlusMode ? 0xFFAA00 : 0x555566, 1);
-        ngPlusGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
+        ngPlusGfx.fillStyle(ngPlusMode ? 0xFFD700 : 0x333344, 0.9); ngPlusGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
+        ngPlusGfx.lineStyle(1, ngPlusMode ? 0xFFAA00 : 0x555566, 1); ngPlusGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
         ngPlusTxt.setColor(ngPlusMode ? '#FFD700' : '#888899');
       }
     };
-    drawNgPlusToggle();
-
     if (ngPlusUnlocked) {
       const ngPlusHit = this.add.rectangle(W/2 + 60, ngPlusY, 200, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
-      allElements.push(ngPlusHit);
+      advElements.push(ngPlusHit); allElements.push(ngPlusHit);
       ngPlusHit.on('pointerdown', () => { ngPlusMode = !ngPlusMode; drawNgPlusToggle(); });
-    } else {
-      const lockTxt = this.add.text(W/2 + 160, ngPlusY, '🔒 60분 클리어 필요', {
-        fontSize: '10px', fontFamily: 'monospace', color: '#555566'
-      }).setOrigin(0, 0.5).setDepth(202);
-      allElements.push(lockTxt);
     }
 
-    // ═══ Boss Rush Toggle ═══
-    let bossRushMode = false;
     const bossRushY = ngPlusY + 28;
     const bossRushGfx = this.add.graphics().setDepth(201);
-    allElements.push(bossRushGfx);
-    const bossRushTxt = this.add.text(W/2 + 14, bossRushY, '🔴 보스 러시 (보스만 연속 등장)', {
-      fontSize: '12px', fontFamily: 'monospace', color: '#CCDDEE'
+    advElements.push(bossRushGfx); allElements.push(bossRushGfx);
+    const bossRushTxt = this.add.text(W/2 + 14, bossRushY, '🔴 보스 러시', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#888899'
     }).setOrigin(0, 0.5).setDepth(202);
-    allElements.push(bossRushTxt);
+    advElements.push(bossRushTxt); allElements.push(bossRushTxt);
     const drawBossRushToggle = () => {
       bossRushGfx.clear();
       const cbx = W/2 - 8, cby = bossRushY - 8;
-      bossRushGfx.fillStyle(bossRushMode ? 0xFF4444 : 0x333344, 0.9);
-      bossRushGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
-      bossRushGfx.lineStyle(1, bossRushMode ? 0xFF6666 : 0x555566, 1);
-      bossRushGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
+      bossRushGfx.fillStyle(bossRushMode ? 0xFF4444 : 0x333344, 0.9); bossRushGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
+      bossRushGfx.lineStyle(1, bossRushMode ? 0xFF6666 : 0x555566, 1); bossRushGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
       bossRushTxt.setColor(bossRushMode ? '#FF6666' : '#888899');
     };
-    drawBossRushToggle();
     const bossRushHit = this.add.rectangle(W/2 + 60, bossRushY, 200, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
-    allElements.push(bossRushHit);
+    advElements.push(bossRushHit); allElements.push(bossRushHit);
     bossRushHit.on('pointerdown', () => { bossRushMode = !bossRushMode; drawBossRushToggle(); });
+
+    // Initially hide advanced elements
+    const toggleAdvanced = () => {
+      advancedOpen = !advancedOpen;
+      advToggleTxt.setText(advancedOpen ? '⚙️ 고급 설정 ▲' : '⚙️ 고급 설정 ▼');
+      advElements.forEach(el => el.setVisible(advancedOpen));
+      if (advancedOpen) { drawEndlessToggle(); drawNgPlusToggle(); drawBossRushToggle(); }
+    };
+    advElements.forEach(el => el.setVisible(false));
+    advToggleHit.on('pointerdown', toggleAdvanced);
 
     // Confirm button
     const btnW2 = Math.min(200, W * 0.4);
@@ -2323,6 +2331,12 @@ class TitleScene extends Phaser.Scene {
       destroy();
       this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty, endlessMode, ngPlus: ngPlusMode, bossRush: bossRushMode });
     });
+
+    // FTUE bottom hint
+    const hintBottom = this.add.text(W/2, btnY2 + btnH2/2 + 16, '💡 처음이라면 🪓 전사를 추천합니다', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#667788'
+    }).setOrigin(0.5).setDepth(201);
+    allElements.push(hintBottom);
 
     // Cancel / back
     const backTxt = this.add.text(W*0.05, H*0.05, '← 뒤로', {
@@ -3018,39 +3032,62 @@ class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
   
   create() {
+    // ═══ Loading Screen ═══
+    const W = this.scale.width, H = this.scale.height;
+    this.cameras.main.setBackgroundColor('#0A0E1A');
+    const snowIcon = this.add.text(W/2, H*0.35, '❄️', { fontSize: '64px' }).setOrigin(0.5);
+    this.tweens.add({ targets: snowIcon, scaleX: 1.2, scaleY: 1.2, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    const loadTitle = this.add.text(W/2, H*0.50, '화이트아웃 서바이벌', {
+      fontSize: '22px', fontFamily: 'monospace', color: '#e0e8ff', stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5);
+    const barW = Math.min(260, W*0.6), barH = 14, barX = W/2-barW/2, barY = H*0.62;
+    const barBg = this.add.graphics();
+    barBg.fillStyle(0x1a1e2e, 1); barBg.fillRoundedRect(barX, barY, barW, barH, 7);
+    const barFill = this.add.graphics();
+    const loadPct = this.add.text(W/2, barY + barH + 14, '로딩 중... 0%', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#667788'
+    }).setOrigin(0.5);
+
+    // Simulate loading progress during texture creation
+    const textureMethods = [
+      'createPlayerTexture', 'createPlayerBackTexture', 'createPlayerAttackTexture',
+      'createRabbitTexture', 'createRabbitBackTexture', 'createDeerTexture', 'createDeerBackTexture',
+      'createPenguinTexture', 'createPenguinBackTexture', 'createSealTexture', 'createSealBackTexture',
+      'createWolfTexture', 'createWolfBackTexture', 'createBearTexture', 'createBearBackTexture',
+      'createIceGolemTexture', 'createSnowLeopardTexture', 'createNPCTextures', 'createNPCBackTextures',
+      'createTreeTexture', 'createRockTexture', 'createDropTextures', 'createParticleTextures', 'createCrateTexture'
+    ];
+    let idx = 0;
+    const total = textureMethods.length;
+    const processNext = () => {
+      if (idx < total) {
+        this[textureMethods[idx]]();
+        idx++;
+        const pct = Math.round((idx / total) * 100);
+        barFill.clear();
+        barFill.fillStyle(0x2266cc, 1);
+        barFill.fillRoundedRect(barX, barY, barW * (idx/total), barH, 7);
+        barFill.fillStyle(0x4488ff, 0.5);
+        barFill.fillRoundedRect(barX, barY, barW * (idx/total), barH/2, { tl: 7, tr: 7, bl: 0, br: 0 });
+        loadPct.setText(`로딩 중... ${pct}%`);
+        this.time.delayedCall(16, processNext);
+      } else {
+        // All textures loaded, proceed
+        const loadSave = this.scene.settings.data?.loadSave || false;
+        const playerClass = this.scene.settings.data?.playerClass || null;
+        const difficulty = this.scene.settings.data?.difficulty || null;
+        const dailyChallenge = this.scene.settings.data?.dailyChallenge || null;
+        const endlessMode = this.scene.settings.data?.endlessMode || false;
+        const ngPlus = this.scene.settings.data?.ngPlus || false;
+        const bossRush = this.scene.settings.data?.bossRush || false;
+        this.time.delayedCall(200, () => {
+          this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge, endlessMode, ngPlus, bossRush });
+        });
+      }
+    };
+
     initAudio();
-    this.createPlayerTexture();
-    this.createPlayerBackTexture();
-    this.createPlayerAttackTexture();
-    this.createRabbitTexture();
-    this.createRabbitBackTexture();
-    this.createDeerTexture();
-    this.createDeerBackTexture();
-    this.createPenguinTexture();
-    this.createPenguinBackTexture();
-    this.createSealTexture();
-    this.createSealBackTexture();
-    this.createWolfTexture();
-    this.createWolfBackTexture();
-    this.createBearTexture();
-    this.createBearBackTexture();
-    this.createIceGolemTexture();
-    this.createSnowLeopardTexture();
-    this.createNPCTextures();
-    this.createNPCBackTextures();
-    this.createTreeTexture();
-    this.createRockTexture();
-    this.createDropTextures();
-    this.createParticleTextures();
-    this.createCrateTexture();
-    const loadSave = this.scene.settings.data?.loadSave || false;
-    const playerClass = this.scene.settings.data?.playerClass || null;
-    const difficulty = this.scene.settings.data?.difficulty || null;
-    const dailyChallenge = this.scene.settings.data?.dailyChallenge || null;
-    const endlessMode = this.scene.settings.data?.endlessMode || false;
-    const ngPlus = this.scene.settings.data?.ngPlus || false;
-    const bossRush = this.scene.settings.data?.bossRush || false;
-    this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge, endlessMode, ngPlus, bossRush });
+    processNext();
   }
 
   createPlayerTexture() {
