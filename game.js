@@ -404,6 +404,20 @@ const MAP_CENTER = { x: 1200, y: 1200 };
 const ZONE_RADII = { safe: 300, normal: 700, danger: 1000 };
 const ZONE_TEMP_DECAY = { safe: 0, normal: -1, danger: -2, extreme: -4 };
 
+// ═══ 장비 시너지 힌트 ═══
+const UPGRADE_SYNERGY = {
+  LOOT_BONUS: '💡 장비 드롭률도 증가!',
+  TREASURE_HUNTER: '💡 장비 드롭률도 증가!',
+  DAMAGE_UP: '💡 무기 장비와 시너지!',
+  ATTACK_SPEED: '💡 무기 장비와 시너지!',
+  CRITICAL: '💡 무기 장비와 시너지!',
+  MAX_HP: '💡 갑옷 장비와 시너지!',
+  ARMOR: '💡 갑옷 장비와 시너지!',
+  MOVEMENT: '💡 신발 장비와 시너지!',
+  DODGE: '💡 신발 장비와 시너지!',
+  CAMPFIRE_BOOST: '💡 캠프파이어 HP 회복 강화!',
+};
+
 const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5 };
 const RARITY_LABELS = { common: { name: '일반', color: '#9E9E9E' }, rare: { name: '희귀', color: '#2196F3' }, epic: { name: '에픽', color: '#9C27B0' } };
 const GRADE_COLORS = { common: '#9E9E9E', uncommon: '#4CAF50', rare: '#2196F3', epic: '#9C27B0', legend: '#FF9800' };
@@ -2740,17 +2754,35 @@ class GameScene extends Phaser.Scene {
       if (this.killComboText) { this.killComboText.destroy(); this.killComboText = null; }
       return;
     }
-    const comboStr = `🔥 ${this.killCombo}x COMBO` + (this.killCombo >= 10 ? ' · XP×2' : this.killCombo >= 5 ? ' · 💰+50%' : '');
-    const color = this.killCombo >= 10 ? '#FF4400' : this.killCombo >= 5 ? '#FFD700' : '#FFDD88';
+    const comboStr = this.killCombo >= 20
+      ? `💥 ${this.killCombo}x COMBO! 광전사 모드!`
+      : `🔥 ${this.killCombo}x COMBO` + (this.killCombo >= 10 ? ' · XP×2' : this.killCombo >= 5 ? ' · 💰+50%' : '');
+    const color = this.killCombo >= 20 ? '#FF0044' : this.killCombo >= 10 ? '#FF4400' : this.killCombo >= 5 ? '#FFD700' : '#FFDD88';
+    const fontSize = this.killCombo >= 20 ? '32px' : this.killCombo >= 10 ? '24px' : '18px';
     if (!this.killComboText) {
       this.killComboText = this.add.text(this.cameras.main.width - 10, 100, comboStr, {
-        fontSize: '18px', fontFamily: 'monospace', color, stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+        fontSize, fontFamily: 'monospace', color, stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
       }).setOrigin(1, 0).setDepth(100).setScrollFactor(0);
     } else {
-      this.killComboText.setText(comboStr).setColor(color);
+      this.killComboText.setText(comboStr).setColor(color).setFontSize(fontSize);
     }
     // Pulse effect
     this.tweens.add({ targets: this.killComboText, scale: { from: 1.3, to: 1 }, duration: 200 });
+
+    // Big combo milestone popup (10, 20, 30...)
+    if (this.killCombo >= 10 && this.killCombo % 10 === 0) {
+      const milestoneText = this.killCombo >= 20
+        ? `💥 ${this.killCombo} COMBO! 광전사 모드!`
+        : `🔥 ${this.killCombo} COMBO!`;
+      const milestoneColor = this.killCombo >= 20 ? '#FF0044' : '#FF4400';
+      const mt = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 60, milestoneText, {
+        fontSize: '36px', fontFamily: 'monospace', color: milestoneColor, stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
+      }).setScrollFactor(0).setDepth(250).setOrigin(0.5).setAlpha(0);
+      this.tweens.add({ targets: mt, alpha: 1, scale: { from: 0.5, to: 1.5 }, duration: 300, ease: 'Back.Out',
+        onComplete: () => this.tweens.add({ targets: mt, alpha: 0, y: mt.y - 40, duration: 1200, onComplete: () => mt.destroy() })
+      });
+      if (this.killCombo >= 20) this.cameras.main.flash(200, 255, 0, 68, true);
+    }
   }
 
   // ═══ Streak Buff System ═══
@@ -2830,12 +2862,17 @@ class GameScene extends Phaser.Scene {
   _updateTutorial() {
     if (this.tutorialShown) return;
     const t = this.gameElapsed;
-    if (t > 30) { this.tutorialShown = true; return; }
+    if (t > 16) {
+      this.tutorialShown = true;
+      if (this._tutorialText) { this.tweens.add({ targets: this._tutorialText, alpha: 0, duration: 500, onComplete: () => { this._tutorialText.destroy(); this._tutorialText = null; } }); }
+      return;
+    }
 
+    const isMobile = this.sys.game.device.input.touch && window.innerWidth < 900;
     const hints = [
-      { start: 0, end: 5, text: '🕹️ 조이스틱으로 이동하세요' },
-      { start: 15, end: 20, text: '🪵 나무를 채취해 모닥불을 피우세요' },
-      { start: 25, end: 30, text: '🌡️ 온도가 0 이하로 떨어지면 HP가 깎입니다' },
+      { start: 0, end: 5, text: isMobile ? '👆 화면을 드래그해서 이동' : '🕹️ WASD / 방향키로 이동' },
+      { start: 5, end: 10, text: '⚔️ 적에게 가까이 가면 자동 공격' },
+      { start: 10, end: 15, text: '❄️ 한파를 피해 생존하세요!' },
     ];
 
     let activeHint = null;
@@ -2847,11 +2884,16 @@ class GameScene extends Phaser.Scene {
       if (!this._tutorialText) {
         this._tutorialText = this.add.text(this.cameras.main.centerX, this.cameras.main.height - 80, '', {
           fontSize: '15px', fontFamily: 'monospace', color: '#FFFFFF',
-          backgroundColor: 'rgba(0,0,0,0.6)', padding: { x: 14, y: 8 },
+          backgroundColor: 'rgba(0,0,0,0.65)', padding: { x: 16, y: 10 },
           stroke: '#000', strokeThickness: 2
-        }).setOrigin(0.5).setDepth(100).setScrollFactor(0);
+        }).setOrigin(0.5).setDepth(100).setScrollFactor(0).setAlpha(0);
       }
-      this._tutorialText.setText(activeHint.text).setVisible(true);
+      if (this._tutorialText.text !== activeHint.text) {
+        this._tutorialText.setText(activeHint.text);
+        this._tutorialText.setAlpha(0);
+        this.tweens.add({ targets: this._tutorialText, alpha: 1, duration: 400 });
+      }
+      this._tutorialText.setVisible(true);
     } else {
       if (this._tutorialText) this._tutorialText.setVisible(false);
     }
@@ -3380,6 +3422,8 @@ class GameScene extends Phaser.Scene {
 
   _pickupEquipment(ed, idx) {
     const equipped = this.equipmentManager.tryEquip(ed.slot, ed.itemId, ed.grade);
+    // Grade-based SFX & visual feedback
+    this._playEquipPickupFX(ed.grade);
     if (equipped) {
       const color = EQUIP_GRADE_COLORS[ed.grade];
       this.showFloatingText(this.player.x, this.player.y - 40,
@@ -3395,6 +3439,56 @@ class GameScene extends Phaser.Scene {
     if (ed.label) ed.label.destroy();
     if (ed.glow) ed.glow.destroy();
     this.equipmentDrops.splice(idx, 1);
+  }
+
+  _playEquipPickupFX(grade) {
+    switch (grade) {
+      case 'common':
+        playCoin();
+        break;
+      case 'rare':
+        playUpgradeSelect();
+        break;
+      case 'epic':
+        playEpicCard();
+        this.cameras.main.flash(200, 160, 40, 200, true);
+        break;
+      case 'legendary':
+        playEpicCard();
+        this.cameras.main.flash(300, 255, 215, 0, true);
+        // Golden burst particles
+        for (let i = 0; i < 16; i++) {
+          const ang = (i / 16) * Math.PI * 2;
+          const p = this.add.circle(this.player.x, this.player.y, 5, 0xFFD700).setDepth(200).setAlpha(0.9);
+          this.tweens.add({ targets: p, x: this.player.x + Math.cos(ang) * 60, y: this.player.y + Math.sin(ang) * 60,
+            alpha: 0, scale: { from: 2, to: 0 }, duration: 700, onComplete: () => p.destroy() });
+        }
+        // Big popup
+        const legText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 50, '⭐ LEGENDARY! ⭐', {
+          fontSize: '28px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 5, fontStyle: 'bold'
+        }).setScrollFactor(0).setDepth(300).setOrigin(0.5).setAlpha(0);
+        this.tweens.add({ targets: legText, alpha: 1, scale: { from: 0.3, to: 1.3 }, duration: 400, ease: 'Back.Out',
+          onComplete: () => this.tweens.add({ targets: legText, alpha: 0, y: legText.y - 40, duration: 800, delay: 600, onComplete: () => legText.destroy() })
+        });
+        break;
+      case 'unique':
+        playEpicCard();
+        this.cameras.main.flash(400, 255, 64, 129, true);
+        for (let i = 0; i < 20; i++) {
+          const ang = (i / 20) * Math.PI * 2;
+          const colors = [0xFF4081, 0xFFD700, 0xFF69B4];
+          const p = this.add.circle(this.player.x, this.player.y, 6, Phaser.Utils.Array.GetRandom(colors)).setDepth(200);
+          this.tweens.add({ targets: p, x: this.player.x + Math.cos(ang) * 80, y: this.player.y + Math.sin(ang) * 80,
+            alpha: 0, scale: { from: 2.5, to: 0 }, duration: 900, onComplete: () => p.destroy() });
+        }
+        const uniText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 50, '💎 UNIQUE!! 💎', {
+          fontSize: '32px', fontFamily: 'monospace', color: '#FF4081', stroke: '#000', strokeThickness: 5, fontStyle: 'bold'
+        }).setScrollFactor(0).setDepth(300).setOrigin(0.5).setAlpha(0);
+        this.tweens.add({ targets: uniText, alpha: 1, scale: { from: 0.3, to: 1.5 }, duration: 500, ease: 'Back.Out',
+          onComplete: () => this.tweens.add({ targets: uniText, alpha: 0, y: uniText.y - 50, duration: 1000, delay: 800, onComplete: () => uniText.destroy() })
+        });
+        break;
+    }
   }
 
   // ═══ EQUIPMENT HUD ═══
@@ -3516,6 +3610,8 @@ class GameScene extends Phaser.Scene {
       btnHit.on('pointerdown', () => {
         const result = this.equipmentManager.craft(slot, cg);
         if (result) {
+          playCraft();
+          this._playEquipPickupFX(result.grade);
           const rc = EQUIP_GRADE_COLORS[result.grade];
           this.showFloatingText(this.player.x, this.player.y - 50,
             `⚗️ ${result.icon} ${result.name} [${EQUIP_GRADE_LABELS[result.grade]}] 합성!`, rc);
@@ -3853,6 +3949,18 @@ class GameScene extends Phaser.Scene {
           this._campfireAttackBonus = Math.max(this._campfireAttackBonus, effects.attackSpeedBonus);
           this.playerSpeed = this.playerBaseSpeed * effects.moveSpeedBonus;
         }
+        // Campfire HP regen indicator text
+        if (!b._regenLabel) {
+          b._regenLabel = this.add.text(b.x, b.y - 30, '🔥 HP+1/s', {
+            fontSize: '11px', fontFamily: 'monospace', color: '#FF8844',
+            stroke: '#000', strokeThickness: 2
+          }).setDepth(12).setOrigin(0.5).setAlpha(0.6);
+          this.tweens.add({ targets: b._regenLabel, y: b.y - 35, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.InOut' });
+        }
+        if (pd < 100 && b._regenLabel) b._regenLabel.setAlpha(0.8);
+        else if (b._regenLabel) b._regenLabel.setAlpha(0.4);
+      } else {
+        if (b._regenLabel) b._regenLabel.setAlpha(0.2);
       }
     });
 
@@ -4577,7 +4685,19 @@ class GameScene extends Phaser.Scene {
         fontSize: '11px', fontFamily: 'monospace', color: cat.color
       }).setScrollFactor(0).setDepth(305).setOrigin(0.5).setAlpha(0);
 
+      // Synergy hint
+      const synergyHint = UPGRADE_SYNERGY[key] || '';
+      let synergyText = null;
+      if (synergyHint) {
+        synergyText = this.add.text(cx, cy + cardH / 2 - 2, synergyHint, {
+          fontSize: '9px', fontFamily: 'monospace', color: '#88CCAA',
+          stroke: '#000', strokeThickness: 1
+        }).setScrollFactor(0).setDepth(305).setOrigin(0.5).setAlpha(0);
+        uiElements.push(synergyText);
+      }
+
       const frontElements = [cardGfx, iconText, nameText, descText, rarityText, lvText, catText];
+      if (synergyText) frontElements.push(synergyText);
       uiElements.push(iconText, nameText, descText, rarityText, lvText, catText);
 
       // Flip animation: delay per card
