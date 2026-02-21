@@ -765,6 +765,15 @@ const UPGRADES = {
   TIME_WARP_ULTRA:   { name: '시간 가속', desc: '공격속도 +100%, 쿨다운 -50%', icon: '⏩', category: 'combat', maxLevel: 1, rarity: 'unique', endgameOnly: true },
   FROZEN_WORLD:      { name: '얼어붙은 세계', desc: '모든 적 이동속도 -60%', icon: '🌨️', category: 'special', maxLevel: 1, rarity: 'unique', endgameOnly: true },
   SPIRIT_BOMB:       { name: '정령의 폭탄', desc: '매 10초마다 화면 전체 50 데미지', icon: '💥', category: 'combat', maxLevel: 1, rarity: 'unique', endgameOnly: true },
+  // ═══ 새 적 대응 + 월드 오브젝트 시너지 업그레이드 8종 ═══
+  COLD_RESISTANCE:   { name: '냉기 저항', desc: '얼음사냥꾼 슬로우 50%↓, 한파 피해 20%↓', icon: '🛡️', category: 'survival', maxLevel: 2, rarity: 'uncommon' },
+  SPLIT_EXPLOSION:   { name: '분열 폭발', desc: '분열슬라임 처치→미니폭발+XP 50%↑', icon: '💥', category: 'combat', maxLevel: 2, rarity: 'rare' },
+  SHAMAN_HUNTER:     { name: '샤먼 사냥꾼', desc: '샤먼 공격력+30%, 처치 시 HP+15', icon: '🔮', category: 'combat', maxLevel: 2, rarity: 'uncommon' },
+  HEARTH_MASTER:     { name: '화롯가 강화', desc: '모닥불 회복+50%, 반경+40px', icon: '🔥', category: 'survival', maxLevel: 2, rarity: 'uncommon' },
+  SUPPLY_EXPERT:     { name: '보급 전문가', desc: '보급상자 회복+50%, 개방 시 XP+30', icon: '📦', category: 'survival', maxLevel: 1, rarity: 'common' },
+  FLARE_EXPERT:      { name: '신호탄 전문가', desc: 'XP2배 +15초, 수집 시 공속+20%(15초)', icon: '🧲', category: 'special', maxLevel: 2, rarity: 'rare' },
+  GLACIAL_WALL:      { name: '얼음 장벽 강화', desc: '장벽 HP 2배, 근처 방어력+15%', icon: '❄️', category: 'special', maxLevel: 2, rarity: 'uncommon' },
+  ARCTIC_ADAPT:      { name: '극한 적응', desc: '한파 중 이속 역전+5%, 종료 후 공속+25%', icon: '⚡', category: 'survival', maxLevel: 1, rarity: 'epic' },
 };
 
 // ═══ 플레이어 클래스 시스템 ═══
@@ -880,6 +889,14 @@ const UPGRADE_SYNERGY = {
   MOVEMENT: '💡 신발 장비와 시너지!',
   DODGE: '💡 신발 장비와 시너지!',
   CAMPFIRE_BOOST: '💡 캠프파이어 HP 회복 강화!',
+  COLD_RESISTANCE: '💡 얼음사냥꾼+한파 대응!',
+  SPLIT_EXPLOSION: '💡 분열슬라임 처치 시 폭발!',
+  SHAMAN_HUNTER: '💡 샤먼 특효 공격!',
+  HEARTH_MASTER: '💡 모닥불 시너지 강화!',
+  SUPPLY_EXPERT: '💡 보급상자 효율 극대화!',
+  FLARE_EXPERT: '💡 신호탄 XP 버프 연장!',
+  GLACIAL_WALL: '💡 얼음 장벽 방어 시너지!',
+  ARCTIC_ADAPT: '💡 한파를 이점으로!',
 };
 
 // ═══ 🔗 SKILL SYNERGY SYSTEM ═══
@@ -1030,7 +1047,7 @@ class SynergyManager {
 }
 // ═══ END SKILL SYNERGY ═══
 
-const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5, unique: 3 };
+const RARITY_WEIGHTS = { common: 70, uncommon: 50, rare: 25, epic: 5, unique: 3 };
 const RARITY_LABELS = { common: { name: '일반', color: '#9E9E9E' }, rare: { name: '희귀', color: '#2196F3' }, epic: { name: '에픽', color: '#9C27B0' } };
 const GRADE_COLORS = { common: '#9E9E9E', uncommon: '#4CAF50', rare: '#2196F3', epic: '#9C27B0', legend: '#FF9800' };
 
@@ -1818,6 +1835,34 @@ class UpgradeManager {
         this._spiritBombActive = true;
         this._spiritBombTimer = 0;
         break;
+      // ═══ 새 적 대응 + 월드 오브젝트 시너지 8종 ═══
+      case 'COLD_RESISTANCE':
+        this._coldResistSlowReduce = Math.min(1.0, lv * 0.5);   // 50% per level
+        this._coldResistBlizzardReduce = Math.min(0.4, lv * 0.2); // 20% per level
+        break;
+      case 'SPLIT_EXPLOSION':
+        this._splitExplosionLevel = lv;  // explosion radius=50, +50% XP per level
+        break;
+      case 'SHAMAN_HUNTER':
+        this._shamanHunterLevel = lv;  // +30% dmg per level vs shaman, +15HP on kill
+        break;
+      case 'HEARTH_MASTER':
+        this._hearthMasterLevel = lv;  // heal mult +50% per lv, radius +40px per lv
+        this.campfireBoost = (this.getLevel('CAMPFIRE_BOOST') > 0 ? 1 + this.getLevel('CAMPFIRE_BOOST') * 0.5 : 1) * (1 + lv * 0.5);
+        this._campfireRadiusBonus = lv * 40;
+        break;
+      case 'SUPPLY_EXPERT':
+        this._supplyExpertActive = true;  // +50% meat heal, +30 XP on open
+        break;
+      case 'FLARE_EXPERT':
+        this._flareExpertLevel = lv;  // +15s XP2x duration per lv, +20% atkspd 15s on pickup
+        break;
+      case 'GLACIAL_WALL':
+        this._glacialWallLevel = lv;  // wall HP x2 per lv, +15% def within 100px
+        break;
+      case 'ARCTIC_ADAPT':
+        this._arcticAdaptActive = true;  // blizzard speed +5% instead of penalty, post-blizzard +25% atkspd 10s
+        break;
     }
   }
 
@@ -1857,6 +1902,12 @@ class UpgradeManager {
       this.doubleShotChance = 0; this.thornsDamage = 0;
       this.timeWarpLevel = 0; this.timeWarpCD = 0;
       this.xpScavengerBonus = 0; this.adrenalineLevel = 0; this.blizzardCloakActive = false;
+      // Phase 3 resets (new 8)
+      this._coldResistSlowReduce = 0; this._coldResistBlizzardReduce = 0;
+      this._splitExplosionLevel = 0; this._shamanHunterLevel = 0;
+      this._hearthMasterLevel = 0; this._campfireRadiusBonus = 0;
+      this._supplyExpertActive = false; this._flareExpertLevel = 0;
+      this._glacialWallLevel = 0; this._arcticAdaptActive = false;
       Object.entries(savedLevels).forEach(([key, lv]) => {
         for (let i = 0; i < lv; i++) this.applyUpgrade(key, scene);
       });
@@ -5508,6 +5559,12 @@ class GameScene extends Phaser.Scene {
       if (a._hitCount % 5 === 1) this._hitStop(80);
     }
     if (a.hp == null) a.hp = 0;
+    // SHAMAN_HUNTER: +30% damage per level vs blizzard_shaman
+    if (a.animalType === 'blizzard_shaman' && this.upgradeManager._shamanHunterLevel > 0) {
+      dmg = Math.round(dmg * (1 + this.upgradeManager._shamanHunterLevel * 0.3));
+    }
+    // GLACIAL_WALL: +15% defense near ice walls
+    // (applied as damage reduction to incoming enemy attacks in enemy attack section instead)
     a.hp -= dmg; a.hitFlash = 0.2; a.setTint(0xFF4444); playHitEnemy(a.isBoss?'boss':a._isElite?'elite':'normal');
     if (a.isBoss && this._questProgress) this._questProgress.boss_damage_dealt += dmg;
     const fs = isCrit ? '28px' : dmg >= 3 ? '20px' : '16px';
@@ -5649,6 +5706,18 @@ class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*50, y: a.y + Math.sin(sa)*50, alpha: 0, duration: 600, onComplete: () => p.destroy() });
       }
       this.showFloatingText(a.x, a.y - 20, '💥 분열!', '#44CC44');
+      // SPLIT_EXPLOSION: mini slimes explode on spawn dealing area damage
+      if (this.upgradeManager._splitExplosionLevel > 0) {
+        const explodeDmg = 15 * this.upgradeManager._splitExplosionLevel;
+        this.animals.getChildren().forEach(e => {
+          if (!e.active || e === a) return;
+          const ed = Phaser.Math.Distance.Between(a.x, a.y, e.x, e.y);
+          if (ed < 50) {
+            e.hp -= explodeDmg;
+            this.showFloatingText(e.x, e.y - 15, '💥' + explodeDmg, '#FF6600');
+          }
+        });
+      }
     } else if (a.animalType === 'splitting_slime' && a._isMiniSlime) {
       // Small green puff
       for (let i = 0; i < 4; i++) {
@@ -5815,8 +5884,18 @@ class GameScene extends Phaser.Scene {
     if (this.killCombo >= 5) {
       _comboGoldBonus = 1; // gold +50% handled in drop
     }
+    // SPLIT_EXPLOSION: +50% XP per level for splitting slimes
+    if (a.animalType === 'splitting_slime' && this.upgradeManager._splitExplosionLevel > 0) {
+      _xpAmt = Math.floor(_xpAmt * (1 + this.upgradeManager._splitExplosionLevel * 0.5));
+    }
     this.gainXP(_xpAmt);
     this.showFloatingText(a.x + 15, a.y - 30, '+' + _xpAmt + ' XP' + (this.killCombo >= 10 ? ' 🔥x2' : ''), '#44AAFF');
+    // SHAMAN_HUNTER: HP+15 on shaman kill
+    if (a.animalType === 'blizzard_shaman' && this.upgradeManager._shamanHunterLevel > 0) {
+      const shamanHeal = 15;
+      this.playerHP = Math.min(this.playerMaxHP, this.playerHP + shamanHeal);
+      this.showFloatingText(a.x, a.y - 40, '🔮 HP+' + shamanHeal, '#AA55FF');
+    }
 
     // ═══ Class Kill Passives ═══
     if (this._playerClass === 'warrior') {
@@ -7079,7 +7158,8 @@ class GameScene extends Phaser.Scene {
         if (!this._playerSlowed) {
           this._playerSlowed = true;
           const origSpeed = this.playerSpeed;
-          this.playerSpeed *= 0.5;
+          const slowMul = 0.5 + (this.upgradeManager._coldResistSlowReduce || 0) * 0.5; // COLD_RESISTANCE: reduce slow
+          this.playerSpeed *= slowMul;
           this.player.setTint(0x88CCFF);
           this.time.delayedCall(500, () => {
             this.playerSpeed = Math.max(this.playerSpeed, origSpeed);
@@ -7259,7 +7339,14 @@ class GameScene extends Phaser.Scene {
               if (this._invincibleTimer > 0) { a.atkCD = 1.0; this.showFloatingText(px, py - 25, '💫 무적!', '#FFD700'); return; }
               const natureBlessDef = this._natureBlessing ? 0.85 : 1;
               const dmgReduceMul = (this.activeRandomEvents && this.activeRandomEvents.damage_reduce) ? 0.5 : 1;
-              const actualDmg = a.def.damage * (a._diffDmgMul || 1) * (1 - this.upgradeManager.armorReduction) * natureBlessDef * dmgReduceMul;
+              // GLACIAL_WALL: +15% defense per level near ice walls (100px)
+              let glacialDefMul = 1;
+              if (this.upgradeManager._glacialWallLevel > 0 && this._worldObjects && this._worldObjects.iceWalls) {
+                for (const wall of this._worldObjects.iceWalls) {
+                  if (Phaser.Math.Distance.Between(px, py, wall.x, wall.y) < 100) { glacialDefMul = 1 - 0.15 * this.upgradeManager._glacialWallLevel; break; }
+                }
+              }
+              const actualDmg = a.def.damage * (a._diffDmgMul || 1) * (1 - this.upgradeManager.armorReduction) * natureBlessDef * dmgReduceMul * glacialDefMul;
               this.playerHP -= actualDmg; a.atkCD = 1.2; playHurt();
               if (this._triggerHitVignette) this._triggerHitVignette();
               this._hitStop(50); // player hit hitstop
@@ -7622,7 +7709,10 @@ class GameScene extends Phaser.Scene {
     });
 
     if (!this._nearCampfire) {
-      const blizzardSlow = (this.blizzardActive && !this.upgradeManager.blizzardCloakActive && !this._survivorBlizzardCloak) ? 0.8 : 1;
+      let blizzardSlow = 1;
+      if (this.blizzardActive && !this.upgradeManager.blizzardCloakActive && !this._survivorBlizzardCloak) {
+        blizzardSlow = this.upgradeManager._arcticAdaptActive ? 1.05 : 0.8; // ARCTIC_ADAPT: +5% instead of -20%
+      }
       this.playerSpeed = this.playerBaseSpeed * blizzardSlow;
     }
 
@@ -7725,7 +7815,12 @@ class GameScene extends Phaser.Scene {
     if (this.temperature <= 0) {
       // Cold master synergy: pulse immunity
       if (this._coldImmunePulse) { this._coldImmunePulse = false; }
-      else { this.playerHP -= 8 * (this._diffMode ? this._diffMode.coldDmg : 1) * dt; if (this.playerHP <= 0) this.endGame(); }
+      else {
+        let coldDmg = 8 * (this._diffMode ? this._diffMode.coldDmg : 1);
+        // COLD_RESISTANCE: reduce blizzard damage by 20% per level
+        if (this.upgradeManager._coldResistBlizzardReduce > 0) coldDmg *= (1 - this.upgradeManager._coldResistBlizzardReduce);
+        this.playerHP -= coldDmg * dt; if (this.playerHP <= 0) this.endGame();
+      }
     }
     if (this.hunger <= 0) { this.playerHP -= 5 * dt; if (this.playerHP <= 0) this.endGame(); }
     if (this.hunger < 30 && this.res.meat > 0) {
@@ -8980,6 +9075,12 @@ class GameScene extends Phaser.Scene {
 
     this.showFloatingText(this.player.x, this.player.y - 60, '❄️ 한파 생존!', '#88CCFF', 2000);
     this.showCenterAlert('☀️ 한파 종료! 보상 지급!', '#FFDD44');
+    // ARCTIC_ADAPT: post-blizzard +25% attack speed for 10s
+    if (this.upgradeManager._arcticAdaptActive) {
+      this.baseAttackSpeed *= 0.75;
+      this.showFloatingText(this.player.x, this.player.y - 80, '⚡ 극한적응 공속+25% 10초', '#FFAA00');
+      this.time.delayedCall(10000, () => { this.baseAttackSpeed /= 0.75; });
+    }
 
     // Reward
     this.res.gold = (this.res.gold || 0) + reward.gold;
@@ -11383,7 +11484,8 @@ class GameScene extends Phaser.Scene {
       gfx.fillRoundedRect(pos.x - w/2, pos.y - h/2, w, h, 4);
       gfx.lineStyle(1, 0xAADDFF, 0.7);
       gfx.strokeRoundedRect(pos.x - w/2, pos.y - h/2, w, h, 4);
-      this._worldObjects.iceWalls.push({ x: pos.x, y: pos.y, w, h, hp: 50, maxHp: 50, gfx, particles: [] });
+      const wallBaseHP = 50 * Math.pow(2, this.upgradeManager._glacialWallLevel || 0);
+      this._worldObjects.iceWalls.push({ x: pos.x, y: pos.y, w, h, hp: wallBaseHP, maxHp: wallBaseHP, gfx, particles: [] });
     }
   }
 
@@ -11419,9 +11521,12 @@ class GameScene extends Phaser.Scene {
     let nearCampfire = false;
     for (const cf of this._worldObjects.campfires) {
       const dist = Phaser.Math.Distance.Between(px, py, cf.x, cf.y);
-      if (dist < 80) {
+      const cfRadius = 80 + (this.upgradeManager._campfireRadiusBonus || 0);
+      if (dist < cfRadius) {
         nearCampfire = true;
-        const healRate = this.blizzardActive ? 6 : 3;
+        let healRate = this.blizzardActive ? 6 : 3;
+        // HEARTH_MASTER: +50% per level
+        if (this.upgradeManager._hearthMasterLevel > 0) healRate *= (1 + this.upgradeManager._hearthMasterLevel * 0.5);
         this.playerHP = Math.min(this.playerMaxHP, this.playerHP + healRate * dt);
       }
       // Fire particles
@@ -11461,9 +11566,10 @@ class GameScene extends Phaser.Scene {
         // Open crate
         const roll = Math.random();
         if (roll < 0.7) {
-          // Meat +30 HP
-          this.playerHP = Math.min(this.playerMaxHP, this.playerHP + 30);
-          this.showFloatingText(cr.x, cr.y - 20, '🥩 HP+30', '#FF8855');
+          // Meat +30 HP (SUPPLY_EXPERT: +50%)
+          const meatHeal = this.upgradeManager._supplyExpertActive ? 45 : 30;
+          this.playerHP = Math.min(this.playerMaxHP, this.playerHP + meatHeal);
+          this.showFloatingText(cr.x, cr.y - 20, '🥩 HP+' + meatHeal, '#FF8855');
         } else if (roll < 0.9) {
           // Equipment drop
           const drop = EquipmentManager.rollDrop(0);
@@ -11492,6 +11598,11 @@ class GameScene extends Phaser.Scene {
         for (let p = 0; p < 8; p++) {
           const spark = this.add.circle(cr.x + Phaser.Math.Between(-10, 10), cr.y + Phaser.Math.Between(-10, 10), 3, 0xFFD700, 0.9).setDepth(5);
           this.tweens.add({ targets: spark, x: spark.x + Phaser.Math.Between(-30, 30), y: spark.y - Phaser.Math.Between(15, 35), alpha: 0, duration: 600, onComplete: () => spark.destroy() });
+        }
+        // SUPPLY_EXPERT: +30 XP on open
+        if (this.upgradeManager._supplyExpertActive) {
+          this.gainXP(30);
+          this.showFloatingText(cr.x, cr.y - 35, '📦 XP+30', '#44DD44');
         }
         playCoin();
         cr.gfx.destroy();
@@ -11566,9 +11677,16 @@ class GameScene extends Phaser.Scene {
 
       const dist = Phaser.Math.Distance.Between(px, py, fl.x, fl.y);
       if (dist < 50) {
-        // Activate 2x XP for 30s
-        this._flareXpBuff = 30;
-        this.showFloatingText(fl.x, fl.y - 20, '🧲 XP 2배! 30초', '#FF6600');
+        // Activate 2x XP for 30s (FLARE_EXPERT: +15s per level)
+        const flareDur = 30 + (this.upgradeManager._flareExpertLevel || 0) * 15;
+        this._flareXpBuff = flareDur;
+        this.showFloatingText(fl.x, fl.y - 20, '🧲 XP 2배! ' + flareDur + '초', '#FF6600');
+        // FLARE_EXPERT: +20% attack speed for 15s
+        if (this.upgradeManager._flareExpertLevel > 0) {
+          this._flareAtkSpeedBuff = 15;
+          this.baseAttackSpeed *= 0.8;
+          this.showFloatingText(fl.x, fl.y - 35, '⚡ 공속+20% 15초', '#FFAA00');
+        }
         fl.gfx.destroy();
         this._worldObjects.flares.splice(i, 1);
       }
@@ -11595,6 +11713,14 @@ class GameScene extends Phaser.Scene {
         this._flareXpBuff = 0;
         if (this._flareAura) { this._flareAura.destroy(); this._flareAura = null; }
         if (this._flareHudText) { this._flareHudText.destroy(); this._flareHudText = null; }
+      }
+    }
+    // FLARE_EXPERT: attack speed buff countdown
+    if (this._flareAtkSpeedBuff > 0) {
+      this._flareAtkSpeedBuff -= dt;
+      if (this._flareAtkSpeedBuff <= 0) {
+        this._flareAtkSpeedBuff = 0;
+        this.baseAttackSpeed /= 0.8; // restore
       }
     }
   }
