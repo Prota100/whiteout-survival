@@ -141,6 +141,7 @@ function stopBGM(){
     _proBGM=null;
   }
   _bgmMode='normal';
+  _bgmStarted=false;
 }
 
 // ═══ Wind Ambience System ═══
@@ -1235,6 +1236,7 @@ class ScoreSystem {
   }
 
   static getGrade(score) {
+    if (score === undefined || score === null || isNaN(score)) return ScoreSystem.GRADE_TABLE[ScoreSystem.GRADE_TABLE.length - 1];
     for (const entry of ScoreSystem.GRADE_TABLE) {
       if (score >= entry.min) return entry;
     }
@@ -1271,6 +1273,7 @@ class ScoreSystem {
   }
 
   static formatScore(n) {
+    if (n === undefined || n === null || isNaN(n)) n = 0;
     return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   }
 }
@@ -7043,6 +7046,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _updateIceBolts(dt) {
+    if (!this.player || !this.player.active) { this._iceBolts.forEach(b => b.destroy()); this._iceBolts = []; return; }
     for (let i = this._iceBolts.length - 1; i >= 0; i--) {
       const b = this._iceBolts[i];
       b.x += b._vx * dt;
@@ -7078,6 +7082,7 @@ class GameScene extends Phaser.Scene {
   }
 
   updateAnimalAI(dt) {
+    if (!this.player || !this.player.active) return;
     const px = this.player.x, py = this.player.y;
     const cam = this.cameras.main;
     const camL = cam.scrollX - 100, camR = cam.scrollX + cam.width + 100;
