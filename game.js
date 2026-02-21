@@ -424,6 +424,12 @@ const UPGRADES = {
   CLASS_WARRIOR_ROAR: { name: '전사의 포효', desc: '주변 100px 적 2초 공포(이동정지)', icon: '🪓', category: 'combat', maxLevel: 1, rarity: 'legendary', classOnly: 'warrior' },
   CLASS_MAGE_BLIZZARD: { name: '얼음 폭풍', desc: '전체 적 1초 동결 (쿨다운 30초)', icon: '🧊', category: 'special', maxLevel: 1, rarity: 'legendary', classOnly: 'mage' },
   CLASS_SURVIVOR_SPRINT: { name: '질주', desc: '3초간 이속 3배+무적 (쿨다운 20초)', icon: '🏃', category: 'survival', maxLevel: 1, rarity: 'legendary', classOnly: 'survivor' },
+  // ═══ 엔드게임 전용 업그레이드 (60분 이후 무한 모드) ═══
+  GODLIKE_POWER:     { name: '신의 축복', desc: '모든 스탯 +50%', icon: '👑', category: 'special', maxLevel: 1, rarity: 'unique', endgameOnly: true },
+  IMMORTAL_WILL:     { name: '불멸의 의지', desc: 'HP+200, HP회복 +5/s', icon: '💖', category: 'survival', maxLevel: 1, rarity: 'unique', endgameOnly: true },
+  TIME_WARP_ULTRA:   { name: '시간 가속', desc: '공격속도 +100%, 쿨다운 -50%', icon: '⏩', category: 'combat', maxLevel: 1, rarity: 'unique', endgameOnly: true },
+  FROZEN_WORLD:      { name: '얼어붙은 세계', desc: '모든 적 이동속도 -60%', icon: '🌨️', category: 'special', maxLevel: 1, rarity: 'unique', endgameOnly: true },
+  SPIRIT_BOMB:       { name: '정령의 폭탄', desc: '매 10초마다 화면 전체 50 데미지', icon: '💥', category: 'combat', maxLevel: 1, rarity: 'unique', endgameOnly: true },
 };
 
 // ═══ 플레이어 클래스 시스템 ═══
@@ -672,7 +678,7 @@ class SynergyManager {
 }
 // ═══ END SKILL SYNERGY ═══
 
-const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5 };
+const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5, unique: 3 };
 const RARITY_LABELS = { common: { name: '일반', color: '#9E9E9E' }, rare: { name: '희귀', color: '#2196F3' }, epic: { name: '에픽', color: '#9C27B0' } };
 const GRADE_COLORS = { common: '#9E9E9E', uncommon: '#4CAF50', rare: '#2196F3', epic: '#9C27B0', legend: '#FF9800' };
 
@@ -754,7 +760,8 @@ class RecordManager {
   static _default() {
     return {
       bestSurvivalTime: 0, bestKills: 0, bestLevel: 0, bestCombo: 0,
-      totalPlays: 0, totalKills: 0, totalPlayTime: 0, wins: 0, achievementsUnlocked: 0
+      totalPlays: 0, totalKills: 0, totalPlayTime: 0, wins: 0, achievementsUnlocked: 0,
+      longestEndlessSurvival: 0
     };
   }
 
@@ -971,18 +978,32 @@ class UpgradeManager {
   getLevel(key) { return this.levels[key] || 0; }
   isMaxed(key) { return this.getLevel(key) >= UPGRADES[key].maxLevel; }
 
-  getAvailableUpgrades(playerClass) {
+  getAvailableUpgrades(playerClass, endgameMode = false) {
     return Object.keys(UPGRADES).filter(k => {
       if (this.isMaxed(k)) return false;
       const u = UPGRADES[k];
+      // Endgame-only cards: only in endless mode after 60min
+      if (u.endgameOnly && !endgameMode) return false;
       // Class-only cards: only show for matching class
       if (u.classOnly) return u.classOnly === playerClass;
       return true;
     });
   }
 
-  pickThreeCards(extra = 0, playerClass = null) {
-    const available = this.getAvailableUpgrades(playerClass);
+  pickThreeCards(extra = 0, playerClass = null, endgameMode = false) {
+    // In endgame mode, only offer endgame cards if any are available
+    if (endgameMode) {
+      const endgameAvailable = this.getAvailableUpgrades(playerClass, true).filter(k => UPGRADES[k].endgameOnly);
+      if (endgameAvailable.length > 0) {
+        const picked = [];
+        const used = new Set();
+        const count = Math.min(3 + extra, endgameAvailable.length);
+        const shuffled = [...endgameAvailable].sort(() => Math.random() - 0.5);
+        for (let i = 0; i < count; i++) { picked.push(shuffled[i]); }
+        return picked;
+      }
+    }
+    const available = this.getAvailableUpgrades(playerClass, endgameMode);
     if (available.length === 0) return [];
 
     // Weighted by rarity
@@ -1114,6 +1135,30 @@ class UpgradeManager {
       case 'CLASS_WARRIOR_ROAR': this._classWarriorRoar = true; break;
       case 'CLASS_MAGE_BLIZZARD': this._classMageBlizzard = true; break;
       case 'CLASS_SURVIVOR_SPRINT': this._classSurvivorSprint = true; break;
+      // ═══ Endgame Upgrades ═══
+      case 'GODLIKE_POWER':
+        scene.playerDamage = Math.round(scene.playerDamage * 1.5);
+        scene.playerMaxHP = Math.round(scene.playerMaxHP * 1.5);
+        scene.playerHP = Math.min(scene.playerHP + scene.playerMaxHP * 0.5, scene.playerMaxHP);
+        scene.playerSpeed *= 1.5;
+        scene.baseAttackSpeed *= 0.67; // 50% faster
+        break;
+      case 'IMMORTAL_WILL':
+        scene.playerMaxHP += 200;
+        scene.playerHP = Math.min(scene.playerHP + 200, scene.playerMaxHP);
+        this.regenPerSec += 5;
+        break;
+      case 'TIME_WARP_ULTRA':
+        scene.baseAttackSpeed *= 0.5; // 100% faster
+        this.cooldownReduction *= 0.5;
+        break;
+      case 'FROZEN_WORLD':
+        this._frozenWorldActive = true;
+        break;
+      case 'SPIRIT_BOMB':
+        this._spiritBombActive = true;
+        this._spiritBombTimer = 0;
+        break;
     }
   }
 
@@ -1764,6 +1809,35 @@ class TitleScene extends Phaser.Scene {
 
     updateDiffSelection();
 
+    // ═══ 무한 모드 토글 ═══
+    let endlessMode = localStorage.getItem('whiteout_endless') === 'true';
+    const endlessY = diffY + diffBtnH/2 + 40;
+    const endlessGfx = this.add.graphics().setDepth(201);
+    allElements.push(endlessGfx);
+    const endlessTxt = this.add.text(W/2 + 14, endlessY, '♾️ 무한 모드 (60분 이후 계속 진행)', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#CCDDEE'
+    }).setOrigin(0, 0.5).setDepth(202);
+    allElements.push(endlessTxt);
+
+    const drawEndlessToggle = () => {
+      endlessGfx.clear();
+      const cbx = W/2 - 8, cby = endlessY - 8;
+      endlessGfx.fillStyle(endlessMode ? 0x44BB44 : 0x333344, 0.9);
+      endlessGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
+      endlessGfx.lineStyle(1, endlessMode ? 0x66DD66 : 0x555566, 1);
+      endlessGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
+      if (endlessMode) {
+        endlessTxt.setColor('#44FF44');
+      } else {
+        endlessTxt.setColor('#888899');
+      }
+    };
+    drawEndlessToggle();
+
+    const endlessHit = this.add.rectangle(W/2 + 60, endlessY, 200, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
+    allElements.push(endlessHit);
+    endlessHit.on('pointerdown', () => { endlessMode = !endlessMode; drawEndlessToggle(); });
+
     // Confirm button
     const btnW2 = Math.min(200, W * 0.4);
     const btnH2 = 44;
@@ -1781,8 +1855,9 @@ class TitleScene extends Phaser.Scene {
     btnHit.on('pointerdown', () => {
       try { localStorage.setItem('whiteout_class', selectedClass); } catch(e) {}
       try { localStorage.setItem('whiteout_difficulty', selectedDifficulty); } catch(e) {}
+      try { localStorage.setItem('whiteout_endless', endlessMode ? 'true' : 'false'); } catch(e) {}
       destroy();
-      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty });
+      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty, endlessMode });
     });
 
     // Cancel / back
@@ -2008,9 +2083,10 @@ class TitleScene extends Phaser.Scene {
       `💀 누적 킬:         ${rec.totalKills.toLocaleString()}마리`,
       `⏰ 총 플레이 시간:  ${totalTime}`,
       `🏆 60분 클리어:     ${rec.wins}회`,
+      rec.longestEndlessSurvival > 0 ? `🔥 최장생존: ${Math.floor(rec.longestEndlessSurvival/60)}분 ${Math.floor(rec.longestEndlessSurvival%60)}초` : null,
       `🥇 달성 성취:       ${rec.achievementsUnlocked} / ${totalAch}`,
     ];
-    const statsText = this.add.text(W/2, H/2 - 20, lines.join('\n'), {
+    const statsText = this.add.text(W/2, H/2 - 20, lines.filter(Boolean).join('\n'), {
       fontSize: '13px', fontFamily: 'monospace', color: '#CCDDEE',
       stroke: '#000', strokeThickness: 1, lineSpacing: 5
     }).setOrigin(0.5).setDepth(202);
@@ -2144,7 +2220,8 @@ class BootScene extends Phaser.Scene {
     const playerClass = this.scene.settings.data?.playerClass || null;
     const difficulty = this.scene.settings.data?.difficulty || null;
     const dailyChallenge = this.scene.settings.data?.dailyChallenge || null;
-    this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge });
+    const endlessMode = this.scene.settings.data?.endlessMode || false;
+    this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge, endlessMode });
   }
 
   createPlayerTexture() {
@@ -2915,6 +2992,12 @@ class GameScene extends Phaser.Scene {
     // ═══ Apply Daily Challenge ═══
     this._dailyChallenge = this.scene.settings.data?.dailyChallenge || null;
     this._dailyModifier = this._dailyChallenge ? this._dailyChallenge.modifier : {};
+    this._endlessMode = this.scene.settings.data?.endlessMode || localStorage.getItem('whiteout_endless') === 'true';
+    this._endlessMultiplier = 1.0;
+    this._endlessBossCount = 0;
+    this._milestone30Shown = false;
+    this._milestone45Shown = false;
+    this._milestone60Shown = false;
     // glass_cannon modifier
     if (this._dailyModifier.hp) {
       this.playerMaxHP = this._dailyModifier.hp;
@@ -3424,10 +3507,10 @@ class GameScene extends Phaser.Scene {
   }
 
   _applyDifficultyToAnimal(a, def) {
-    const hpMul = this._diffMode ? this._diffMode.enemyHP : 1;
+    const hpMul = (this._diffMode ? this._diffMode.enemyHP : 1) * (this._endlessMultiplier || 1);
     a.hp = Math.round(def.hp * hpMul);
     a.maxHP = a.hp;
-    a._diffDmgMul = this._diffMode ? this._diffMode.enemyDmg : 1;
+    a._diffDmgMul = (this._diffMode ? this._diffMode.enemyDmg : 1) * (this._endlessMultiplier || 1);
   }
 
   spawnAnimal(type) {
@@ -4209,7 +4292,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // Show upgrade card selection
-    const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0, this._playerClass);
+    const isEndgame = this._endlessMode && this.gameElapsed >= 3600;
+    const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0, this._playerClass, isEndgame);
     if (cards.length > 0) {
       this.showUpgradeUI(cards);
     }
@@ -5005,6 +5089,10 @@ class GameScene extends Phaser.Scene {
       else { const ang = Phaser.Math.FloatBetween(0, Math.PI*2); a.wanderDir = { x: Math.cos(ang), y: Math.sin(ang) }; }
     }
     a.body.setVelocity(a.wanderDir.x*a.def.speed*speedMul, a.wanderDir.y*a.def.speed*speedMul);
+    // Frozen World: slow all enemies by 60%
+    if (this.upgradeManager._frozenWorldActive && a.body) {
+      a.body.velocity.scale(0.4);
+    }
   }
 
   updateNPCs(dt) {
@@ -5823,7 +5911,7 @@ class GameScene extends Phaser.Scene {
     // ═══ Timeline Progress Bar ═══
     if (d.timelineBar) {
       d.timelineBar.style.display = '';
-      const progress = Math.min(1, this.gameElapsed / 3600); // 60 min
+      const progress = this._endlessMode ? Math.min(1, (this.gameElapsed % 3600) / 3600) : Math.min(1, this.gameElapsed / 3600);
       d.timelineFill.style.width = (progress * 100) + '%';
       const minE = this.gameElapsed / 60;
       if (minE >= 55) d.timelineFill.style.background = '#EE2222';
@@ -5905,7 +5993,8 @@ class GameScene extends Phaser.Scene {
 
   openCrate(crate) {
     if (!crate.active || this.upgradeUIActive) return;
-    const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0, this._playerClass);
+    const isEndgame = this._endlessMode && this.gameElapsed >= 3600;
+    const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0, this._playerClass, isEndgame);
     if (cards.length === 0) {
       this.showFloatingText(crate.x, crate.y - 20, '✅ 모든 업그레이드 최대!', '#88FF88');
       if (crate._label) crate._label.destroy();
@@ -6773,6 +6862,57 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  _showMilestoneBanner(text, color = '#FFD700', duration = 2000) {
+    const cam = this.cameras.main;
+    // Golden particles
+    for (let i = 0; i < 15; i++) {
+      const px = cam.centerX + Phaser.Math.Between(-150, 150);
+      const py = cam.centerY + Phaser.Math.Between(-80, 80);
+      const p = this.add.circle(px, py, Phaser.Math.Between(2, 5), 0xFFD700).setDepth(200).setScrollFactor(0).setAlpha(0.9);
+      this.tweens.add({ targets: p, y: py - 60, alpha: 0, duration: 1000 + Math.random() * 500, onComplete: () => p.destroy() });
+    }
+    const t = this.add.text(cam.centerX, cam.centerY - 40, text, {
+      fontSize: '32px', fontFamily: 'monospace', color, stroke: '#000', strokeThickness: 5, fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(200).setScrollFactor(0).setScale(0.3).setAlpha(0);
+    this.tweens.add({ targets: t, scale: 1.2, alpha: 1, duration: 400, ease: 'Back.Out', onComplete: () => {
+      this.tweens.add({ targets: t, scale: 1, duration: 200, onComplete: () => {
+        this.tweens.add({ targets: t, alpha: 0, y: t.y - 40, duration: 1000, delay: duration - 600, onComplete: () => t.destroy() });
+      }});
+    }});
+  }
+
+  _spawnEndlessBoss(index) {
+    const hpMul = Math.pow(1.5, index + 1);
+    const bossHP = Math.round(4000 * hpMul);
+    const bossDmg = Math.round(35 * Math.pow(1.2, index));
+    const bossSpeed = 60 + index * 5;
+    const bossName = `❄️ 폭풍왕 Lv.${index + 2}`;
+
+    this.showCenterAlert(`⚠️ ${bossName} 출현!`, '#FF2222');
+    this.cameras.main.shake(500, 0.02);
+    playBossSpawn();
+
+    this.time.delayedCall(2000, () => {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 400;
+      const bx = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 80, WORLD_W - 80);
+      const by = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 80, WORLD_H - 80);
+      const boss = this.physics.add.sprite(bx, by, 'bear').setCollideWorldBounds(true).setDepth(5);
+      boss.setScale(2.8 + index * 0.2);
+      boss.setTint(0x8866FF);
+      boss.animalType = 'boss';
+      boss.def = { hp: bossHP, speed: bossSpeed, damage: bossDmg, drops: { meat: 30, leather: 15, gold: 50 }, size: 26 * (2.8 + index * 0.2), behavior: 'chase', name: bossName, aggroRange: 500, fleeRange: 0, fleeDistance: 0, color: 0x8866FF };
+      boss.hp = bossHP; boss.maxHP = bossHP;
+      boss.wanderTimer = 0; boss.wanderDir = {x:0,y:0}; boss.hitFlash = 0; boss.atkCD = 0; boss.fleeTimer = 0;
+      boss.isBoss = true;
+      boss.hpBar = this.add.graphics().setDepth(6);
+      boss.nameLabel = this.add.text(bx, by - boss.def.size - 10, bossName, {
+        fontSize: '16px', fontFamily: 'monospace', color: '#FF66FF', stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+      }).setDepth(6).setOrigin(0.5);
+      this.animals.add(boss);
+    });
+  }
+
   showVictory() {
     if (this.gameOver) return;
     this.gameOver = true;
@@ -6867,6 +7007,9 @@ class GameScene extends Phaser.Scene {
     if (this._diffMode && this._difficulty !== 'normal') {
       statsLines.push(`🎮 난이도: ${this._diffMode.name}`);
     }
+    if (this._endlessMode) {
+      statsLines.push(`♾️ 무한 모드`);
+    }
     if (this._dailyChallenge) {
       const dcCleared = isVictory;
       statsLines.push(dcCleared ? `📅 데일리 클리어! (${this._dailyChallenge.name})` : `📅 데일리: ${this._dailyChallenge.name}`);
@@ -6934,7 +7077,7 @@ class GameScene extends Phaser.Scene {
       .setScrollFactor(0).setDepth(304).setOrigin(0.5).setInteractive().setAlpha(0.001);
 
     // Button handlers
-    retryHit.on('pointerdown', () => { this.scene.start('Boot', { loadSave: false, difficulty: this._difficulty, dailyChallenge: this._dailyChallenge }); });
+    retryHit.on('pointerdown', () => { this.scene.start('Boot', { loadSave: false, difficulty: this._difficulty, dailyChallenge: this._dailyChallenge, endlessMode: this._endlessMode }); });
     titleHit.on('pointerdown', () => { this.scene.start('Title'); });
     shareHit.on('pointerdown', () => {
       // Build equipment string
@@ -7009,6 +7152,15 @@ class GameScene extends Phaser.Scene {
 
     const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
     const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0);
+
+    // Record endless survival time
+    if (this._endlessMode) {
+      const rec = RecordManager.load();
+      if (this.gameElapsed > (rec.longestEndlessSurvival || 0)) {
+        rec.longestEndlessSurvival = this.gameElapsed;
+        RecordManager.save(rec);
+      }
+    }
 
     this._showEndScreen({
       isVictory: false,
@@ -7263,7 +7415,8 @@ class GameScene extends Phaser.Scene {
     const rushMul = (this.activeRandomEvents && this.activeRandomEvents.spawn_rush) ? 3 : 1;
     const challengeMul = this._challengeActive ? (this._challengeSpawnMul || 1) : 1;
     const diffSpawnMul = this._diffMode ? this._diffMode.spawnRate : 1;
-    const spawnIntervalSec = (spawnConfig.spawnInterval / 1000) / rushMul / challengeMul / diffSpawnMul;
+    const endlessSpawnMul = this._endlessMultiplier || 1;
+    const spawnIntervalSec = (spawnConfig.spawnInterval / 1000) / rushMul / challengeMul / diffSpawnMul / endlessSpawnMul;
     if (this.waveTimer >= spawnIntervalSec) {
       this.waveTimer = 0;
       this.waveNumber++;
@@ -7418,10 +7571,70 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    // ═══ Milestone Banners ═══
+    if (!this._milestone30Shown && this.gameElapsed >= 30 * 60) {
+      this._milestone30Shown = true;
+      this._showMilestoneBanner('💪 절반 돌파!', '#FFD700');
+    }
+    if (!this._milestone45Shown && this.gameElapsed >= 45 * 60) {
+      this._milestone45Shown = true;
+      this._showMilestoneBanner('⚡ 고지가 눈앞!', '#FFD700');
+    }
+
     // ═══ Victory Condition: 60분 생존 ═══
     if (!this.gameWon && this.gameElapsed >= 60 * 60) {
       this.gameWon = true;
-      this.showVictory();
+      if (this._endlessMode) {
+        // Endless mode: show banner and continue
+        this._milestone60Shown = true;
+        this.cameras.main.flash(500, 255, 215, 0, true); // golden flash
+        this._showMilestoneBanner('🏆 전설이 되다!', '#FFD700', 3000);
+        this.time.delayedCall(3000, () => {
+          this._showMilestoneBanner('🏆 60분 생존! 계속 진행 중...', '#44FF44', 3000);
+        });
+        // Record the win but don't end
+        const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
+        const diffBonus = this._diffMode ? this._diffMode.clearBonus : 10;
+        RecordManager.recordRun(this.gameElapsed, totalKills, this.playerLevel, this.stats.maxCombo || 0, true, 0);
+        if (this._dailyChallenge) {
+          try { localStorage.setItem('daily_clear_' + getDailyChallengeKey(), 'true'); } catch(e) {}
+        }
+        playWinSound();
+      } else {
+        this.showVictory();
+      }
+    }
+
+    // ═══ Endless Mode: Difficulty Escalation ═══
+    if (this._endlessMode && this.gameElapsed >= 60 * 60) {
+      // Every 10 minutes after 60min, increase multiplier
+      const minutesPast60 = (this.gameElapsed - 3600) / 60;
+      const escalationSteps = Math.floor(minutesPast60 / 10);
+      this._endlessMultiplier = Math.pow(1.1, escalationSteps);
+
+      // Endless boss spawns at 70, 90, 110, 130, ... minutes
+      const endlessBossTimes = [70, 90, 110, 130, 150, 170, 190, 210];
+      const minNowE = this.gameElapsed / 60;
+      endlessBossTimes.forEach((bossMin, idx) => {
+        if (idx >= this._endlessBossCount && minNowE >= bossMin && minNowE < bossMin + 0.5) {
+          this._endlessBossCount = idx + 1;
+          this._spawnEndlessBoss(idx);
+        }
+      });
+
+      // Spirit Bomb tick
+      if (this.upgradeManager._spiritBombActive) {
+        this.upgradeManager._spiritBombTimer = (this.upgradeManager._spiritBombTimer || 0) + dt;
+        if (this.upgradeManager._spiritBombTimer >= 10) {
+          this.upgradeManager._spiritBombTimer = 0;
+          this.cameras.main.flash(200, 200, 100, 255, true);
+          this.animals.getChildren().forEach(a => {
+            if (!a.active || a.hp === undefined) return;
+            a.hp -= 50;
+            if (a.hp <= 0) this.killAnimal(a);
+          });
+        }
+      }
     }
 
     // ═══ Phase 2: Rhythm System ═══
