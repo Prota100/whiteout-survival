@@ -426,6 +426,8 @@ const UPGRADES = {
   CLASS_WARRIOR_ROAR: { name: '전사의 포효', desc: '주변 100px 적 2초 공포(이동정지)', icon: '🪓', category: 'combat', maxLevel: 1, rarity: 'legendary', classOnly: 'warrior' },
   CLASS_MAGE_BLIZZARD: { name: '얼음 폭풍', desc: '전체 적 1초 동결 (쿨다운 30초)', icon: '🧊', category: 'special', maxLevel: 1, rarity: 'legendary', classOnly: 'mage' },
   CLASS_SURVIVOR_SPRINT: { name: '질주', desc: '3초간 이속 3배+무적 (쿨다운 20초)', icon: '🏃', category: 'survival', maxLevel: 1, rarity: 'legendary', classOnly: 'survivor' },
+  CLASS_SHAMAN_SPIRIT: { name: '정령 소환', desc: '정령이 10초간 적에 초당 15 데미지+XP 자동 수집 (쿨다운 30초)', icon: '🔮', category: 'special', maxLevel: 1, rarity: 'legendary', classOnly: 'shaman' },
+  CLASS_SHAMAN_STORM: { name: '정령의 폭풍', desc: '정령이 30초간 화면 전체를 돌며 50 데미지 광역 공격 (쿨다운 45초)', icon: '🌀', category: 'special', maxLevel: 1, rarity: 'legendary', classOnly: 'shaman' },
   // ═══ 엔드게임 전용 업그레이드 (60분 이후 무한 모드) ═══
   GODLIKE_POWER:     { name: '신의 축복', desc: '모든 스탯 +50%', icon: '👑', category: 'special', maxLevel: 1, rarity: 'unique', endgameOnly: true },
   IMMORTAL_WILL:     { name: '불멸의 의지', desc: 'HP+200, HP회복 +5/s', icon: '💖', category: 'survival', maxLevel: 1, rarity: 'unique', endgameOnly: true },
@@ -459,6 +461,14 @@ const PLAYER_CLASSES = {
     passives: ['이동 중 15% 회피', '한파 이속 패널티 없음'],
     startItem: { slot: 'boots', itemId: 'wind_boots', grade: 'common' },
     ratings: { hp: 3.5, atk: 2, spd: 5, surv: 4 },
+  },
+  shaman: {
+    name: '무당', icon: '🔮', color: '#9B59B6', colorHex: 0x9B59B6,
+    desc: '자연의 힘을 다루는 지원형. XP 1.5x, 영혼 구슬+정령 소환.',
+    stats: { hp: 95, damageMul: 1.0, speedMul: 1.1, attackSpeedMul: 1.0, attackRangeMul: 1.0, warmthResist: 0, xpMul: 1.5 },
+    passives: ['처치 시 10% 영혼 구슬 (HP+5)', '캠프파이어 150px내 전 스탯+15%'],
+    startItem: { slot: 'ring', itemId: 'legend_ring', grade: 'common' },
+    ratings: { hp: 3, atk: 2, spd: 3, surv: 4, special: 5 },
   },
 };
 
@@ -823,6 +833,7 @@ const PLAYER_SKINS = [
   { id: 'shadow',        name: '어둠의 전사',  color: 0x444444, outline: 0x222222, unlockCondition: 'kills_100_total' },
   { id: 'icy',           name: '얼음 군주',    color: 0xAAEEFF, outline: 0x66CCEE, unlockCondition: 'achievements_5' },
   { id: 'legendary',     name: '전설의 자',    color: 0xFF8C00, outline: 0xFF4500, unlockCondition: 'endless_60min' },
+  { id: 'shaman_purple', name: '무당의 영혼',  color: 0x9B59B6, outline: 0x6C3483, unlockCondition: 'class_shaman_win' },
 ];
 
 const ACHIEVEMENT_REWARDS = {
@@ -1255,6 +1266,8 @@ class UpgradeManager {
       case 'CLASS_WARRIOR_ROAR': this._classWarriorRoar = true; break;
       case 'CLASS_MAGE_BLIZZARD': this._classMageBlizzard = true; break;
       case 'CLASS_SURVIVOR_SPRINT': this._classSurvivorSprint = true; break;
+      case 'CLASS_SHAMAN_SPIRIT': this._classShamanSpirit = true; break;
+      case 'CLASS_SHAMAN_STORM': this._classShamanStorm = true; break;
       // ═══ Endgame Upgrades ═══
       case 'GODLIKE_POWER':
         scene.playerDamage = Math.round(scene.playerDamage * 1.5);
@@ -1957,12 +1970,12 @@ class TitleScene extends Phaser.Scene {
 
     let selectedClass = localStorage.getItem('whiteout_class') || 'warrior';
     let selectedDifficulty = localStorage.getItem('whiteout_difficulty') || 'normal';
-    const classKeys = ['warrior', 'mage', 'survivor'];
+    const classKeys = ['warrior', 'mage', 'survivor', 'shaman'];
     const diffKeys = ['normal', 'hard', 'hell'];
-    const cardW = Math.min(110, W * 0.25);
+    const cardW = Math.min(90, W * 0.2);
     const cardH = 170;
-    const gap = Math.min(20, W * 0.03);
-    const totalW = cardW * 3 + gap * 2;
+    const gap = Math.min(15, W * 0.02);
+    const totalW = cardW * 4 + gap * 3;
     const startX = W/2 - totalW/2 + cardW/2;
     const cardY = H * 0.38;
 
@@ -3263,6 +3276,12 @@ class GameScene extends Phaser.Scene {
     this._classBlizzardCD = 0; // mage blizzard cooldown
     this._classSprintCD = 0; // survivor sprint cooldown
     this._classSprintActive = false;
+    this._classSpiritCD = 0; // shaman spirit cooldown
+    this._classShamanStormCD = 0; // shaman storm cooldown
+    this._spiritOrbs = []; // soul harvest orbs
+    this._shamanSpirit = null; // active spirit entity
+    this._shamanSpiritTimer = 0;
+    this._natureBlessing = false; // nature's blessing active
     if (this._playerClass && PLAYER_CLASSES[this._playerClass]) {
       const cls = PLAYER_CLASSES[this._playerClass];
       // Override HP
@@ -3278,6 +3297,10 @@ class GameScene extends Phaser.Scene {
       // Survivor: blizzard cloak by default
       if (this._playerClass === 'survivor') {
         this._survivorBlizzardCloak = true;
+      }
+      // Shaman: XP multiplier
+      if (this._playerClass === 'shaman' && cls.stats.xpMul) {
+        this._shamanXpMul = cls.stats.xpMul;
       }
       // Start item
       if (cls.startItem) {
@@ -3984,6 +4007,8 @@ class GameScene extends Phaser.Scene {
     if (!a || !a.active) return;
     // Warrior rage mode: 1.5x damage when HP <= 50%
     if (this._warriorRageActive) dmg = Math.round(dmg * 1.5);
+    // Shaman: Nature's Blessing +15% damage near campfire
+    if (this._natureBlessing) dmg = Math.round(dmg * 1.15);
     // Shield Bash: stun on ready
     if (this.upgradeManager.shieldBashReady && a.body) {
       this.upgradeManager.shieldBashReady = false;
@@ -4266,6 +4291,18 @@ class GameScene extends Phaser.Scene {
             this.time.delayedCall(3000, () => { if (b.active) { b.body.moves = true; b.clearTint(); } });
           }
         });
+      }
+    }
+
+    // ═══ Shaman: Soul Harvest (10% chance spirit orb on kill) ═══
+    if (this._playerClass === 'shaman') {
+      if (Math.random() < 0.10 && this._spiritOrbs.length < 10) {
+        const orb = this.add.circle(a.x, a.y, 8, 0x4488FF, 0.7).setDepth(15);
+        this.tweens.add({ targets: orb, scale: { from: 0.8, to: 1.2 }, alpha: { from: 0.5, to: 0.9 }, yoyo: true, repeat: -1, duration: 600 });
+        const glow = this.add.circle(a.x, a.y, 14, 0x4488FF, 0.2).setDepth(14);
+        this.tweens.add({ targets: glow, scale: { from: 0.8, to: 1.5 }, alpha: { from: 0.3, to: 0.1 }, yoyo: true, repeat: -1, duration: 800 });
+        this._spiritOrbs.push({ x: a.x, y: a.y, lifetime: 10, orb, glow });
+        this.showFloatingText(a.x, a.y - 20, '🔮 영혼 구슬!', '#4488FF');
       }
     }
 
@@ -4627,6 +4664,7 @@ class GameScene extends Phaser.Scene {
     let amount = (typeof source === 'number') ? source : (XP_SOURCES[source] ?? XP_SOURCES.default);
     if (this._diffMode) amount = Math.round(amount * this._diffMode.xpMul);
     if (this._equipBonuses && this._equipBonuses.xpMul > 0) amount = Math.round(amount * (1 + this._equipBonuses.xpMul));
+    if (this._shamanXpMul) amount = Math.round(amount * this._shamanXpMul);
     this.playerXP += amount;
     while (this.playerXP >= this._getXPRequired(this.playerLevel)) {
       this.playerXP -= this._getXPRequired(this.playerLevel);
@@ -5421,7 +5459,8 @@ class GameScene extends Phaser.Scene {
                 return;
               }
               if (this._invincibleTimer > 0) { a.atkCD = 1.0; this.showFloatingText(px, py - 25, '💫 무적!', '#FFD700'); return; }
-              const actualDmg = a.def.damage * (a._diffDmgMul || 1) * (1 - this.upgradeManager.armorReduction);
+              const natureBlessDef = this._natureBlessing ? 0.85 : 1;
+              const actualDmg = a.def.damage * (a._diffDmgMul || 1) * (1 - this.upgradeManager.armorReduction) * natureBlessDef;
               this.playerHP -= actualDmg; a.atkCD = 1.2; playHurt();
               if (this._triggerHitVignette) this._triggerHitVignette();
               this._hitStop(50); // player hit hitstop
@@ -6392,6 +6431,7 @@ class GameScene extends Phaser.Scene {
       if (this._playerClass === 'warrior') { cd = this._classRoarCD; maxCd = 15; skillIcon = '🪓'; }
       else if (this._playerClass === 'mage') { cd = this._classBlizzardCD; maxCd = 30; skillIcon = '🧊'; }
       else if (this._playerClass === 'survivor') { cd = this._classSprintCD; maxCd = 20; skillIcon = '🏃'; }
+      else if (this._playerClass === 'shaman') { cd = this._classSpiritCD; maxCd = 30; skillIcon = '🔮'; }
       if (cd > 0) {
         d.classSkillCd.textContent = Math.ceil(cd);
         d.classSkillCd.style.background = 'rgba(0,0,0,0.7)';
@@ -6405,6 +6445,14 @@ class GameScene extends Phaser.Scene {
         d.classSkillCd.style.color = '#FFD700';
         d.classSkillCd.style.animation = 'skill-ready-pulse 1s ease-in-out infinite';
       }
+    }
+
+    // ═══ Shaman Nature's Blessing indicator ═══
+    if (this._playerClass === 'shaman') {
+      if (!this._natureBlessingText) {
+        this._natureBlessingText = this.add.text(10, 90, '', { fontSize: '12px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 2 }).setDepth(100).setScrollFactor(0);
+      }
+      this._natureBlessingText.setText(this._natureBlessing ? '🔥 자연의 가호 +15%' : '');
     }
 
     // ═══ Timeline Progress Bar ═══
@@ -8037,6 +8085,8 @@ class GameScene extends Phaser.Scene {
     if (this._classRoarCD > 0) this._classRoarCD -= dt;
     if (this._classBlizzardCD > 0) this._classBlizzardCD -= dt;
     if (this._classSprintCD > 0) this._classSprintCD -= dt;
+    if (this._classSpiritCD > 0) this._classSpiritCD -= dt;
+    if (this._classShamanStormCD > 0) this._classShamanStormCD -= dt;
     if (this._classSprintActive && this._classSprintTimer !== undefined) {
       this._classSprintTimer -= dt;
       if (this._classSprintTimer <= 0) {
@@ -8088,6 +8138,133 @@ class GameScene extends Phaser.Scene {
         this.player.setTint(0x44FF44);
         playClassSkill();
         this.showFloatingText(this.player.x, this.player.y - 40, '🏃 질주!', '#44FF44');
+      }
+    }
+
+    // ═══ Shaman: Spirit Orb Collection ═══
+    if (this._playerClass === 'shaman' && this._spiritOrbs.length > 0) {
+      for (let i = this._spiritOrbs.length - 1; i >= 0; i--) {
+        const orb = this._spiritOrbs[i];
+        orb.lifetime -= dt;
+        if (orb.lifetime <= 0) {
+          orb.orb.destroy(); orb.glow.destroy();
+          this._spiritOrbs.splice(i, 1);
+          continue;
+        }
+        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, orb.x, orb.y);
+        if (dist < 30) {
+          this.playerHP = Math.min(this.playerMaxHP, this.playerHP + 5);
+          this.showFloatingText(this.player.x, this.player.y - 30, '🔮+5 HP', '#4488FF');
+          orb.orb.destroy(); orb.glow.destroy();
+          this._spiritOrbs.splice(i, 1);
+        }
+      }
+    }
+
+    // ═══ Shaman: Nature's Blessing (campfire proximity buff) ═══
+    if (this._playerClass === 'shaman') {
+      this._natureBlessing = false;
+      if (this.placedBuildings) {
+        for (const b of this.placedBuildings) {
+          if (b.type === 'campfire') {
+            const pd = Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y);
+            if (pd < 150) { this._natureBlessing = true; break; }
+          }
+        }
+      }
+    }
+
+    // ═══ Shaman: Summon Spirit (auto 30s cooldown) ═══
+    if (this.upgradeManager._classShamanSpirit && this._classSpiritCD <= 0 && !this._shamanSpirit && this.player && this.player.active) {
+      const anyEnemy = this.animals.getChildren().some(a => a.active);
+      if (anyEnemy) {
+        this._classSpiritCD = 30;
+        this._shamanSpiritTimer = 10;
+        playClassSkill();
+        this.showFloatingText(this.player.x, this.player.y - 40, '🔮 정령 소환!', '#9B59B6');
+        const spirit = this.add.circle(this.player.x, this.player.y, 20, 0x4488FF, 0.4).setDepth(15);
+        const spiritGlow = this.add.circle(this.player.x, this.player.y, 30, 0x4488FF, 0.15).setDepth(14);
+        this.tweens.add({ targets: spiritGlow, scale: { from: 0.8, to: 1.3 }, alpha: { from: 0.2, to: 0.05 }, yoyo: true, repeat: -1, duration: 700 });
+        this._shamanSpirit = { sprite: spirit, glow: spiritGlow, dmgTimer: 0 };
+      }
+    }
+    // Update active spirit
+    if (this._shamanSpirit) {
+      this._shamanSpiritTimer -= dt;
+      if (this._shamanSpiritTimer <= 0) {
+        this._shamanSpirit.sprite.destroy(); this._shamanSpirit.glow.destroy();
+        this._shamanSpirit = null;
+      } else {
+        // Follow player with slight offset
+        const s = this._shamanSpirit;
+        const tx = this.player.x + Math.cos(this.time.now / 500) * 35;
+        const ty = this.player.y + Math.sin(this.time.now / 500) * 35;
+        s.sprite.x += (tx - s.sprite.x) * 0.1; s.sprite.y += (ty - s.sprite.y) * 0.1;
+        s.glow.x = s.sprite.x; s.glow.y = s.sprite.y;
+        // DPS to nearby enemies
+        s.dmgTimer -= dt;
+        if (s.dmgTimer <= 0) {
+          s.dmgTimer = 1; // every 1 second
+          const spiritDmg = this._natureBlessing ? Math.round(15 * 1.15) : 15;
+          this.animals.getChildren().forEach(a => {
+            if (!a.active || a.hp <= 0) return;
+            if (Phaser.Math.Distance.Between(s.sprite.x, s.sprite.y, a.x, a.y) < 100) {
+              a.hp -= spiritDmg;
+              this.showFloatingText(a.x, a.y - 15, '-' + spiritDmg, '#4488FF');
+              if (a.hp <= 0) this.killAnimal(a);
+            }
+          });
+        }
+        // Auto-collect XP drops nearby
+        if (this.drops) {
+          this.drops.forEach(d => {
+            if (d && d.sprite && d.sprite.active && Phaser.Math.Distance.Between(s.sprite.x, s.sprite.y, d.sprite.x, d.sprite.y) < 100) {
+              // Move drop toward player
+              d.sprite.x += (this.player.x - d.sprite.x) * 0.3;
+              d.sprite.y += (this.player.y - d.sprite.y) * 0.3;
+            }
+          });
+        }
+      }
+    }
+
+    // ═══ Shaman: Spirit Storm (screen-wide roaming spirit) ═══
+    if (this.upgradeManager._classShamanStorm && this._classShamanStormCD <= 0 && this.player && this.player.active) {
+      const anyEnemy = this.animals.getChildren().some(a => a.active);
+      if (anyEnemy) {
+        this._classShamanStormCD = 45;
+        playClassSkill();
+        this.showFloatingText(this.player.x, this.player.y - 50, '🌀 정령의 폭풍!', '#9B59B6');
+        const storm = this.add.circle(this.player.x, this.player.y, 25, 0x9B59B6, 0.5).setDepth(16);
+        const stormGlow = this.add.circle(this.player.x, this.player.y, 40, 0x9B59B6, 0.2).setDepth(15);
+        let stormTimer = 30;
+        let stormDmgTimer = 0;
+        let stormAngle = 0;
+        const stormUpdate = this.time.addEvent({ delay: 50, loop: true, callback: () => {
+          stormTimer -= 0.05;
+          if (stormTimer <= 0) {
+            storm.destroy(); stormGlow.destroy(); stormUpdate.remove();
+            return;
+          }
+          // Roam around map
+          stormAngle += 0.05;
+          const cx = this.player.x + Math.cos(stormAngle) * 200 + Math.sin(stormAngle * 0.7) * 100;
+          const cy = this.player.y + Math.sin(stormAngle) * 200 + Math.cos(stormAngle * 0.7) * 100;
+          storm.x += (cx - storm.x) * 0.08; storm.y += (cy - storm.y) * 0.08;
+          stormGlow.x = storm.x; stormGlow.y = storm.y;
+          stormDmgTimer -= 0.05;
+          if (stormDmgTimer <= 0) {
+            stormDmgTimer = 1;
+            this.animals.getChildren().forEach(a => {
+              if (!a.active || a.hp <= 0) return;
+              if (Phaser.Math.Distance.Between(storm.x, storm.y, a.x, a.y) < 120) {
+                a.hp -= 50;
+                this.showFloatingText(a.x, a.y - 15, '-50🌀', '#9B59B6');
+                if (a.hp <= 0) this.killAnimal(a);
+              }
+            });
+          }
+        }});
       }
     }
 
@@ -8176,7 +8353,8 @@ class GameScene extends Phaser.Scene {
     }
     const eqSpdMul = 1 + (this._equipBonuses ? this._equipBonuses.spdMul : 0);
     const hiddenBossSlowMul = this._hiddenBossSlowActive ? 0.6 : 1;
-    const effectiveSpeed = this.playerSpeed * (this.streakBuff?.spdMul || 1) * eqSpdMul * hiddenBossSlowMul;
+    const natureBlessingMul = this._natureBlessing ? 1.15 : 1;
+    const effectiveSpeed = this.playerSpeed * (this.streakBuff?.spdMul || 1) * eqSpdMul * hiddenBossSlowMul * natureBlessingMul;
     this.player.body.setVelocity(finalMX*effectiveSpeed, finalMY*effectiveSpeed);
     // 4방향 스프라이트 전환 (상하좌우) + 뒷모습
     const absX = Math.abs(finalMX);
