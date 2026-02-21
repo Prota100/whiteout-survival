@@ -18,13 +18,26 @@ html, body {
   -webkit-user-select: none; user-select: none;
   position: fixed; top: 0; left: 0;
 }
-body { background: #1a1a2e; }
+body { background: #0A0E1A; }
 #game-container {
   position: relative;
   width: 100vw; height: 100vh; height: 100dvh;
   overflow: hidden;
 }
 canvas { display: block; position: absolute; top: 0; left: 0; }
+
+/* ═══ Habby 스타일 색상 시스템 ═══ */
+:root {
+  --bg-primary: #0A0E1A;
+  --bg-panel: rgba(10,14,26,0.92);
+  --cta-orange: #FF6B35;
+  --cta-orange-glow: rgba(255,107,53,0.4);
+  --grade-common: #9E9E9E;
+  --grade-uncommon: #4CAF50;
+  --grade-rare: #2196F3;
+  --grade-epic: #9C27B0;
+  --grade-legend: #FF9800;
+}
 
 /* ═══ DOM UI OVERLAY ═══ */
 #ui-overlay {
@@ -33,49 +46,117 @@ canvas { display: block; position: absolute; top: 0; left: 0; }
 }
 #bottom-buttons {
   position: absolute;
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   left: 0; right: 0;
-  display: flex; justify-content: center; gap: 5px;
-  padding: 0 8px;
+  display: flex; justify-content: center; gap: 8px;
+  padding: 0 12px;
   pointer-events: none;
   z-index: 50;
 }
 #dom-hud { z-index: 20; }
 #joystick-zone { z-index: 5; }
+
+/* ═══ 버튼 스타일 (Habby) ═══ */
 #bottom-buttons button {
   pointer-events: auto;
-  background: rgba(20, 20, 50, 0.88);
-  color: #fff; border: 1.5px solid rgba(100, 120, 200, 0.4);
-  border-radius: 8px;
-  font-family: monospace; font-size: 14px;
-  padding: 9px 12px;
-  min-height: 44px; min-width: 44px;
+  color: #fff; border: none;
+  border-radius: 12px;
+  font-family: monospace; font-size: 13px; font-weight: 700;
+  padding: 10px 14px;
+  min-height: 52px; min-width: 52px;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   white-space: nowrap;
-  transition: background 0.1s;
+  transition: transform 0.1s, box-shadow 0.1s;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+/* CTA 주요 버튼 (건설, 제작) */
+#btn-build, #btn-craft {
+  background: linear-gradient(180deg, #FF8C42, #E65100);
+  box-shadow: 0 4px 12px var(--cta-orange-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+  min-width: 64px; min-height: 58px;
+}
+/* 보조 버튼 */
+#btn-hire, #btn-inv, #btn-eat {
+  background: linear-gradient(180deg, rgba(30,40,70,0.9), rgba(20,30,55,0.95));
+  border: 1.5px solid rgba(100,140,220,0.3);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+/* 유틸 버튼 */
+#btn-sound {
+  background: rgba(20,25,45,0.7);
+  border: 1px solid rgba(80,100,160,0.2);
+  font-size: 18px;
+  min-width: 44px; min-height: 44px;
 }
 #bottom-buttons button:active {
-  background: rgba(60, 60, 120, 0.95);
-  border-color: rgba(140, 160, 255, 0.7);
+  transform: scale(0.92) !important;
+  box-shadow: none !important;
 }
+@keyframes btn-bounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(0.9); }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+.btn-bouncing { animation: btn-bounce 0.25s ease; }
+
 @media (max-width: 420px) {
-  #bottom-buttons button { font-size: 12px; padding: 7px 8px; }
+  #bottom-buttons button { font-size: 12px; padding: 8px 10px; }
+  #btn-build, #btn-craft { min-width: 56px; min-height: 52px; }
 }
 @media (max-width: 360px) {
-  #bottom-buttons button { font-size: 11px; padding: 6px 6px; }
+  #bottom-buttons button { font-size: 11px; padding: 6px 8px; }
 }
 
-.sbar { display:flex; align-items:center; gap:4px; margin:1px 0; }
-.bar-c { width:140px; height:12px; background:rgba(17,17,34,0.85); border-radius:3px; border:1px solid rgba(51,68,102,0.5); overflow:hidden; }
-.bar-f { height:100%; border-radius:2px; transition:width 0.3s ease; }
-.bar-t { font-family:monospace; font-size:10px; color:#fff; text-shadow:0 0 2px #000; white-space:nowrap; }
+/* ═══ HUD 바 (Habby 스타일: 두꺼운 그라데이션) ═══ */
+.sbar { display:flex; align-items:center; gap:5px; margin:2px 0; }
+.bar-c { width:150px; height:16px; background:rgba(10,14,26,0.9); border-radius:8px; border:2px solid rgba(255,255,255,0.15); overflow:hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); }
+.bar-f { height:100%; border-radius:6px; transition:width 0.3s ease, background 0.3s; }
+.bar-t { font-family:monospace; font-size:12px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.8); white-space:nowrap; font-weight:bold; }
+
+/* ═══ HP 바 그라데이션 ═══ */
+#hp-fill { background: linear-gradient(180deg, #EF5350, #C62828) !important; }
+#hp-fill.hp-safe { background: linear-gradient(180deg, #66BB6A, #388E3C) !important; }
+#hp-fill.hp-warn { background: linear-gradient(180deg, #FFCA28, #F9A825) !important; }
+#hp-fill.hp-danger { background: linear-gradient(180deg, #EF5350, #C62828) !important; animation: bar-danger-pulse 0.8s ease-in-out infinite; }
+
+/* ═══ 온도 바 빙하 그라데이션 ═══ */
+#temp-fill { background: linear-gradient(90deg, #80DEEA, #26C6DA) !important; }
+#temp-fill.temp-warn { background: linear-gradient(90deg, #42A5F5, #1E88E5) !important; }
+#temp-fill.temp-danger { background: linear-gradient(90deg, #EF5350, #C62828) !important; animation: bar-danger-pulse 0.6s ease-in-out infinite; }
+
+/* ═══ XP 바 pulse (레벨업 직전) ═══ */
+#xp-fill { background: linear-gradient(90deg, #42A5F5, #90CAF9) !important; }
+#xp-fill.xp-near-levelup { animation: xp-pulse 0.5s ease-in-out infinite; }
+@keyframes xp-pulse {
+  0%, 100% { opacity: 1; filter: brightness(1); }
+  50% { opacity: 0.7; filter: brightness(1.5); }
+}
+
+@keyframes bar-danger-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ═══ HUD 텍스트 강화 ═══ */
+#dom-hud span, #dom-hud div {
+  font-weight: bold !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.4) !important;
+}
+
+/* ═══ 한파 경고 펄스 ═══ */
+@keyframes blizzard-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(68,136,255,0.3); }
+  50% { box-shadow: 0 0 25px rgba(68,136,255,0.7); transform: translateX(-50%) scale(1.02); }
+}
 </style>
 </head>
 <body>
 <div id="game-container">
-  <div id="blizzard-warning" style="display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,100,200,0.85);color:#fff;padding:6px 16px;border-radius:8px;font-size:14px;font-weight:bold;text-align:center;z-index:100;border:1px solid #4488FF;">
+  <div id="blizzard-warning" style="display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,rgba(0,80,180,0.9),rgba(0,50,150,0.95));color:#fff;padding:8px 20px;border-radius:12px;font-size:15px;font-weight:bold;text-align:center;z-index:100;border:2px solid #4488FF;animation:blizzard-pulse 1.5s ease-in-out infinite;backdrop-filter:blur(4px);">
     ❄️ 한파까지 <span id="blizzard-countdown">60</span>초
   </div>
   <div id="blizzard-active" style="display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,50,150,0.9);color:#88CCFF;padding:6px 16px;border-radius:8px;font-size:14px;font-weight:bold;text-align:center;z-index:100;border:1px solid #88CCFF;">

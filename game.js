@@ -335,10 +335,10 @@ class MetaManager {
 
 // ═══ 🎴 UPGRADE SYSTEM (뱀서 스타일) ═══
 const UPGRADE_CATEGORIES = {
-  combat: { color: '#FF4444', bgColor: 0xCC2222, borderColor: '#FF6666', icon: '⚔️', name: '전투' },
-  survival: { color: '#4488FF', bgColor: 0x2255AA, borderColor: '#66AAFF', icon: '🛡️', name: '생존' },
-  economy: { color: '#FFCC00', bgColor: 0xAA8800, borderColor: '#FFDD44', icon: '💰', name: '경제' },
-  special: { color: '#AA44FF', bgColor: 0x7722CC, borderColor: '#CC66FF', icon: '✨', name: '특수' },
+  combat: { color: '#EF5350', bgColor: 0xC62828, borderColor: '#EF5350', icon: '⚔️', name: '전투' },
+  survival: { color: '#42A5F5', bgColor: 0x1565C0, borderColor: '#42A5F5', icon: '🛡️', name: '생존' },
+  economy: { color: '#FFD700', bgColor: 0xF9A825, borderColor: '#FFD700', icon: '💰', name: '경제' },
+  special: { color: '#CE93D8', bgColor: 0x7B1FA2, borderColor: '#CE93D8', icon: '✨', name: '특수' },
 };
 
 const UPGRADES = {
@@ -405,7 +405,8 @@ const ZONE_RADII = { safe: 300, normal: 700, danger: 1000 };
 const ZONE_TEMP_DECAY = { safe: 0, normal: -1, danger: -2, extreme: -4 };
 
 const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5 };
-const RARITY_LABELS = { common: { name: '일반', color: '#CCCCCC' }, rare: { name: '희귀', color: '#4488FF' }, epic: { name: '에픽', color: '#AA44FF' } };
+const RARITY_LABELS = { common: { name: '일반', color: '#9E9E9E' }, rare: { name: '희귀', color: '#2196F3' }, epic: { name: '에픽', color: '#9C27B0' } };
+const GRADE_COLORS = { common: '#9E9E9E', uncommon: '#4CAF50', rare: '#2196F3', epic: '#9C27B0', legend: '#FF9800' };
 
 class UpgradeManager {
   constructor() {
@@ -683,7 +684,7 @@ class TitleScene extends Phaser.Scene {
     const H = this.scale.height;
     
     // ═══ 설산 배경: 그라데이션 하늘 ═══
-    this.cameras.main.setBackgroundColor('#0a0a1a');
+    this.cameras.main.setBackgroundColor('#0A0E1A');
     this.skyGfx = this.add.graphics().setDepth(0);
     const skySteps = 40;
     for (let i = 0; i < skySteps; i++) {
@@ -826,21 +827,60 @@ class TitleScene extends Phaser.Scene {
   }
   
   _createButton(x, y, w, h, text, color, callback) {
+    const isOrange = color === 0x2255aa || color === 0xaa44aa;
     const bg = this.add.graphics();
-    bg.fillStyle(color, 0.8);
-    bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 8);
-    bg.lineStyle(2, 0x88aadd, 0.5);
-    bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 8);
+    if (isOrange) {
+      // Orange CTA gradient
+      bg.fillStyle(0xFF6B35, 0.9);
+      bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      bg.fillStyle(0xE65100, 0.5);
+      bg.fillRoundedRect(x - w / 2, y - h / 2 + h * 0.5, w, h * 0.5, { tl: 0, tr: 0, bl: 12, br: 12 });
+    } else {
+      bg.fillStyle(color, 0.8);
+      bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+    }
+    bg.lineStyle(2, isOrange ? 0xFFAA66 : 0x88aadd, 0.5);
+    bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
     
     const txt = this.add.text(x, y, text, {
-      fontSize: '20px', fontFamily: 'monospace', color: '#e0e8ff',
-      stroke: '#000', strokeThickness: 2
+      fontSize: '20px', fontFamily: 'monospace', color: '#fff',
+      stroke: '#000', strokeThickness: 2, fontStyle: 'bold'
     }).setOrigin(0.5);
     
     const hitArea = this.add.rectangle(x, y, w, h, 0x000000, 0).setInteractive({ useHandCursor: true });
-    hitArea.on('pointerover', () => { bg.clear(); bg.fillStyle(color, 1); bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 8); bg.lineStyle(2, 0xaaccff, 0.8); bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 8); });
-    hitArea.on('pointerout', () => { bg.clear(); bg.fillStyle(color, 0.8); bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 8); bg.lineStyle(2, 0x88aadd, 0.5); bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 8); });
-    hitArea.on('pointerdown', callback);
+    hitArea.on('pointerover', () => {
+      bg.clear();
+      if (isOrange) {
+        bg.fillStyle(0xFF8C42, 1);
+        bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+        bg.fillStyle(0xE65100, 0.5);
+        bg.fillRoundedRect(x - w / 2, y - h / 2 + h * 0.5, w, h * 0.5, { tl: 0, tr: 0, bl: 12, br: 12 });
+      } else {
+        bg.fillStyle(color, 1);
+        bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      }
+      bg.lineStyle(2, isOrange ? 0xFFCC88 : 0xaaccff, 0.8);
+      bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+    });
+    hitArea.on('pointerout', () => {
+      bg.clear();
+      if (isOrange) {
+        bg.fillStyle(0xFF6B35, 0.9);
+        bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+        bg.fillStyle(0xE65100, 0.5);
+        bg.fillRoundedRect(x - w / 2, y - h / 2 + h * 0.5, w, h * 0.5, { tl: 0, tr: 0, bl: 12, br: 12 });
+      } else {
+        bg.fillStyle(color, 0.8);
+        bg.fillRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      }
+      bg.lineStyle(2, isOrange ? 0xFFAA66 : 0x88aadd, 0.5);
+      bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+    });
+    hitArea.on('pointerdown', () => {
+      // Scale 0.95 press effect
+      txt.setScale(0.95);
+      this.time.delayedCall(100, () => { txt.setScale(1); callback(); });
+    });
     
     return { bg, txt, hitArea };
   }
@@ -2726,43 +2766,76 @@ class GameScene extends Phaser.Scene {
     // Level up sound
     playLevelUp();
 
-    // Level up effect - enhanced
-    this.cameras.main.flash(400, 255, 215, 0, true);
-    this.cameras.main.shake(300, 0.008);
-    this.showFloatingText(this.player.x, this.player.y - 50, `⬆️ Level ${this.playerLevel}!`, '#FFD700', 1500);
+    // ═══ ENHANCED LEVEL UP EFFECT (Habby 스타일) ═══
+    // 1. 화면 전체 황금색 플래시 (2단계)
+    this.cameras.main.flash(600, 255, 200, 0, true);
+    this.cameras.main.shake(400, 0.012);
 
-    // Golden edge vignette flash
+    // Golden vignette overlay (more dramatic)
     const edgeFlash = this.add.rectangle(this.cameras.main.centerX, this.cameras.main.centerY,
       this.cameras.main.width, this.cameras.main.height, 0xFFD700, 0)
       .setDepth(99).setScrollFactor(0);
-    this.tweens.add({ targets: edgeFlash, alpha: { from: 0.3, to: 0 }, duration: 600, ease: 'Quad.Out',
+    this.tweens.add({ targets: edgeFlash, alpha: { from: 0.5, to: 0 }, duration: 800, ease: 'Quad.Out',
       onComplete: () => edgeFlash.destroy() });
 
-    // Large center text
+    // 2. 레벨 숫자 팝업 (커졌다가 작아지는 애니메이션)
     const lvText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 60,
-      `LEVEL UP! Lv.${this.playerLevel}`, {
-      fontSize: '48px', fontFamily: 'monospace', color: '#FFD700',
-      stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
-    }).setOrigin(0.5).setDepth(100).setScrollFactor(0);
-    this.tweens.add({ targets: lvText, y: lvText.y - 40, alpha: 0, scale: { from: 1.2, to: 0.6 },
-      duration: 2000, ease: 'Quad.Out', onComplete: () => lvText.destroy() });
+      `🎊 레벨 ${this.playerLevel} 달성!`, {
+      fontSize: '52px', fontFamily: 'monospace', color: '#FFD700',
+      stroke: '#000', strokeThickness: 6, fontStyle: 'bold',
+      shadow: { offsetX: 0, offsetY: 0, color: '#FF8C00', blur: 20, fill: true }
+    }).setOrigin(0.5).setDepth(100).setScrollFactor(0).setScale(0.2).setAlpha(0);
+    // Pop in big then settle
+    this.tweens.add({ targets: lvText, scale: 1.4, alpha: 1, duration: 300, ease: 'Back.Out',
+      onComplete: () => {
+        this.tweens.add({ targets: lvText, scale: 1, duration: 200, ease: 'Quad.Out',
+          onComplete: () => {
+            this.tweens.add({ targets: lvText, y: lvText.y - 50, alpha: 0, scale: 0.6,
+              duration: 1500, delay: 300, ease: 'Quad.Out', onComplete: () => lvText.destroy() });
+          }
+        });
+      }
+    });
 
-    // Circular particle burst - enhanced (24 particles, 2 rings)
-    for (let ring = 0; ring < 2; ring++) {
-      const count = ring === 0 ? 16 : 8;
-      const radius = ring === 0 ? 70 : 40;
-      const delay = ring * 100;
+    // Level number pop (big number behind)
+    const bigNum = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 60,
+      `${this.playerLevel}`, {
+      fontSize: '120px', fontFamily: 'monospace', color: '#FFD700',
+      stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(98).setScrollFactor(0).setAlpha(0.3);
+    this.tweens.add({ targets: bigNum, scale: { from: 0.5, to: 3 }, alpha: 0, duration: 1200,
+      ease: 'Quad.Out', onComplete: () => bigNum.destroy() });
+
+    // 3. 파티클 폭발 (3 rings, more particles)
+    for (let ring = 0; ring < 3; ring++) {
+      const count = ring === 0 ? 20 : ring === 1 ? 12 : 8;
+      const radius = ring === 0 ? 90 : ring === 1 ? 55 : 30;
+      const delay = ring * 80;
       for (let i = 0; i < count; i++) {
-        const ang = (Math.PI * 2 / count) * i + ring * 0.2;
-        const colors = [0xFFFFFF, 0xFFD700, 0xFFF8DC, 0xFFAA00];
-        const p = this.add.circle(this.player.x, this.player.y, ring === 0 ? 5 : 3, Phaser.Utils.Array.GetRandom(colors))
+        const ang = (Math.PI * 2 / count) * i + ring * 0.3;
+        const colors = [0xFFFFFF, 0xFFD700, 0xFFF8DC, 0xFFAA00, 0xFF6B35];
+        const size = ring === 0 ? 6 : ring === 1 ? 4 : 3;
+        const p = this.add.circle(this.player.x, this.player.y, size, Phaser.Utils.Array.GetRandom(colors))
           .setDepth(15).setAlpha(0.9);
         this.tweens.add({ targets: p, delay,
           x: this.player.x + Math.cos(ang) * radius,
           y: this.player.y + Math.sin(ang) * radius,
-          alpha: 0, scale: { from: 1.8, to: 0 }, duration: 900, ease: 'Quad.Out',
+          alpha: 0, scale: { from: 2, to: 0 }, duration: 1000, ease: 'Quad.Out',
           onComplete: () => p.destroy() });
       }
+    }
+
+    // Sparkle trail particles
+    for (let i = 0; i < 10; i++) {
+      this.time.delayedCall(i * 60, () => {
+        const sp = this.add.image(
+          this.player.x + Phaser.Math.Between(-50, 50),
+          this.player.y + Phaser.Math.Between(-50, 50),
+          'sparkle'
+        ).setScrollFactor(1).setDepth(16).setScale(2).setTint(0xFFD700);
+        this.tweens.add({ targets: sp, alpha: 0, scale: 0, y: sp.y - 40,
+          duration: 600 + Math.random() * 400, onComplete: () => sp.destroy() });
+      });
     }
 
     // Show upgrade card selection
@@ -3698,6 +3771,14 @@ class GameScene extends Phaser.Scene {
     bind('btn-hire', () => scene.toggleHireMenu());
     bind('btn-inv', () => scene.toggleInventoryMenu());
     bind('btn-eat', () => scene.interactNearest());
+    // Button bounce animation
+    document.querySelectorAll('#bottom-buttons button').forEach(btn => {
+      btn.addEventListener('pointerdown', () => {
+        btn.classList.remove('btn-bouncing');
+        void btn.offsetWidth;
+        btn.classList.add('btn-bouncing');
+      });
+    });
     bind('btn-sound', () => {
       soundEnabled = !soundEnabled;
       if (!soundEnabled) { stopFire(); stopBGM(); _bgmStarted=false; }
@@ -3825,12 +3906,12 @@ class GameScene extends Phaser.Scene {
     
     const hpR = Math.max(0, Math.min(1, this.playerHP/this.playerMaxHP));
     d.hpFill.style.width = (hpR*100)+'%';
-    d.hpFill.style.background = hpR>0.6?'#4CAF50':hpR>0.3?'#FFCC00':'#F44336';
+    d.hpFill.className = hpR > 0.6 ? 'bar-f hp-safe' : hpR > 0.3 ? 'bar-f hp-warn' : 'bar-f hp-danger';
     d.hpText.textContent = Math.ceil(Math.max(0,this.playerHP))+'/'+this.playerMaxHP;
     
     const tempR = Math.max(0, Math.min(1, this.temperature/this.maxTemp));
     d.tempFill.style.width = (tempR*100)+'%';
-    d.tempFill.style.background = tempR > 0.4 ? '#2196F3' : tempR > 0.15 ? '#FF9800' : '#F44336';
+    d.tempFill.className = tempR > 0.4 ? 'bar-f' : tempR > 0.15 ? 'bar-f temp-warn' : 'bar-f temp-danger';
     const tempLabel = this.blizzardActive ? `${Math.ceil(this.temperature)}% ❄️위험!` : `${Math.ceil(this.temperature)}%`;
     d.tempText.textContent = tempLabel;
     
@@ -3849,6 +3930,7 @@ class GameScene extends Phaser.Scene {
       const req = this._getXPRequired(this.playerLevel);
       const xpR = Math.min(1, this.playerXP / req);
       d.xpFill.style.width = (xpR * 100) + '%';
+      d.xpFill.className = xpR > 0.8 ? 'xp-near-levelup' : '';
       d.xpText.textContent = `Lv${this.playerLevel} · ${Math.floor(this.playerXP)}/${req} XP`;
     }
 
@@ -3980,12 +4062,12 @@ class GameScene extends Phaser.Scene {
     // Container for all UI elements
     const uiElements = [];
 
-    // Dark overlay
+    // Dark overlay (다크네이비 반투명)
     const overlay = this.add.graphics().setScrollFactor(0).setDepth(300);
-    overlay.fillStyle(0x000000, 0).fillRect(0, 0, W, H);
+    overlay.fillStyle(0x0A0E1A, 0).fillRect(0, 0, W, H);
     uiElements.push(overlay);
-    this.tweens.add({ targets: { v: 0 }, v: 0.75, duration: 300,
-      onUpdate: (_, t) => { overlay.clear(); overlay.fillStyle(0x000000, t.v); overlay.fillRect(0, 0, W, H); }
+    this.tweens.add({ targets: { v: 0 }, v: 0.88, duration: 300,
+      onUpdate: (_, t) => { overlay.clear(); overlay.fillStyle(0x0A0E1A, t.v); overlay.fillRect(0, 0, W, H); }
     });
 
     // Title
@@ -4034,22 +4116,32 @@ class GameScene extends Phaser.Scene {
       }).setScrollFactor(0).setDepth(303).setOrigin(0.5);
       uiElements.push(cardBack, qmark);
 
+      // Grade-specific border color
+      const gradeColorMap = { common: 0x9E9E9E, rare: 0x2196F3, epic: 0x9C27B0 };
+      const gradeColor = gradeColorMap[upgrade.rarity] || 0x9E9E9E;
+      const gradeGlowAlpha = upgrade.rarity === 'epic' ? 0.6 : upgrade.rarity === 'rare' ? 0.4 : 0.2;
+
       // Card front (hidden initially)
       const cardGfx = this.add.graphics().setScrollFactor(0).setDepth(304).setAlpha(0);
-      // Background
-      cardGfx.fillStyle(0x1a1a2e, 0.95);
-      cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
-      // Category color border
-      cardGfx.lineStyle(3, cat.bgColor, 1);
-      cardGfx.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
+      // Outer glow (grade color)
+      if (upgrade.rarity !== 'common') {
+        cardGfx.lineStyle(4, gradeColor, gradeGlowAlpha);
+        cardGfx.strokeRoundedRect(cx - cardW / 2 - 4, cy - cardH / 2 - 4, cardW + 8, cardH + 8, 16);
+      }
+      // Background (다크네이비)
+      cardGfx.fillStyle(0x0D1B2A, 0.95);
+      cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 14);
+      // Grade color border
+      cardGfx.lineStyle(3, gradeColor, 1);
+      cardGfx.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 14);
       // Top color band
       cardGfx.fillStyle(cat.bgColor, 0.3);
-      cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, 50, { tl: 12, tr: 12, bl: 0, br: 0 });
-      // Rarity glow for epic
-      if (upgrade.rarity === 'epic') {
-        cardGfx.lineStyle(2, 0xAA44FF, 0.6);
-        cardGfx.strokeRoundedRect(cx - cardW / 2 - 3, cy - cardH / 2 - 3, cardW + 6, cardH + 6, 14);
-      }
+      cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, 50, { tl: 14, tr: 14, bl: 0, br: 0 });
+      // Icon circle background (등급색 테두리)
+      cardGfx.fillStyle(0x152238, 1);
+      cardGfx.fillCircle(cx, cy - cardH / 2 + 30, 22);
+      cardGfx.lineStyle(2, gradeColor, 0.8);
+      cardGfx.strokeCircle(cx, cy - cardH / 2 + 30, 22);
       uiElements.push(cardGfx);
 
       // Card content texts (hidden initially)
@@ -4124,27 +4216,43 @@ class GameScene extends Phaser.Scene {
       const zone = this.add.zone(cx, cy, cardW, cardH).setScrollFactor(0).setDepth(310).setInteractive();
       uiElements.push(zone);
 
-      // Hover effect
+      // Hover effect (살짝 위로 이동 + 밝아짐)
       zone.on('pointerover', () => {
         if (cardGfx.alpha > 0) {
+          // Move card up slightly
+          frontElements.forEach(el => { if (el.y !== undefined) el.y -= 5; });
           cardGfx.clear();
-          cardGfx.fillStyle(0x2a2a4e, 0.95);
-          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
-          cardGfx.lineStyle(4, cat.bgColor, 1);
-          cardGfx.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
-          cardGfx.fillStyle(cat.bgColor, 0.4);
-          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, 50, { tl: 12, tr: 12, bl: 0, br: 0 });
+          if (upgrade.rarity !== 'common') {
+            cardGfx.lineStyle(5, gradeColor, gradeGlowAlpha + 0.2);
+            cardGfx.strokeRoundedRect(cx - cardW / 2 - 4, cy - cardH / 2 - 9, cardW + 8, cardH + 8, 16);
+          }
+          cardGfx.fillStyle(0x1B2838, 0.98);
+          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2 - 5, cardW, cardH, 14);
+          cardGfx.lineStyle(4, gradeColor, 1);
+          cardGfx.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2 - 5, cardW, cardH, 14);
+          cardGfx.fillStyle(cat.bgColor, 0.5);
+          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2 - 5, cardW, 50, { tl: 14, tr: 14, bl: 0, br: 0 });
+          cardGfx.fillStyle(0x152238, 1); cardGfx.fillCircle(cx, cy - cardH / 2 + 25, 22);
+          cardGfx.lineStyle(2, gradeColor, 1); cardGfx.strokeCircle(cx, cy - cardH / 2 + 25, 22);
         }
       });
       zone.on('pointerout', () => {
         if (cardGfx.alpha > 0) {
+          // Move card back
+          frontElements.forEach(el => { if (el.y !== undefined) el.y += 5; });
           cardGfx.clear();
-          cardGfx.fillStyle(0x1a1a2e, 0.95);
-          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
-          cardGfx.lineStyle(3, cat.bgColor, 1);
-          cardGfx.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 12);
+          if (upgrade.rarity !== 'common') {
+            cardGfx.lineStyle(4, gradeColor, gradeGlowAlpha);
+            cardGfx.strokeRoundedRect(cx - cardW / 2 - 4, cy - cardH / 2 - 4, cardW + 8, cardH + 8, 16);
+          }
+          cardGfx.fillStyle(0x0D1B2A, 0.95);
+          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 14);
+          cardGfx.lineStyle(3, gradeColor, 1);
+          cardGfx.strokeRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 14);
           cardGfx.fillStyle(cat.bgColor, 0.3);
-          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, 50, { tl: 12, tr: 12, bl: 0, br: 0 });
+          cardGfx.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, 50, { tl: 14, tr: 14, bl: 0, br: 0 });
+          cardGfx.fillStyle(0x152238, 1); cardGfx.fillCircle(cx, cy - cardH / 2 + 30, 22);
+          cardGfx.lineStyle(2, gradeColor, 0.8); cardGfx.strokeCircle(cx, cy - cardH / 2 + 30, 22);
         }
       });
 
