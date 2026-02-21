@@ -4769,6 +4769,24 @@ class GameScene extends Phaser.Scene {
     this._iceBolts = [];
     this._playerSlowed = false;
     this._shamanHintShown = false;
+
+    // ═══ PERF: Object Pooling ═══
+    this._particlePool = [];
+    this._particlePoolMax = 200;
+    this._textPool = [];
+    this._textPoolMax = 20;
+    this._frameCount = 0;
+    this._timerIds = []; // track setTimeout/setInterval for cleanup
+
+    // ═══ PERF: FPS Debug Counter ═══
+    if (new URLSearchParams(window.location.search).get('debug') === '1') {
+      this._debugFPS = true;
+      this._fpsText = this.add.text(10, 10, 'FPS: --', { fontSize: '12px', fontFamily: 'monospace', color: '#00FF00', stroke: '#000', strokeThickness: 2 }).setScrollFactor(0).setDepth(999);
+      this._fpsHistory = [];
+      this._fpsLastTime = performance.now();
+      this._fpsFrameCount = 0;
+      this._fpsSpikeCount = 0;
+    }
     this.drops = this.physics.add.group();
     this.npcSprites = this.physics.add.group();
     this.resourceNodes = [];
@@ -5369,10 +5387,11 @@ class GameScene extends Phaser.Scene {
     const pCount = isCrit ? 10 : 5;
     const pColor = isCrit ? 0xFF8800 : null;
     for (let i = 0; i < pCount; i++) {
-      const p = this.add.image(a.x, a.y, 'hit_particle').setDepth(15).setScale(Phaser.Math.FloatBetween(0.5, isCrit ? 1.8 : 1.2));
+      const p = this.getParticle(a.x, a.y, 'hit_particle');
+      p.setScale(Phaser.Math.FloatBetween(0.5, isCrit ? 1.8 : 1.2));
       if (pColor) p.setTint(pColor);
       this.tweens.add({ targets: p, x: a.x + Phaser.Math.Between(-40, 40), y: a.y + Phaser.Math.Between(-40, 40),
-        alpha: 0, scale: 0, duration: isCrit ? 400 : 300, onComplete: () => p.destroy() });
+        alpha: 0, scale: 0, duration: isCrit ? 400 : 300, onComplete: () => this.returnParticle(p) });
     }
     // White flash on knockback
     const whiteFlash = this.add.circle(a.x, a.y, 12, 0xFFFFFF, 0.7).setDepth(15);
@@ -6893,6 +6912,11 @@ class GameScene extends Phaser.Scene {
     bolt._vy = Math.sin(ang) * 200;
     bolt._life = 3;
     this._iceBolts.push(bolt);
+    // PERF: limit ice bolts array
+    while (this._iceBolts.length > 50) {
+      const old = this._iceBolts.shift();
+      old.destroy();
+    }
   }
 
   _updateIceBolts(dt) {
@@ -6932,7 +6956,14 @@ class GameScene extends Phaser.Scene {
 
   updateAnimalAI(dt) {
     const px = this.player.x, py = this.player.y;
-    this.animals.getChildren().forEach(a => {
+    const cam = this.cameras.main;
+    const camL = cam.scrollX - 100, camR = cam.scrollX + cam.width + 100;
+    const camT = cam.scrollY - 100, camB = cam.scrollY + cam.height + 100;
+    const animalChildren = this.animals.getChildren();
+    const animalCount = animalChildren.length;
+    const useAlternating = animalCount > 50;
+    this._frameCount = (this._frameCount || 0) + 1;
+    animalChildren.forEach((a, idx) => {
       if (!a.active) return;
       // Boss cinematic freeze
       if (a._cinematicFreeze) { if (a.body) a.body.setVelocity(0, 0); return; }
@@ -6942,6 +6973,11 @@ class GameScene extends Phaser.Scene {
         if (a.hp > 0 && a.maxHP && a.hp / a.maxHP <= 0.2) { a.setTint(0xFF2222); a.setAlpha(0.7 + Math.sin(Date.now() * 0.01) * 0.3); }
       } }
       const dist = Phaser.Math.Distance.Between(a.x, a.y, px, py);
+      // PERF: off-screen non-boss enemies skip detailed AI (still update atkCD/hitFlash above)
+      const onScreen = a.x >= camL && a.x <= camR && a.y >= camT && a.y <= camB;
+      if (!onScreen && !a.isBoss && dist > 500) return;
+      // PERF: alternating frame AI for large enemy counts
+      if (useAlternating && !a.isBoss && idx % 2 !== this._frameCount % 2 && dist > 200) return;
 
       // Campfire/wall repel
       let repelled = false;
@@ -6998,18 +7034,20 @@ class GameScene extends Phaser.Scene {
         }
         // ═══ Blizzard Shaman: flee + buff nearby enemies ═══
         else if (a.def.behavior === 'shaman') {
-          // Buff nearby enemies: speed +20%
-          this.animals.getChildren().forEach(b => {
-            if (b === a || !b.active || b.animalType === 'blizzard_shaman') return;
-            const bd = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
-            if (bd < 300) {
-              if (!b._shamanBuffed) {
-                b._shamanBuffed = true;
-                b._shamanBuffSource = a;
-                b._origSpeed = b.def.speed;
+          // PERF: Buff nearby enemies only every 10 frames
+          if (this._frameCount % 10 === 0) {
+            this.animals.getChildren().forEach(b => {
+              if (b === a || !b.active || b.animalType === 'blizzard_shaman') return;
+              const bd = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
+              if (bd < 300) {
+                if (!b._shamanBuffed) {
+                  b._shamanBuffed = true;
+                  b._shamanBuffSource = a;
+                  b._origSpeed = b.def.speed;
+                }
               }
-            }
-          });
+            });
+          }
           // Flee from player
           if (dist < a.def.fleeRange) {
             const ang = Phaser.Math.Angle.Between(px, py, a.x, a.y);
@@ -7585,14 +7623,43 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ═══ PERF: Object Pool Methods ═══
+  getParticle(x, y, texture) {
+    let p = this._particlePool.find(pp => !pp.visible);
+    if (p) {
+      p.setPosition(x, y).setTexture(texture).setVisible(true).setActive(true).setAlpha(1).setScale(1).clearTint();
+      return p;
+    }
+    p = this.add.image(x, y, texture).setDepth(15);
+    if (this._particlePool.length < this._particlePoolMax) this._particlePool.push(p);
+    return p;
+  }
+  returnParticle(p) {
+    if (p) { p.setVisible(false).setActive(false); }
+  }
+  getPooledText(x, y, text, style) {
+    let t = this._textPool.find(tt => !tt.visible);
+    if (t) {
+      t.setPosition(x, y).setText(text).setStyle(style).setVisible(true).setActive(true).setAlpha(1).setScale(1).setOrigin(0.5);
+      return t;
+    }
+    t = this.add.text(x, y, text, style).setDepth(20).setOrigin(0.5);
+    if (this._textPool.length < this._textPoolMax) this._textPool.push(t);
+    return t;
+  }
+  returnPooledText(t) {
+    if (t) { t.setVisible(false).setActive(false); }
+  }
+
   showFloatingText(x, y, text, color, sizeOverride) {
     // Consistent text hierarchy: detect type by content
     let fontSize = sizeOverride || 14;
     let fontStyle = '';
     if (text.includes('CRITICAL') || text.includes('💥')) { fontSize = 20; fontStyle = 'bold'; }
     else if (text.includes('레벨') || text.includes('🎊')) { fontSize = 24; fontStyle = 'bold'; }
-    const t = this.add.text(x, y, text, {fontSize:fontSize+'px',fontFamily:'monospace',color:color,stroke:'#000',strokeThickness:3,fontStyle:fontStyle}).setDepth(20).setOrigin(0.5);
-    this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+    const style = {fontSize:fontSize+'px',fontFamily:'monospace',color:color,stroke:'#000',strokeThickness:3,fontStyle:fontStyle};
+    const t = this.getPooledText(x, y, text, style);
+    this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => this.returnPooledText(t) });
   }
 
   createVirtualJoystick() {
@@ -7771,6 +7838,15 @@ class GameScene extends Phaser.Scene {
       this._fogMask = null;
       // Cleanup speedrun HUD
       if (this._speedrunTimerText) { this._speedrunTimerText.destroy(); this._speedrunTimerText = null; }
+      // PERF: cleanup ice bolts
+      if (this._iceBolts) { this._iceBolts.forEach(b => b.destroy()); this._iceBolts = []; }
+      // PERF: cleanup pooled objects
+      if (this._particlePool) { this._particlePool.forEach(p => p.destroy()); this._particlePool = []; }
+      if (this._textPool) { this._textPool.forEach(t => t.destroy()); this._textPool = []; }
+      // PERF: clear tracked timers
+      if (this._timerIds) { this._timerIds.forEach(id => { clearTimeout(id); clearInterval(id); }); this._timerIds = []; }
+      // PERF: cleanup debug FPS
+      if (this._fpsText) { this._fpsText.destroy(); this._fpsText = null; }
       // Stop audio on scene exit
       stopBGM(); stopWindAmbience();
     });
@@ -11076,6 +11152,23 @@ class GameScene extends Phaser.Scene {
     this.checkQuests();
     this._checkNewQuests();
     this.updateUI();
+
+    // ═══ PERF: FPS Debug Counter ═══
+    if (this._debugFPS) {
+      this._fpsFrameCount++;
+      const now = performance.now();
+      const elapsed = now - this._fpsLastTime;
+      if (elapsed >= 1000) {
+        const fps = Math.round(this._fpsFrameCount * 1000 / elapsed);
+        this._fpsHistory.push(fps);
+        if (this._fpsHistory.length > 60) this._fpsHistory.shift();
+        const avg = Math.round(this._fpsHistory.reduce((a,b) => a+b, 0) / this._fpsHistory.length);
+        if (fps < 30) this._fpsSpikeCount++;
+        this._fpsText.setText(`FPS: ${fps} | Avg: ${avg} | Spikes: ${this._fpsSpikeCount}\nEnemies: ${this.animals.getChildren().length} | Bolts: ${this._iceBolts.length}`);
+        this._fpsFrameCount = 0;
+        this._fpsLastTime = now;
+      }
+    }
   }
 
   // ═══ 🏆 ACHIEVEMENT METHODS ═══
