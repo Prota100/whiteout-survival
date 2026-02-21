@@ -4937,6 +4937,16 @@ class GameScene extends Phaser.Scene {
 
     this.campfireGlow = this.add.graphics().setDepth(1);
 
+    // ═══ 🌍 WORLD OBJECTS ═══
+    this._worldObjects = { campfires: [], crates: [], iceWalls: [], flares: [] };
+    this._flareXpBuff = 0; // remaining seconds of 2x XP
+    this._worldObjCrateTimer = 0; // timer for periodic crate spawn
+    this._worldObjFlareTimer = Phaser.Math.Between(300, 420); // 5~7 min first flare
+    this._campfireHudText = null;
+    this._flareHudText = null;
+    this._flareAura = null;
+    this._spawnWorldObjects();
+
     // Cold wave blue overlay (screen-space)
     this.coldWaveOverlay = this.add.graphics().setScrollFactor(0).setDepth(60).setAlpha(0);
 
@@ -6294,6 +6304,8 @@ class GameScene extends Phaser.Scene {
     if (this._diffMode) amount = Math.round(amount * this._diffMode.xpMul);
     if (this._equipBonuses && this._equipBonuses.xpMul > 0) amount = Math.round(amount * (1 + this._equipBonuses.xpMul));
     if (this._shamanXpMul) amount = Math.round(amount * this._shamanXpMul);
+    // Signal Flare: XP double
+    if (this._flareXpBuff > 0) amount = Math.round(amount * 2);
     // Random event: XP triple
     if (this.activeRandomEvents && this.activeRandomEvents.xp_triple) amount = Math.round(amount * 3);
     // Random event: Combo XP (3x for next N kills)
@@ -7966,6 +7978,16 @@ class GameScene extends Phaser.Scene {
       this._fogMask = null;
       // Cleanup speedrun HUD
       if (this._speedrunTimerText) { this._speedrunTimerText.destroy(); this._speedrunTimerText = null; }
+      // PERF: cleanup world objects
+      if (this._worldObjects) {
+        ['campfires','crates','iceWalls','flares'].forEach(k => {
+          if (this._worldObjects[k]) this._worldObjects[k].forEach(o => { if(o.gfx) o.gfx.destroy(); if(o.particles) o.particles.forEach(p=>p.destroy()); });
+          this._worldObjects[k] = [];
+        });
+      }
+      if (this._campfireHudText) { this._campfireHudText.destroy(); this._campfireHudText = null; }
+      if (this._flareHudText) { this._flareHudText.destroy(); this._flareHudText = null; }
+      if (this._flareAura) { this._flareAura.destroy(); this._flareAura = null; }
       // PERF: cleanup ice bolts
       if (this._iceBolts) { this._iceBolts.forEach(b => b.destroy()); this._iceBolts = []; }
       // PERF: cleanup pooled objects
@@ -11307,6 +11329,9 @@ class GameScene extends Phaser.Scene {
     this._checkNewQuests();
     this.updateUI();
 
+    // ═══ 🌍 WORLD OBJECTS UPDATE ═══
+    this._updateWorldObjects(dt);
+
     // ═══ PERF: FPS Debug Counter ═══
     if (this._debugFPS) {
       this._fpsFrameCount++;
@@ -11321,6 +11346,255 @@ class GameScene extends Phaser.Scene {
         this._fpsText.setText(`FPS: ${fps} | Avg: ${avg} | Spikes: ${this._fpsSpikeCount}\nEnemies: ${this.animals.getChildren().length} | Bolts: ${this._iceBolts.length}`);
         this._fpsFrameCount = 0;
         this._fpsLastTime = now;
+      }
+    }
+  }
+
+  // ═══ 🌍 WORLD OBJECTS METHODS ═══
+  _spawnWorldObjects() {
+    const margin = 120;
+    const rndPos = () => ({ x: Phaser.Math.Between(margin, WORLD_W - margin), y: Phaser.Math.Between(margin, WORLD_H - margin) });
+
+    // 🔥 Campfires (4~6)
+    const campCount = Phaser.Math.Between(4, 6);
+    for (let i = 0; i < campCount; i++) {
+      const pos = rndPos();
+      const gfx = this.add.graphics().setDepth(3);
+      // Draw campfire base (orange circle)
+      gfx.fillStyle(0xFF6600, 0.8);
+      gfx.fillCircle(pos.x, pos.y, 10);
+      gfx.fillStyle(0xFF8800, 0.4);
+      gfx.fillCircle(pos.x, pos.y, 18);
+      const particles = [];
+      this._worldObjects.campfires.push({ x: pos.x, y: pos.y, gfx, particles, _particleTimer: 0 });
+    }
+
+    // 📦 Supply Crates (3~5)
+    const crateCount = Phaser.Math.Between(3, 5);
+    for (let i = 0; i < crateCount; i++) this._spawnCrate();
+
+    // ❄️ Ice Walls (8~12)
+    const wallCount = Phaser.Math.Between(8, 12);
+    for (let i = 0; i < wallCount; i++) {
+      const pos = rndPos();
+      const w = Phaser.Math.Between(40, 70), h = Phaser.Math.Between(15, 25);
+      const gfx = this.add.graphics().setDepth(3);
+      gfx.fillStyle(0x66BBFF, 0.45);
+      gfx.fillRoundedRect(pos.x - w/2, pos.y - h/2, w, h, 4);
+      gfx.lineStyle(1, 0xAADDFF, 0.7);
+      gfx.strokeRoundedRect(pos.x - w/2, pos.y - h/2, w, h, 4);
+      this._worldObjects.iceWalls.push({ x: pos.x, y: pos.y, w, h, hp: 50, maxHp: 50, gfx, particles: [] });
+    }
+  }
+
+  _spawnCrate() {
+    const margin = 120;
+    const pos = { x: Phaser.Math.Between(margin, WORLD_W - margin), y: Phaser.Math.Between(margin, WORLD_H - margin) };
+    const gfx = this.add.graphics().setDepth(3);
+    // Brown box with lid
+    gfx.fillStyle(0x8B5E3C, 0.9);
+    gfx.fillRect(pos.x - 12, pos.y - 8, 24, 16);
+    gfx.fillStyle(0x6B3E1C, 0.9);
+    gfx.fillRect(pos.x - 14, pos.y - 10, 28, 6);
+    gfx.lineStyle(1, 0xFFD700, 0.6);
+    gfx.strokeRect(pos.x - 12, pos.y - 8, 24, 16);
+    this._worldObjects.crates.push({ x: pos.x, y: pos.y, gfx, particles: [] });
+  }
+
+  _spawnFlare() {
+    const margin = 150;
+    const pos = { x: Phaser.Math.Between(margin, WORLD_W - margin), y: Phaser.Math.Between(margin, WORLD_H - margin) };
+    const gfx = this.add.graphics().setDepth(4);
+    // Red triangle
+    gfx.fillStyle(0xFF2222, 0.9);
+    gfx.fillTriangle(pos.x, pos.y - 10, pos.x - 7, pos.y + 6, pos.x + 7, pos.y + 6);
+    this._worldObjects.flares.push({ x: pos.x, y: pos.y, gfx, particles: [], _bob: 0 });
+  }
+
+  _updateWorldObjects(dt) {
+    if (!this._worldObjects || !this.player || !this.player.active) return;
+    const px = this.player.x, py = this.player.y;
+
+    // 🔥 Campfires
+    let nearCampfire = false;
+    for (const cf of this._worldObjects.campfires) {
+      const dist = Phaser.Math.Distance.Between(px, py, cf.x, cf.y);
+      if (dist < 80) {
+        nearCampfire = true;
+        const healRate = this.blizzardActive ? 6 : 3;
+        this.playerHP = Math.min(this.playerMaxHP, this.playerHP + healRate * dt);
+      }
+      // Fire particles
+      cf._particleTimer -= dt;
+      if (cf._particleTimer <= 0) {
+        cf._particleTimer = 0.15;
+        const colors = [0xFFCC00, 0xFF8800, 0xFF5500];
+        const p = this.add.circle(
+          cf.x + Phaser.Math.Between(-6, 6),
+          cf.y + Phaser.Math.Between(-4, 2),
+          Phaser.Math.Between(2, 4),
+          Phaser.Math.RND.pick(colors), 0.8
+        ).setDepth(4);
+        this.tweens.add({ targets: p, y: p.y - Phaser.Math.Between(12, 25), alpha: 0, scale: 0.2, duration: Phaser.Math.Between(400, 700), onComplete: () => p.destroy() });
+      }
+    }
+    // HUD for campfire
+    if (nearCampfire) {
+      if (!this._campfireHudText) {
+        const healLabel = this.blizzardActive ? '+6HP/s' : '+3HP/s';
+        this._campfireHudText = this.add.text(this.scale.width / 2, this.scale.height - 60, '🔥 온기 ' + healLabel, {
+          fontSize: '16px', fontFamily: 'monospace', color: '#FFB347', stroke: '#000', strokeThickness: 3
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
+      } else {
+        this._campfireHudText.setText('🔥 온기 ' + (this.blizzardActive ? '+6HP/s' : '+3HP/s'));
+      }
+    } else if (this._campfireHudText) {
+      this._campfireHudText.destroy();
+      this._campfireHudText = null;
+    }
+
+    // 📦 Supply Crates
+    for (let i = this._worldObjects.crates.length - 1; i >= 0; i--) {
+      const cr = this._worldObjects.crates[i];
+      const dist = Phaser.Math.Distance.Between(px, py, cr.x, cr.y);
+      if (dist < 50) {
+        // Open crate
+        const roll = Math.random();
+        if (roll < 0.7) {
+          // Meat +30 HP
+          this.playerHP = Math.min(this.playerMaxHP, this.playerHP + 30);
+          this.showFloatingText(cr.x, cr.y - 20, '🥩 HP+30', '#FF8855');
+        } else if (roll < 0.9) {
+          // Equipment drop
+          const drop = EquipmentManager.rollDrop(0);
+          if (drop && drop.grade && drop.itemId) {
+            const equipped = this.equipmentManager.tryEquip(drop.slot, drop.itemId, drop.grade);
+            if (equipped) {
+              this.showFloatingText(cr.x, cr.y - 20, (drop.icon||'⚔️') + ' ' + (drop.name||'장비') + ' 장착!', EQUIP_GRADE_COLORS[drop.grade] || '#9E9E9E');
+              this._equipBonuses = this.equipmentManager.getTotalBonuses();
+              this._updateEquipHUD();
+            } else {
+              this.equipmentManager.addToInventory(drop.slot, drop.itemId, drop.grade);
+              this.showFloatingText(cr.x, cr.y - 20, (drop.icon||'⚔️') + ' 보관', '#AAAAAA');
+            }
+          } else {
+            this.playerHP = Math.min(this.playerMaxHP, this.playerHP + 30);
+            this.showFloatingText(cr.x, cr.y - 20, '🥩 HP+30', '#FF8855');
+          }
+        } else {
+          // Meta points +3
+          const meta = MetaManager.load();
+          meta.totalPoints += 3;
+          MetaManager.save(meta);
+          this.showFloatingText(cr.x, cr.y - 20, '⭐ 메타포인트 +3', '#FFD700');
+        }
+        // Golden particles
+        for (let p = 0; p < 8; p++) {
+          const spark = this.add.circle(cr.x + Phaser.Math.Between(-10, 10), cr.y + Phaser.Math.Between(-10, 10), 3, 0xFFD700, 0.9).setDepth(5);
+          this.tweens.add({ targets: spark, x: spark.x + Phaser.Math.Between(-30, 30), y: spark.y - Phaser.Math.Between(15, 35), alpha: 0, duration: 600, onComplete: () => spark.destroy() });
+        }
+        playCoin();
+        cr.gfx.destroy();
+        this._worldObjects.crates.splice(i, 1);
+      }
+    }
+    // Periodic crate spawn (every 10 min)
+    this._worldObjCrateTimer += dt;
+    if (this._worldObjCrateTimer >= 600 && this._worldObjects.crates.length < 8) {
+      this._worldObjCrateTimer = 0;
+      this._spawnCrate();
+    }
+
+    // ❄️ Ice Walls — enemy collision
+    const animals = this.animals.getChildren();
+    for (let wi = this._worldObjects.iceWalls.length - 1; wi >= 0; wi--) {
+      const wall = this._worldObjects.iceWalls[wi];
+      const wl = wall.x - wall.w/2, wr = wall.x + wall.w/2, wt = wall.y - wall.h/2, wb = wall.y + wall.h/2;
+      for (const a of animals) {
+        if (!a.active || !a.body) continue;
+        const ax = a.x, ay = a.y;
+        // Simple AABB overlap check
+        if (ax > wl - 12 && ax < wr + 12 && ay > wt - 12 && ay < wb + 12) {
+          // Push enemy away from wall
+          const ang = Phaser.Math.Angle.Between(wall.x, wall.y, ax, ay);
+          a.x += Math.cos(ang) * 3;
+          a.y += Math.sin(ang) * 3;
+          // Enemy attacks wall
+          if (!a._wallAttackCD) a._wallAttackCD = 0;
+          a._wallAttackCD -= dt;
+          if (a._wallAttackCD <= 0) {
+            a._wallAttackCD = 1;
+            wall.hp -= (a.def && a.def.damage ? a.def.damage : 5);
+          }
+        }
+      }
+      // Redraw wall based on HP
+      if (wall.hp <= 0) {
+        // Destroy with ice shard particles
+        for (let p = 0; p < 6; p++) {
+          const shard = this.add.circle(wall.x + Phaser.Math.Between(-15, 15), wall.y + Phaser.Math.Between(-8, 8), Phaser.Math.Between(2, 5), 0x88CCFF, 0.8).setDepth(5);
+          this.tweens.add({ targets: shard, x: shard.x + Phaser.Math.Between(-40, 40), y: shard.y + Phaser.Math.Between(-30, 30), alpha: 0, duration: 500, onComplete: () => shard.destroy() });
+        }
+        wall.gfx.destroy();
+        this._worldObjects.iceWalls.splice(wi, 1);
+      } else {
+        // Update opacity based on remaining HP
+        const ratio = wall.hp / wall.maxHp;
+        wall.gfx.clear();
+        wall.gfx.fillStyle(0x66BBFF, 0.45 * ratio);
+        wall.gfx.fillRoundedRect(wall.x - wall.w/2, wall.y - wall.h/2, wall.w, wall.h, 4);
+        wall.gfx.lineStyle(1, 0xAADDFF, 0.7 * ratio);
+        wall.gfx.strokeRoundedRect(wall.x - wall.w/2, wall.y - wall.h/2, wall.w, wall.h, 4);
+      }
+    }
+
+    // 🧲 Signal Flares
+    this._worldObjFlareTimer -= dt;
+    if (this._worldObjFlareTimer <= 0 && this._worldObjects.flares.length < 2) {
+      this._worldObjFlareTimer = Phaser.Math.Between(300, 420);
+      this._spawnFlare();
+    }
+    for (let i = this._worldObjects.flares.length - 1; i >= 0; i--) {
+      const fl = this._worldObjects.flares[i];
+      // Bob animation
+      fl._bob += dt * 2;
+      fl.gfx.clear();
+      const bobY = Math.sin(fl._bob) * 4;
+      const alpha = 0.6 + Math.sin(fl._bob * 1.5) * 0.3;
+      fl.gfx.fillStyle(0xFF2222, alpha);
+      fl.gfx.fillTriangle(fl.x, fl.y - 10 + bobY, fl.x - 7, fl.y + 6 + bobY, fl.x + 7, fl.y + 6 + bobY);
+
+      const dist = Phaser.Math.Distance.Between(px, py, fl.x, fl.y);
+      if (dist < 50) {
+        // Activate 2x XP for 30s
+        this._flareXpBuff = 30;
+        this.showFloatingText(fl.x, fl.y - 20, '🧲 XP 2배! 30초', '#FF6600');
+        fl.gfx.destroy();
+        this._worldObjects.flares.splice(i, 1);
+      }
+    }
+
+    // Flare XP buff countdown
+    if (this._flareXpBuff > 0) {
+      this._flareXpBuff -= dt;
+      // Orange aura around player
+      if (!this._flareAura) {
+        this._flareAura = this.add.graphics().setDepth(9);
+      }
+      this._flareAura.clear();
+      this._flareAura.lineStyle(2, 0xFF8800, 0.4 + Math.sin(Date.now() * 0.005) * 0.2);
+      this._flareAura.strokeCircle(px, py, 30);
+      // HUD countdown
+      if (!this._flareHudText) {
+        this._flareHudText = this.add.text(this.scale.width / 2, this.scale.height - 80, '', {
+          fontSize: '14px', fontFamily: 'monospace', color: '#FF8800', stroke: '#000', strokeThickness: 3
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
+      }
+      this._flareHudText.setText('🧲 XP 2배 ' + Math.ceil(this._flareXpBuff) + '초');
+      if (this._flareXpBuff <= 0) {
+        this._flareXpBuff = 0;
+        if (this._flareAura) { this._flareAura.destroy(); this._flareAura = null; }
+        if (this._flareHudText) { this._flareHudText.destroy(); this._flareHudText = null; }
       }
     }
   }
