@@ -1247,6 +1247,32 @@ const RECIPES = {
   boots:      { name: '가죽 장화', cost: { leather: 5 }, effect: 'speed', value: 30, desc: '이동속도 +30', icon: '👢' },
 };
 
+// ── Act Story Text ──
+const ACT_STORY = {
+  start: "❄️ 영하 60도의 설원. 살아남아야 한다.",
+  act2:  "🐺 짐승들이 움직이기 시작했다. 더 강해져야 한다.",
+  act3:  "💀 괴물이 나타났다. 도망칠 곳은 없다.",
+  act4:  "🌨️ 눈보라가 거세진다. 희망은 아직 있다.",
+  act5:  "👁️ 최강의 존재가 눈을 뜬다. 마지막 결전.",
+  win:   "🏔️ 살아남았다. 전설이 되었다."
+};
+
+// ── Region Names ──
+const REGION_NAMES = {
+  safe:    { name: '🏕️ 생존 캠프', color: '#44FF44' },
+  normal:  { name: '🌲 침엽수림', color: '#FFDD44' },
+  danger:  { name: '🏔️ 빙하 지대', color: '#FF8844' },
+  extreme: { name: '💀 죽음의 설원', color: '#FF4444' }
+};
+
+// ── NPC Speech Bubbles ──
+const NPC_BUBBLES = {
+  merchant:  '💬 오늘 운이 좋네요! 좋은 물건 있어요.',
+  hunter:    '💬 사냥감이 많군... 같이 가자!',
+  gatherer:  '💬 재료만 있으면 뭐든 만들어 드려요.',
+  warrior:   '💬 한파가 3분마다 온다네... 조심하게.'
+};
+
 // ── NPC Definitions ──
 const NPC_DEFS = [
   { type: 'hunter',    name: '사냥꾼', cost: { meat: 8 },  desc: '자동 사냥' },
@@ -3209,6 +3235,8 @@ class GameScene extends Phaser.Scene {
     if (!loadSave) {
       this._showStartCountdown();
       this._showTutorialOverlay();
+      // Act 1 story text (delayed to show after countdown)
+      this.time.delayedCall(3500, () => this.showActStoryText(ACT_STORY.start));
 
       // ═══ FTUE: Spawn 2 rabbits near player for early kill ═══
       for (let i = 0; i < 2; i++) {
@@ -5924,7 +5952,7 @@ class GameScene extends Phaser.Scene {
     const zoneEl = document.getElementById('zone-indicator');
     if (zoneEl) {
       const zone = this.getPlayerZone();
-      const zoneNames = { safe: '🏠 안전', normal: '🌲 일반', danger: '⚠️ 위험', extreme: '☠️ 극한' };
+      const zoneNames = { safe: '🏕️ 생존 캠프', normal: '🌲 침엽수림', danger: '🏔️ 빙하 지대', extreme: '💀 죽음의 설원' };
       zoneEl.textContent = zoneNames[zone];
     }
     
@@ -6534,17 +6562,21 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // ═══ 눈 입자 시스템 (한파 강도 연동) ═══
+    // ═══ 눈 입자 시스템 (한파 강도 + 지역 연동) ═══
     if (!this._snowParticles) this._snowParticles = [];
-    const targetCount = coldLevel >= 5 ? 100 : coldLevel >= 3 ? 50 : coldLevel >= 1 ? 20 : 0;
+    const pZone = this.getPlayerZone();
+    const zoneParticleBonus = { safe: 0, normal: 5, danger: 15, extreme: 30 }[pZone] || 0;
+    const zoneDriftMul = pZone === 'extreme' ? 3 : pZone === 'danger' ? 1.5 : 1;
+    const zoneSizeMul = pZone === 'danger' ? 1.5 : pZone === 'extreme' ? 0.8 : 1;
+    const targetCount = (coldLevel >= 5 ? 100 : coldLevel >= 3 ? 50 : coldLevel >= 1 ? 20 : 0) + zoneParticleBonus;
     const snowAlpha = coldLevel >= 5 ? 0.3 : coldLevel >= 3 ? 0.2 : 0.1;
     // Spawn missing particles
     while (this._snowParticles.length < targetCount) {
       this._snowParticles.push({
         x: Math.random() * W, y: Math.random() * H,
         speed: 80 + Math.random() * 150,
-        drift: -30 - Math.random() * 40, // diagonal
-        size: 1 + Math.random() * 3
+        drift: (-30 - Math.random() * 40) * zoneDriftMul, // extreme: horizontal blizzard
+        size: (1 + Math.random() * 3) * zoneSizeMul
       });
     }
     // Remove excess
@@ -6859,6 +6891,82 @@ class GameScene extends Phaser.Scene {
       onComplete: () => {
         this.tweens.add({ targets: t, alpha: 0, y: t.y - 30, duration: 1500, delay: 1000, onComplete: () => t.destroy() });
       }
+    });
+  }
+
+  // ═══ Act Story Text (타이핑 효과) ═══
+  showActStoryText(text) {
+    if (!text || this._actStoryActive) return;
+    this._actStoryActive = true;
+    const cam = this.cameras.main;
+    const W = cam.width, H = cam.height;
+    // Dark box background
+    const bg = this.add.rectangle(W / 2, H * 0.78, W * 0.8, 50, 0x000000, 0.7)
+      .setScrollFactor(0).setDepth(300).setOrigin(0.5).setAlpha(0);
+    const storyText = this.add.text(W / 2, H * 0.78, '', {
+      fontSize: '18px', fontFamily: 'monospace', color: '#FFFFFF',
+      stroke: '#000', strokeThickness: 3, fontStyle: 'bold', align: 'center',
+      wordWrap: { width: W * 0.75 }
+    }).setScrollFactor(0).setDepth(301).setOrigin(0.5).setAlpha(0);
+    // Fade in bg
+    this.tweens.add({ targets: [bg, storyText], alpha: 1, duration: 300 });
+    // Typing effect
+    let charIndex = 0;
+    const typingTimer = this.time.addEvent({
+      delay: 50, loop: true,
+      callback: () => {
+        charIndex++;
+        storyText.setText(text.substring(0, charIndex));
+        if (charIndex >= text.length) {
+          typingTimer.destroy();
+          // Wait 2s then fade out
+          this.time.delayedCall(2000, () => {
+            this.tweens.add({
+              targets: [bg, storyText], alpha: 0, duration: 500,
+              onComplete: () => { bg.destroy(); storyText.destroy(); this._actStoryActive = false; }
+            });
+          });
+        }
+      }
+    });
+  }
+
+  // ═══ Region Name Banner ═══
+  showRegionBanner(zone) {
+    const region = REGION_NAMES[zone];
+    if (!region) return;
+    const cam = this.cameras.main;
+    const banner = this.add.text(cam.width / 2, cam.height * 0.12, region.name, {
+      fontSize: '22px', fontFamily: 'monospace', color: region.color,
+      stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(200).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({
+      targets: banner, alpha: 1, duration: 300, ease: 'Power2',
+      onComplete: () => {
+        this.tweens.add({ targets: banner, alpha: 0, duration: 500, delay: 2000, onComplete: () => banner.destroy() });
+      }
+    });
+  }
+
+  // ═══ NPC Speech Bubble ═══
+  showNPCBubble(npc, text) {
+    if (npc._bubbleActive) return;
+    npc._bubbleActive = true;
+    const bubbleBg = this.add.rectangle(npc.x, npc.y - 35, 10, 24, 0xFFFFFF, 0.9)
+      .setDepth(200).setOrigin(0.5, 1).setStrokeStyle(1, 0x000000);
+    const bubbleText = this.add.text(npc.x, npc.y - 36, text, {
+      fontSize: '11px', fontFamily: 'monospace', color: '#000000', align: 'center',
+      wordWrap: { width: 180 }
+    }).setDepth(201).setOrigin(0.5, 1);
+    // Resize bg to fit text
+    bubbleBg.setSize(bubbleText.width + 16, bubbleText.height + 10);
+    bubbleBg.setPosition(npc.x, npc.y - 30);
+    bubbleText.setPosition(npc.x, npc.y - 31);
+    this.time.delayedCall(3000, () => {
+      this.tweens.add({
+        targets: [bubbleBg, bubbleText], alpha: 0, duration: 300,
+        onComplete: () => { bubbleBg.destroy(); bubbleText.destroy(); npc._bubbleActive = false; }
+      });
     });
   }
 
@@ -7407,6 +7515,9 @@ class GameScene extends Phaser.Scene {
       this.currentAct = newAct;
       this.showCenterAlert(`🎬 Act ${this.currentAct} 시작!`, '#FFD700');
       this.cameras.main.flash(500, 255, 255, 200);
+      // Act story text
+      const storyKeys = { 2: 'act2', 3: 'act3', 4: 'act4', 5: 'act5' };
+      if (storyKeys[newAct]) this.showActStoryText(ACT_STORY[storyKeys[newAct]]);
     }
 
     // ═══ Wave Spawn (dynamic interval) ═══
@@ -7589,6 +7700,7 @@ class GameScene extends Phaser.Scene {
         this._milestone60Shown = true;
         this.cameras.main.flash(500, 255, 215, 0, true); // golden flash
         this._showMilestoneBanner('🏆 전설이 되다!', '#FFD700', 3000);
+        this.showActStoryText(ACT_STORY.win);
         this.time.delayedCall(3000, () => {
           this._showMilestoneBanner('🏆 60분 생존! 계속 진행 중...', '#44FF44', 3000);
         });
@@ -7601,7 +7713,8 @@ class GameScene extends Phaser.Scene {
         }
         playWinSound();
       } else {
-        this.showVictory();
+        this.showActStoryText(ACT_STORY.win);
+        this.time.delayedCall(3000, () => this.showVictory());
       }
     }
 
@@ -7665,6 +7778,37 @@ class GameScene extends Phaser.Scene {
       if (zoneAlerts[newZone]) {
         this.showZoneAlert(zoneAlerts[newZone]);
       }
+      // Region name banner
+      this.showRegionBanner(newZone);
+    }
+
+    // ═══ Region Name HUD (좌측 하단) ═══
+    if (!this._regionHudText) {
+      this._regionHudText = this.add.text(10, this.cameras.main.height - 30, '', {
+        fontSize: '14px', fontFamily: 'monospace', color: '#44FF44',
+        stroke: '#000', strokeThickness: 3
+      }).setScrollFactor(0).setDepth(150);
+    }
+    const rInfo = REGION_NAMES[this.currentZone];
+    if (rInfo) {
+      this._regionHudText.setText(rInfo.name);
+      this._regionHudText.setColor(rInfo.color);
+    }
+
+    // ═══ NPC Proximity Speech Bubbles ═══
+    if (this.npcsOwned && this.player) {
+      this.npcsOwned.forEach(npc => {
+        if (!npc.active) return;
+        const dist = Phaser.Math.Distance.Between(npc.x, npc.y, this.player.x, this.player.y);
+        if (dist < 50 && !npc._bubbleActive && !npc._bubbleCooldown) {
+          const bubbleText = NPC_BUBBLES[npc.npcType];
+          if (bubbleText) {
+            this.showNPCBubble(npc, bubbleText);
+            npc._bubbleCooldown = true;
+            this.time.delayedCall(15000, () => { npc._bubbleCooldown = false; });
+          }
+        }
+      });
     }
 
     // ═══ Quest-based Wolf/Bear Spawn Guarantee ═══
