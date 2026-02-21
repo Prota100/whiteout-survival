@@ -459,6 +459,7 @@ class EquipmentManager {
 
   constructor() {
     this.slots = { weapon:null, armor:null, boots:null, helmet:null, ring:null };
+    this.inventory = { weapon:[], armor:[], boots:[], helmet:[], ring:[] };
     this.load();
   }
 
@@ -468,12 +469,16 @@ class EquipmentManager {
       if (raw) {
         const saved = JSON.parse(raw);
         Object.keys(this.slots).forEach(s => { if (saved[s]) this.slots[s] = saved[s]; });
+        if (saved._inventory) {
+          Object.keys(this.inventory).forEach(s => { if (saved._inventory[s]) this.inventory[s] = saved._inventory[s]; });
+        }
       }
     } catch(e) {}
   }
 
   save() {
-    localStorage.setItem(EquipmentManager.STORAGE_KEY, JSON.stringify(this.slots));
+    const data = { ...this.slots, _inventory: this.inventory };
+    localStorage.setItem(EquipmentManager.STORAGE_KEY, JSON.stringify(data));
   }
 
   // Try equipping; returns true if equipped (upgrade)
@@ -530,8 +535,53 @@ class EquipmentManager {
     return { slot, itemId: item.id, grade, name: item.name, icon: item.icon };
   }
 
+  addToInventory(slot, itemId, grade) {
+    this.inventory[slot].push({ itemId, grade });
+    this.save();
+  }
+
+  // Count items of a specific grade in a slot's inventory
+  countByGrade(slot, grade) {
+    return this.inventory[slot].filter(i => i.grade === grade).length;
+  }
+
+  // Get craftable grades for a slot (grades that have 3+ items)
+  getCraftableGrades(slot) {
+    const result = [];
+    for (const g of EQUIP_GRADES.slice(0, -1)) { // can't craft unique→next
+      if (this.countByGrade(slot, g) >= 3) result.push(g);
+    }
+    return result;
+  }
+
+  // Craft: consume 3 items of same grade from slot → produce next grade random item
+  craft(slot, grade) {
+    const gradeIdx = EQUIP_GRADES.indexOf(grade);
+    if (gradeIdx < 0 || gradeIdx >= EQUIP_GRADES.length - 1) return null;
+    if (this.countByGrade(slot, grade) < 3) return null;
+    // Remove 3 items of this grade
+    let removed = 0;
+    this.inventory[slot] = this.inventory[slot].filter(i => {
+      if (removed >= 3) return true;
+      if (i.grade === grade) { removed++; return false; }
+      return true;
+    });
+    // Create next grade item
+    const nextGrade = EQUIP_GRADES[gradeIdx + 1];
+    const items = EQUIPMENT_TABLE[slot];
+    const newItem = items[Math.floor(Math.random() * items.length)];
+    const result = { slot, itemId: newItem.id, grade: nextGrade, name: newItem.name, icon: newItem.icon };
+    // Auto-equip if better, otherwise add to inventory
+    if (!this.tryEquip(slot, result.itemId, result.grade)) {
+      this.inventory[slot].push({ itemId: result.itemId, grade: result.grade });
+    }
+    this.save();
+    return result;
+  }
+
   reset() {
     this.slots = { weapon:null, armor:null, boots:null, helmet:null, ring:null };
+    this.inventory = { weapon:[], armor:[], boots:[], helmet:[], ring:[] };
     localStorage.removeItem(EquipmentManager.STORAGE_KEY);
   }
 }
@@ -3331,16 +3381,16 @@ class GameScene extends Phaser.Scene {
   _pickupEquipment(ed, idx) {
     const equipped = this.equipmentManager.tryEquip(ed.slot, ed.itemId, ed.grade);
     if (equipped) {
-      const gradeLabel = EQUIP_GRADE_LABELS[ed.grade];
       const color = EQUIP_GRADE_COLORS[ed.grade];
       this.showFloatingText(this.player.x, this.player.y - 40,
         ed.icon + ' ' + ed.name + ' 장착!', color);
-      // Re-apply equipment bonuses
       this._equipBonuses = this.equipmentManager.getTotalBonuses();
       this._updateEquipHUD();
     } else {
+      // Store in inventory for crafting
+      this.equipmentManager.addToInventory(ed.slot, ed.itemId, ed.grade);
       this.showFloatingText(this.player.x, this.player.y - 40,
-        '이미 더 좋은 장비!', '#888888');
+        ed.icon + ' 보관 (+1)', '#AAAAAA');
     }
     if (ed.label) ed.label.destroy();
     if (ed.glow) ed.glow.destroy();
@@ -3403,25 +3453,86 @@ class GameScene extends Phaser.Scene {
   }
 
   _showEquipTooltip(slot, x, y) {
-    if (this._equipHudTooltip) { this._equipHudTooltip.destroy(); this._equipHudTooltip = null; }
+    // Clean up previous tooltip
+    if (this._equipHudTooltip) { this._equipHudTooltip.forEach(o => o.destroy()); this._equipHudTooltip = null; }
+    if (this._craftBtn) { this._craftBtn.forEach(o => o.destroy()); this._craftBtn = null; }
+
     const eq = this.equipmentManager.slots[slot];
-    if (!eq) return;
-    const def = this.equipmentManager.getItemDef(slot);
-    if (!def) return;
-    const gradeLabel = EQUIP_GRADE_LABELS[eq.grade];
-    const color = EQUIP_GRADE_COLORS[eq.grade];
-    const effectStr = Object.entries(def.effects).map(([k,v]) => {
-      const names = { atkMul:'공격력', aspdMul:'공속', hpFlat:'HP', defMul:'방어', spdMul:'이속', dodgeMul:'회피', coldRes:'한파저항', regenPS:'HP회복', xpMul:'XP', luckFlat:'행운' };
-      return (names[k]||k) + (k.includes('Flat') ? '+'+v : '+'+Math.round(v*100)+'%');
-    }).join(', ');
-    const txt = `[${gradeLabel}] ${def.icon} ${def.name}\n${effectStr}`;
-    this._equipHudTooltip = this.add.text(x, y, txt, {
+    const inv = this.equipmentManager.inventory[slot] || [];
+    const effectNames = { atkMul:'공격력', aspdMul:'공속', hpFlat:'HP', defMul:'방어', spdMul:'이속', dodgeMul:'회피', coldRes:'한파저항', regenPS:'HP회복', xpMul:'XP', luckFlat:'행운' };
+
+    let lines = [];
+    if (eq) {
+      const def = this.equipmentManager.getItemDef(slot);
+      if (def) {
+        const gradeLabel = EQUIP_GRADE_LABELS[eq.grade];
+        const effectStr = Object.entries(def.effects).map(([k,v]) => (effectNames[k]||k) + (k.includes('Flat') ? '+'+v : '+'+Math.round(v*100)+'%')).join(', ');
+        lines.push(`[${gradeLabel}] ${def.icon} ${def.name}`);
+        lines.push(effectStr);
+      }
+    } else {
+      lines.push('빈 슬롯');
+    }
+
+    // Show inventory counts by grade
+    if (inv.length > 0) {
+      const counts = {};
+      inv.forEach(i => { counts[i.grade] = (counts[i.grade]||0) + 1; });
+      const invStr = Object.entries(counts).map(([g,c]) => `${EQUIP_GRADE_LABELS[g]}×${c}`).join(' ');
+      lines.push(`📦 보관: ${invStr}`);
+    }
+
+    // Check craftable
+    const craftable = this.equipmentManager.getCraftableGrades(slot);
+    if (craftable.length > 0) {
+      const cg = craftable[0]; // craft lowest grade first
+      const nextG = EQUIP_GRADES[EQUIP_GRADES.indexOf(cg) + 1];
+      lines.push(`⚗️ ${EQUIP_GRADE_LABELS[cg]}×3 → ${EQUIP_GRADE_LABELS[nextG]} 합성 가능!`);
+    }
+
+    const color = eq ? EQUIP_GRADE_COLORS[eq.grade] : '#888888';
+    const tooltipText = this.add.text(x, y, lines.join('\n'), {
       fontSize: '11px', fontFamily: 'monospace', color: color,
       stroke: '#000', strokeThickness: 3, backgroundColor: '#111122',
-      padding: { x: 6, y: 4 }
+      padding: { x: 6, y: 4 }, align: 'center', wordWrap: { width: 250 }
     }).setScrollFactor(0).setDepth(200).setOrigin(0.5, 1);
-    this.time.delayedCall(3000, () => {
-      if (this._equipHudTooltip) { this._equipHudTooltip.destroy(); this._equipHudTooltip = null; }
+
+    const elements = [tooltipText];
+
+    // Add craft button if craftable
+    if (craftable.length > 0) {
+      const cg = craftable[0];
+      const btnY = tooltipText.y + 4;
+      const btnBg = this.add.graphics().setScrollFactor(0).setDepth(200);
+      btnBg.fillStyle(0x6633AA, 0.9);
+      btnBg.fillRoundedRect(x - 50, btnY, 100, 26, 6);
+      btnBg.lineStyle(1, 0xAA66FF, 1);
+      btnBg.strokeRoundedRect(x - 50, btnY, 100, 26, 6);
+      const btnText = this.add.text(x, btnY + 13, '⚗️ 합성', {
+        fontSize: '13px', fontFamily: 'monospace', color: '#FFFFFF',
+        stroke: '#000', strokeThickness: 2, fontStyle: 'bold'
+      }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
+      const btnHit = this.add.rectangle(x, btnY + 13, 100, 26).setScrollFactor(0).setDepth(202).setOrigin(0.5).setInteractive().setAlpha(0.001);
+      btnHit.on('pointerdown', () => {
+        const result = this.equipmentManager.craft(slot, cg);
+        if (result) {
+          const rc = EQUIP_GRADE_COLORS[result.grade];
+          this.showFloatingText(this.player.x, this.player.y - 50,
+            `⚗️ ${result.icon} ${result.name} [${EQUIP_GRADE_LABELS[result.grade]}] 합성!`, rc);
+          this._equipBonuses = this.equipmentManager.getTotalBonuses();
+          this._updateEquipHUD();
+          // Re-show tooltip
+          this._showEquipTooltip(slot, x, y);
+        }
+      });
+      elements.push(btnBg, btnText, btnHit);
+      this._craftBtn = [btnBg, btnText, btnHit];
+    }
+
+    this._equipHudTooltip = elements;
+    this.time.delayedCall(5000, () => {
+      if (this._equipHudTooltip) { this._equipHudTooltip.forEach(o => o.destroy()); this._equipHudTooltip = null; }
+      if (this._craftBtn) { this._craftBtn.forEach(o => o.destroy()); this._craftBtn = null; }
     });
   }
 
@@ -5153,41 +5264,131 @@ class GameScene extends Phaser.Scene {
 
   showVictory() {
     if (this.gameOver) return;
-    this.gameOver = true; // Prevents further game updates
+    this.gameOver = true;
     
-    // Record meta progression
     const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
     const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0);
-    
-    playWinSound(); // Assumes a win sound exists or will be added
+    playWinSound();
 
+    this._showEndScreen({
+      isVictory: true,
+      survivalTime: this.gameElapsed,
+      totalKills,
+      maxCombo: this.stats.maxCombo || 0,
+      level: this.playerLevel,
+      earned,
+      equipBonuses: this._equipBonuses
+    });
+  }
+
+  // ═══ HABBY-STYLE END SCREEN ═══
+  _showEndScreen(opts) {
+    const { isVictory, survivalTime, totalKills, maxCombo, level, earned, equipBonuses } = opts;
     const cam = this.cameras.main;
-    cam.flash(1000, 200, 255, 200); // Greenish flash for victory
-    cam.shake(500, 0.01);
+    const W = cam.width, H = cam.height;
 
-    const ov = this.add.graphics().setScrollFactor(0).setDepth(200);
-    ov.fillStyle(0x000000, 0).fillRect(0, 0, cam.width, cam.height);
-    this.tweens.add({ targets: ov, alpha: 0.75, duration: 800 });
+    if (isVictory) {
+      cam.flash(1000, 200, 255, 200);
+      cam.shake(500, 0.01);
+    } else {
+      cam.flash(400, 255, 0, 0);
+      cam.shake(500, 0.02);
+    }
 
-    const msg = this.add.text(cam.width/2, cam.height/2 - 50, '🎉 생존 성공! 🎉', {
-      fontSize:'48px', fontFamily:'monospace', color:'#AAFFDD', stroke:'#000', strokeThickness:6, align:'center'
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
+    // Dark overlay
+    const ov = this.add.graphics().setScrollFactor(0).setDepth(300);
+    ov.fillStyle(0x0A0E1A, 0).fillRect(0, 0, W, H);
+    this.tweens.add({ targets: ov, alpha: 0.85, duration: 600 });
 
-    const statsText = this.add.text(cam.width/2, cam.height/2 + 30, 
-      `⏱️ 1시간 생존! | ⚔️ 처치: ${Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0)} | ⭐ Lv.${this.playerLevel} | 🔥 최고 콤보: ${this.stats.maxCombo || 0}\n💎 +${earned} 포인트 획득!`, {
-      fontSize:'18px', fontFamily:'monospace', color:'#DDFFEE', stroke:'#000', strokeThickness:4, align:'center'
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
+    // Panel background
+    const panelW = Math.min(340, W - 40), panelH = 360;
+    const px = W/2, py = H/2;
+    const panel = this.add.graphics().setScrollFactor(0).setDepth(301);
+    panel.fillStyle(0x1A1E2E, 0.95);
+    panel.fillRoundedRect(px - panelW/2, py - panelH/2, panelW, panelH, 16);
+    panel.lineStyle(2, isVictory ? 0xFFD700 : 0xFF4444, 0.6);
+    panel.strokeRoundedRect(px - panelW/2, py - panelH/2, panelW, panelH, 16);
+    panel.setAlpha(0);
 
-    const restartMsg = this.add.text(cam.width/2, cam.height/2 + 100, '다시 시작하려면 탭하세요!', {
-      fontSize:'20px', fontFamily:'monospace', color:'#99AAFF', stroke:'#000', strokeThickness:3
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
+    // Icon
+    const icon = this.add.text(px, py - panelH/2 + 50, isVictory ? '🏆' : '💀', {
+      fontSize: '48px'
+    }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
 
-    this.tweens.add({ targets: msg, alpha: 1, y: msg.y + 20, duration: 600, ease: 'Back.Out', delay: 200 });
-    this.tweens.add({ targets: statsText, alpha: 1, y: statsText.y + 10, duration: 600, ease: 'Back.Out', delay: 600 });
-    this.tweens.add({ targets: restartMsg, alpha: 1, duration: 500, delay: 1200, yoyo: true, repeat: -1 });
+    // Title
+    const titleColor = isVictory ? '#FFD700' : '#FF4444';
+    const titleText = isVictory ? '60분 생존 성공!' : '생존 실패';
+    const title = this.add.text(px, py - panelH/2 + 100, titleText, {
+      fontSize: '28px', fontFamily: 'monospace', color: titleColor,
+      stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
 
-    this.input.once('pointerdown', () => {
-      this.scene.start('Title');
+    // Stats
+    const survMin = Math.floor(survivalTime / 60);
+    const survSec = Math.floor(survivalTime % 60);
+    const statsLines = [
+      `⏱️ 생존 시간: ${survMin}분 ${survSec}초`,
+      `⚔️ 처치한 적: ${totalKills}`,
+      `🔥 최대 콤보: ${maxCombo}킬`,
+      `⭐ 달성 레벨: Lv.${level}`,
+      `💎 획득 포인트: +${earned}`
+    ];
+    // Equipment bonus line
+    if (equipBonuses) {
+      const bonusStrs = [];
+      if (equipBonuses.atkMul > 0) bonusStrs.push(`공격력+${Math.round(equipBonuses.atkMul*100)}%`);
+      if (equipBonuses.defMul > 0) bonusStrs.push(`방어+${Math.round(equipBonuses.defMul*100)}%`);
+      if (equipBonuses.spdMul > 0) bonusStrs.push(`이속+${Math.round(equipBonuses.spdMul*100)}%`);
+      if (equipBonuses.hpFlat > 0) bonusStrs.push(`HP+${Math.round(equipBonuses.hpFlat)}`);
+      if (bonusStrs.length > 0) statsLines.push(`🛡️ 장비 보너스: ${bonusStrs.join(', ')}`);
+    }
+    const stats = this.add.text(px, py - 20, statsLines.join('\n'), {
+      fontSize: '14px', fontFamily: 'monospace', color: '#CCDDEE',
+      stroke: '#000', strokeThickness: 2, align: 'center', lineSpacing: 6
+    }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
+
+    // Buttons
+    const btnW = 130, btnH = 36, btnGap = 16;
+    const btnY = py + panelH/2 - 55;
+
+    // Retry button (orange CTA)
+    const retryBg = this.add.graphics().setScrollFactor(0).setDepth(302);
+    retryBg.fillStyle(0xFF6B35, 1);
+    retryBg.fillRoundedRect(px - btnW - btnGap/2, btnY, btnW, btnH, 8);
+    retryBg.setAlpha(0);
+    const retryText = this.add.text(px - btnW/2 - btnGap/2, btnY + btnH/2, '🔄 다시 도전', {
+      fontSize: '14px', fontFamily: 'monospace', color: '#FFFFFF',
+      stroke: '#000', strokeThickness: 2, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(303).setOrigin(0.5).setAlpha(0);
+    const retryHit = this.add.rectangle(px - btnW/2 - btnGap/2, btnY + btnH/2, btnW, btnH)
+      .setScrollFactor(0).setDepth(304).setOrigin(0.5).setInteractive().setAlpha(0.001);
+
+    // Title button (dark)
+    const titleBg = this.add.graphics().setScrollFactor(0).setDepth(302);
+    titleBg.fillStyle(0x2A2E3E, 1);
+    titleBg.fillRoundedRect(px + btnGap/2, btnY, btnW, btnH, 8);
+    titleBg.lineStyle(1, 0x555577, 0.6);
+    titleBg.strokeRoundedRect(px + btnGap/2, btnY, btnW, btnH, 8);
+    titleBg.setAlpha(0);
+    const titleBtnText = this.add.text(px + btnW/2 + btnGap/2, btnY + btnH/2, '🏠 타이틀로', {
+      fontSize: '14px', fontFamily: 'monospace', color: '#AABBCC',
+      stroke: '#000', strokeThickness: 2
+    }).setScrollFactor(0).setDepth(303).setOrigin(0.5).setAlpha(0);
+    const titleHit = this.add.rectangle(px + btnW/2 + btnGap/2, btnY + btnH/2, btnW, btnH)
+      .setScrollFactor(0).setDepth(304).setOrigin(0.5).setInteractive().setAlpha(0.001);
+
+    // Button handlers
+    retryHit.on('pointerdown', () => { this.scene.start('Boot', { loadSave: false }); });
+    titleHit.on('pointerdown', () => { this.scene.start('Title'); });
+
+    // Slide-in + fade animation
+    const allElements = [panel, icon, title, stats, retryBg, retryText, titleBg, titleBtnText];
+    allElements.forEach((el, i) => {
+      if (el.y !== undefined) el.y -= 40;
+      this.tweens.add({
+        targets: el, alpha: 1, y: (el.y !== undefined ? el.y + 40 : undefined),
+        duration: 500, ease: 'Back.Out', delay: 200 + i * 80
+      });
     });
   }
 
@@ -5196,46 +5397,23 @@ class GameScene extends Phaser.Scene {
     if (this.gameOver || this.isRespawning) return;
     this.isRespawning = true;
     playGameOverSound();
-    const cam = this.cameras.main;
-    cam.flash(400, 255, 0, 0);
-    cam.shake(500, 0.02);
 
-    // 통계 계산
     const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
-    const survMin = Math.floor(this.gameElapsed / 60);
-    const survSec = Math.floor(this.gameElapsed % 60);
+    const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0);
 
-    const ov = this.add.graphics().setScrollFactor(0).setDepth(200);
-    ov.fillStyle(0x000000, 0).fillRect(0, 0, cam.width, cam.height);
-    // Fade in overlay
-    this.tweens.add({ targets: ov, alpha: 0.75, duration: 500 });
+    this._showEndScreen({
+      isVictory: false,
+      survivalTime: this.gameElapsed,
+      totalKills,
+      maxCombo: this.stats.maxCombo || 0,
+      level: this.playerLevel,
+      earned,
+      equipBonuses: this._equipBonuses
+    });
 
-    const msg = this.add.text(cam.width/2, cam.height/2 - 30, '💀 기절...', {
-      fontSize:'36px', fontFamily:'monospace', color:'#FF8888', stroke:'#000', strokeThickness:4, align:'center'
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
-
-    const statsText = this.add.text(cam.width/2, cam.height/2 + 30, 
-      `⏱️ 생존: ${survMin}분 ${survSec}초  |  ⚔️ 처치: ${totalKills}  |  ⭐ Lv.${this.playerLevel} | 🔥 최고 콤보: ${this.stats.maxCombo || 0}`, {
-      fontSize:'16px', fontFamily:'monospace', color:'#AABBCC', stroke:'#000', strokeThickness:3, align:'center'
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
-
-    const respawnMsg = this.add.text(cam.width/2, cam.height/2 + 65, '마을로 이동 중...', {
-      fontSize:'14px', fontFamily:'monospace', color:'#888', stroke:'#000', strokeThickness:2
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5).setAlpha(0);
-
-    // Fade in text sequentially
-    this.tweens.add({ targets: msg, alpha: 1, duration: 400, delay: 200 });
-    this.tweens.add({ targets: statsText, alpha: 1, duration: 400, delay: 600 });
-    this.tweens.add({ targets: respawnMsg, alpha: 1, duration: 400, delay: 1000 });
-
-    this.time.delayedCall(3000, () => {
-      this.playerHP = Math.floor(this.playerMaxHP * 0.5);
-      this.hunger = Math.min(this.maxHunger, this.hunger + 30);
-      this.temperature = Math.min(this.maxTemp, this.maxTemp * 0.8);
-      this.player.setPosition(WORLD_W / 2, WORLD_H - 200);
-      this.cameras.main.flash(300, 255, 255, 255);
-      ov.destroy(); msg.destroy(); statsText.destroy(); respawnMsg.destroy();
-      this.isRespawning = false;
+    // Auto-cleanup after choosing or timeout (respawn fallback)
+    this._endScreenCleanup = this.time.delayedCall(30000, () => {
+      this.scene.start('Title');
     });
   }
 
