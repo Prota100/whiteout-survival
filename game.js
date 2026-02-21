@@ -2658,6 +2658,7 @@ class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
 
   create() {
+    this.cameras.main.fadeIn(500);
     this.res = { meat: 0, wood: 0, stone: 0, leather: 0, gold: 0 };
     this.playerHP = 100; this.playerMaxHP = 100;
     this.playerDamage = 10;
@@ -5293,6 +5294,12 @@ class GameScene extends Phaser.Scene {
       xpFill: document.getElementById('xp-fill'),
       xpText: document.getElementById('xp-text'),
       actText: document.getElementById('act-text'),
+      nextEventText: document.getElementById('next-event-text'),
+      classHud: document.getElementById('class-hud'),
+      classNameText: document.getElementById('class-name-text'),
+      classSkillCd: document.getElementById('class-skill-cd'),
+      timelineBar: document.getElementById('timeline-bar'),
+      timelineFill: document.getElementById('timeline-fill'),
     };
 
     // ═══ DOM Buttons (100% reliable touch) ═══
@@ -5482,6 +5489,86 @@ class GameScene extends Phaser.Scene {
       } else {
         d.actText.style.color = '#FFDD88';
       }
+    }
+
+    // ═══ Next Event Countdown HUD ═══
+    if (d.nextEventText) {
+      const t = this.gameElapsed;
+      const events = [];
+      // Boss: 25min, 55min
+      if (!this.boss1Spawned) events.push({ time: 25*60, label: '💀 보스까지' });
+      if (!this.boss2Spawned && this.boss1Spawned) events.push({ time: 55*60, label: '💀 보스까지' });
+      // Elite wave: 15, 30, 45 min
+      [15,30,45].forEach(m => { if (!this._eliteWaveTriggered[m]) events.push({ time: m*60, label: '⚠️ 엘리트 웨이브까지' }); });
+      // Siege wave: 25, 50 min
+      [25,50].forEach(m => { if (!this._siegeWaveTriggered || !this._siegeWaveTriggered[m]) events.push({ time: m*60, label: '🔴 포위 공격까지' }); });
+      // Random event: every 3min
+      const nextRandom = (Math.floor(t / 180) + 1) * 180;
+      events.push({ time: nextRandom, label: '🎲 이벤트까지' });
+      // Survival challenge: every 10min (starting at 10)
+      const nextChallenge = Math.max(10*60, (Math.floor(t / 600) + 1) * 600);
+      if (!this._challengeActive) events.push({ time: nextChallenge, label: '🏆 챌린지까지' });
+
+      const future = events.filter(e => e.time > t).sort((a,b) => a.time - b.time);
+      if (future.length > 0) {
+        const next = future[0];
+        const rem = Math.max(0, next.time - t);
+        const rm = Math.floor(rem / 60);
+        const rs = Math.floor(rem % 60);
+        const timeStr = rm > 0 ? `${rm}m ${String(rs).padStart(2,'0')}s` : `${rs}s`;
+        d.nextEventText.textContent = `${next.label} ${timeStr}`;
+        d.nextEventText.style.display = '';
+        if (rem <= 30) {
+          d.nextEventText.style.color = '#FF4444';
+          d.nextEventText.style.animation = 'event-pulse-fast 0.4s ease-in-out infinite';
+        } else if (rem <= 60) {
+          d.nextEventText.style.color = '#FF6666';
+          d.nextEventText.style.animation = 'event-pulse 0.8s ease-in-out infinite';
+        } else {
+          d.nextEventText.style.color = '#FFFFFF';
+          d.nextEventText.style.animation = 'none';
+        }
+      } else {
+        d.nextEventText.style.display = 'none';
+      }
+    }
+
+    // ═══ Class HUD ═══
+    if (d.classHud && this._playerClass && PLAYER_CLASSES[this._playerClass]) {
+      const cls = PLAYER_CLASSES[this._playerClass];
+      d.classHud.style.display = '';
+      d.classNameText.textContent = `${cls.icon} ${cls.name}`;
+      d.classNameText.style.color = cls.color;
+      // Skill cooldown display
+      let cd = 0, maxCd = 1, skillIcon = '';
+      if (this._playerClass === 'warrior') { cd = this._classRoarCD; maxCd = 15; skillIcon = '🪓'; }
+      else if (this._playerClass === 'mage') { cd = this._classBlizzardCD; maxCd = 30; skillIcon = '🧊'; }
+      else if (this._playerClass === 'survivor') { cd = this._classSprintCD; maxCd = 20; skillIcon = '🏃'; }
+      if (cd > 0) {
+        d.classSkillCd.textContent = Math.ceil(cd);
+        d.classSkillCd.style.background = 'rgba(0,0,0,0.7)';
+        d.classSkillCd.style.borderColor = '#666';
+        d.classSkillCd.style.color = '#AAA';
+        d.classSkillCd.style.animation = 'none';
+      } else {
+        d.classSkillCd.textContent = skillIcon;
+        d.classSkillCd.style.background = 'rgba(60,60,0,0.6)';
+        d.classSkillCd.style.borderColor = '#FFD700';
+        d.classSkillCd.style.color = '#FFD700';
+        d.classSkillCd.style.animation = 'skill-ready-pulse 1s ease-in-out infinite';
+      }
+    }
+
+    // ═══ Timeline Progress Bar ═══
+    if (d.timelineBar) {
+      d.timelineBar.style.display = '';
+      const progress = Math.min(1, this.gameElapsed / 3600); // 60 min
+      d.timelineFill.style.width = (progress * 100) + '%';
+      const minE = this.gameElapsed / 60;
+      if (minE >= 55) d.timelineFill.style.background = '#EE2222';
+      else if (minE >= 45) d.timelineFill.style.background = '#EE8822';
+      else if (minE >= 30) d.timelineFill.style.background = '#DDBB22';
+      else d.timelineFill.style.background = '#44BB44';
     }
 
     // Zone indicator
@@ -6444,6 +6531,14 @@ class GameScene extends Phaser.Scene {
     const { isVictory, survivalTime, totalKills, maxCombo, level, earned, equipBonuses } = opts;
     const cam = this.cameras.main;
     const W = cam.width, H = cam.height;
+
+    // Hide HUD elements on end
+    const tl = document.getElementById('timeline-bar');
+    if (tl) tl.style.display = 'none';
+    const ne = document.getElementById('next-event-text');
+    if (ne) ne.style.display = 'none';
+    const ch = document.getElementById('class-hud');
+    if (ch) ch.style.display = 'none';
 
     // ═══ 기록 저장 + 신기록 체크 ═══
     let achCount = 0;
