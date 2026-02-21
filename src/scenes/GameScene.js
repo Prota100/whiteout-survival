@@ -1081,12 +1081,13 @@ class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*40, y: a.y + Math.sin(sa)*40, alpha: 0, duration: 250, onComplete: () => p.destroy() });
       }
     } else if (a.animalType === 'rabbit') {
+      // DISABLED: Causing browser crash
       // Small white fur particles
-      for (let i = 0; i < 5; i++) {
-        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
-        const p = this.add.circle(a.x, a.y, 2, 0xFFEEDD).setDepth(15);
-        this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*25, y: a.y + Math.sin(sa)*25, alpha: 0, duration: 500, onComplete: () => p.destroy() });
-      }
+      // for (let i = 0; i < 5; i++) {
+      //   const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      //   const p = this.add.circle(a.x, a.y, 2, 0xFFEEDD).setDepth(15);
+      //   this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*25, y: a.y + Math.sin(sa)*25, alpha: 0, duration: 500, onComplete: () => p.destroy() });
+      // }
     } else if (a.animalType === 'wolf') {
       // Gray particles + howl text
       for (let i = 0; i < 6; i++) {
