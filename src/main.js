@@ -11,4 +11,4 @@ const config = {
   input: { activePointers: 3 },
 };
 
-new Phaser.Game(config);
+window.phaserGame = new Phaser.Game(config);
