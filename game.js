@@ -766,6 +766,21 @@ const ACHIEVEMENTS = [
   { id: 'secret_hidden_boss', name: '비밀 사냥꾼', desc: '숨겨진 보스 처치', icon: '👁️', hidden: true },
   { id: 'secret_konami',      name: '전설의 코드', desc: '???',              icon: '🎮', hidden: true },
   { id: 'secret_survive_zone',name: '극한 탐험가', desc: '극한 구역 5분 생존', icon: '🏔️', hidden: true },
+  // 클래스 마스터리 (5종)
+  { id: 'class_warrior',   name: '전사 마스터',   desc: '전사로 60분 클리어',     icon: '🪓', category: 'class' },
+  { id: 'class_mage',      name: '마법사 마스터',  desc: '마법사로 60분 클리어',    icon: '🧊', category: 'class' },
+  { id: 'class_survivor',  name: '생존가 마스터',  desc: '생존가로 60분 클리어',    icon: '🏃', category: 'class' },
+  { id: 'class_shaman',    name: '무당 마스터',    desc: '무당으로 60분 클리어',    icon: '🔮', category: 'class' },
+  { id: 'class_hunter',    name: '사냥꾼 마스터',  desc: '사냥꾼으로 60분 클리어',  icon: '🏹', category: 'class' },
+  // 도전 모드 (4종)
+  { id: 'boss_rush_clear', name: '보스 사냥꾼',   desc: '보스 러시 클리어',         icon: '🔴', category: 'challenge' },
+  { id: 'ng_plus_clear',   name: '전설을 넘어',   desc: 'NG+ 모드 클리어',          icon: '⭐', category: 'challenge' },
+  { id: 'endless_30',      name: '영원한 생존',   desc: '무한 모드 30분 추가 생존', icon: '♾️', category: 'challenge' },
+  { id: 'hard_clear',      name: '강철 의지',     desc: '하드 이상 난이도 클리어',  icon: '🔥', category: 'challenge' },
+  // 수집/탐험 (3종)
+  { id: 'all_equipment',   name: '수집가',        desc: '모든 장비 슬롯에 에픽 이상 장착', icon: '💜', category: 'collect' },
+  { id: 'all_zones',       name: '탐험가',        desc: '모든 지역 방문',            icon: '🗺️', category: 'collect' },
+  { id: 'all_synergies',   name: '시너지 마스터', desc: '5가지 시너지 모두 발동',    icon: '⚡', category: 'collect' },
 ];
 
 const RANDOM_EVENTS = [
@@ -775,6 +790,11 @@ const RANDOM_EVENTS = [
   { id: 'golden_fever',  name: '✨ 황금 시간',       desc: '30초간 장비 드롭률 3배!',                   action: 'drop_fever',      duration: 30 },
   { id: 'healing_spring',name: '🔥 따뜻한 봄',       desc: '30초간 HP 회복 속도 5배!',                  action: 'heal_boost',      duration: 30 },
   { id: 'merchant',      name: '🧑‍🤝‍🧑 행상인 방문',    desc: '행상인이 나타났다! 보급 상자가 출현합니다.',action: 'spawn_chest' },
+  { id: 'equipment_bonus', name: '🎁 장비 보급', desc: '30초간 장비 드롭률 5배!', action: 'equip_bonus_5x', duration: 30 },
+  { id: 'xp_feast',        name: '📚 지식의 폭발', desc: '30초간 XP 획득 3배!',   action: 'xp_triple', duration: 30 },
+  { id: 'shield_wall',     name: '🛡️ 신성한 방어', desc: '30초간 피해 50% 감소',  action: 'damage_reduce', duration: 30 },
+  { id: 'mega_combo',      name: '🔥 킬 광란', desc: '다음 10킬은 XP 3배',        action: 'combo_xp', charges: 10 },
+  { id: 'class_boost',     name: '✨ 클래스 각성', desc: '30초간 클래스 스킬 쿨다운 0', action: 'class_cd_zero', duration: 30 },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -787,7 +807,8 @@ class RecordManager {
     return {
       bestSurvivalTime: 0, bestKills: 0, bestLevel: 0, bestCombo: 0,
       totalPlays: 0, totalKills: 0, totalPlayTime: 0, wins: 0, achievementsUnlocked: 0,
-      longestEndlessSurvival: 0, totalQuestsCompleted: 0, ngPlusClears: 0
+      longestEndlessSurvival: 0, totalQuestsCompleted: 0, ngPlusClears: 0,
+      bossRushClears: 0, hardClears: 0
     };
   }
 
@@ -858,6 +879,21 @@ const ACHIEVEMENT_REWARDS = {
   craft_1:        { type: 'meta_points', amount: 5 },
   survivor_30:    { type: 'meta_points', amount: 30 },
   kills_100:      { type: 'skin_unlock', skinId: 'shadow' },
+  // 클래스 마스터리
+  class_warrior:   { type: 'meta_points', amount: 15 },
+  class_mage:      { type: 'meta_points', amount: 15 },
+  class_survivor:  { type: 'meta_points', amount: 15 },
+  class_shaman:    { type: 'meta_points', amount: 15 },
+  class_hunter:    { type: 'meta_points', amount: 15 },
+  // 도전 모드
+  boss_rush_clear: { type: 'meta_points', amount: 25 },
+  ng_plus_clear:   { type: 'meta_points', amount: 30 },
+  endless_30:      { type: 'meta_points', amount: 30 },
+  hard_clear:      { type: 'meta_points', amount: 20 },
+  // 수집/탐험
+  all_equipment:   { type: 'meta_points', amount: 20 },
+  all_zones:       { type: 'meta_points', amount: 15 },
+  all_synergies:   { type: 'meta_points', amount: 25 },
 };
 
 class SkinManager {
@@ -2592,6 +2628,13 @@ class TitleScene extends Phaser.Scene {
     const SLOT_ICONS = { weapon: '⚔️', armor: '🛡️', boots: '👟', helmet: '🎩', ring: '💍' };
     const SLOT_NAMES = { weapon: '무기', armor: '방어구', boots: '장화', helmet: '모자', ring: '반지' };
     const HIDDEN_IDS = ['secret_hidden_boss', 'secret_konami', 'secret_survive_zone'];
+    const ACH_CATEGORIES = [
+      { key: 'basic', label: '🏅 기본 성취', filter: (a) => !a.hidden && !a.category },
+      { key: 'class', label: '🏆 클래스 마스터리', filter: (a) => a.category === 'class' },
+      { key: 'challenge', label: '🎯 도전 모드', filter: (a) => a.category === 'challenge' },
+      { key: 'collect', label: '🗺️ 탐험/수집', filter: (a) => a.category === 'collect' },
+      { key: 'hidden', label: '🔒 히든 성취', filter: (a) => a.hidden },
+    ];
 
     const renderContent = () => {
       clearContent();
@@ -2621,25 +2664,37 @@ class TitleScene extends Phaser.Scene {
         contentItems.push(barG);
         cy += 20;
 
-        for (const ach of ACHIEVEMENTS) {
-          const isHidden = HIDDEN_IDS.includes(ach.id);
-          const achieved = !!saved[ach.id];
-          let line, color;
-          if (achieved) {
-            line = `${ach.icon} ${ach.name}  ${ach.desc}  ✅`;
-            color = '#88DDAA';
-          } else if (isHidden) {
-            line = `🔒 ???  비밀 성취  🔒`;
-            color = '#445566';
-          } else {
-            line = `${ach.icon} ${ach.name}  ${ach.desc}  ⬜`;
-            color = '#667788';
-          }
-          const t = this.add.text(leftX, cy, line, {
-            fontSize: '11px', fontFamily: 'monospace', color, wordWrap: { width: textW }
+        for (const cat of ACH_CATEGORIES) {
+          const catAchs = ACHIEVEMENTS.filter(cat.filter);
+          const catDone = catAchs.filter(a => saved[a.id]).length;
+          const catHeader = this.add.text(leftX, cy, `${cat.label} (${catDone}/${catAchs.length})`, {
+            fontSize: '12px', fontFamily: 'monospace', color: '#AABBDD', stroke: '#000', strokeThickness: 1
           }).setDepth(303);
-          contentItems.push(t);
-          cy += 20;
+          contentItems.push(catHeader);
+          cy += 18;
+
+          for (const ach of catAchs) {
+            const isHidden = HIDDEN_IDS.includes(ach.id);
+            const achieved = !!saved[ach.id];
+            let line, color;
+            if (achieved) {
+              line = `  ${ach.icon} ${ach.name}  ${ach.desc}  ✅`;
+              color = '#88DDAA';
+            } else if (isHidden) {
+              line = `  🔒 ???  비밀 성취  🔒`;
+              color = '#445566';
+            } else {
+              line = `  ${ach.icon} ${ach.name}  ${ach.desc}  ⬜`;
+              color = '#667788';
+            }
+            const t = this.add.text(leftX, cy, line, {
+              fontSize: '11px', fontFamily: 'monospace', color, wordWrap: { width: textW }
+            }).setDepth(303);
+            contentItems.push(t);
+            cy += 20;
+            if (cy > contentY + contentH - 10) break;
+          }
+          cy += 6;
           if (cy > contentY + contentH - 10) break;
         }
       } else if (activeTab === 'equipment') {
@@ -5272,6 +5327,14 @@ class GameScene extends Phaser.Scene {
     if (this._diffMode) amount = Math.round(amount * this._diffMode.xpMul);
     if (this._equipBonuses && this._equipBonuses.xpMul > 0) amount = Math.round(amount * (1 + this._equipBonuses.xpMul));
     if (this._shamanXpMul) amount = Math.round(amount * this._shamanXpMul);
+    // Random event: XP triple
+    if (this.activeRandomEvents && this.activeRandomEvents.xp_triple) amount = Math.round(amount * 3);
+    // Random event: Combo XP (3x for next N kills)
+    if (this.activeRandomEvents && this.activeRandomEvents.combo_xp) {
+      amount = Math.round(amount * 3);
+      this.activeRandomEvents.combo_xp.charges--;
+      if (this.activeRandomEvents.combo_xp.charges <= 0) delete this.activeRandomEvents.combo_xp;
+    }
     this.playerXP += amount;
     while (this.playerXP >= this._getXPRequired(this.playerLevel)) {
       this.playerXP -= this._getXPRequired(this.playerLevel);
@@ -5711,7 +5774,7 @@ class GameScene extends Phaser.Scene {
   // ═══ EQUIPMENT DROP & PICKUP ═══
   _tryDropEquipment(x, y) {
     const luck = (this._equipBonuses ? this._equipBonuses.luckFlat : 0);
-    const feverMul = (this.activeRandomEvents && this.activeRandomEvents.drop_fever) ? 3 : 1;
+    const feverMul = (this.activeRandomEvents && this.activeRandomEvents.drop_fever) ? 3 : (this.activeRandomEvents && this.activeRandomEvents.equip_bonus_5x) ? 5 : 1;
     const synergyDrop = this._synergyExtraDropRate || 0;
     const timeBonus = Math.min(0.04, (this.gameElapsed || 0) / 60 * 0.002); // +0.2% per min, max +4%
     if (this._dailyModifier && this._dailyModifier.noEquipDrop) return;
@@ -6073,7 +6136,8 @@ class GameScene extends Phaser.Scene {
               }
               if (this._invincibleTimer > 0) { a.atkCD = 1.0; this.showFloatingText(px, py - 25, '💫 무적!', '#FFD700'); return; }
               const natureBlessDef = this._natureBlessing ? 0.85 : 1;
-              const actualDmg = a.def.damage * (a._diffDmgMul || 1) * (1 - this.upgradeManager.armorReduction) * natureBlessDef;
+              const dmgReduceMul = (this.activeRandomEvents && this.activeRandomEvents.damage_reduce) ? 0.5 : 1;
+              const actualDmg = a.def.damage * (a._diffDmgMul || 1) * (1 - this.upgradeManager.armorReduction) * natureBlessDef * dmgReduceMul;
               this.playerHP -= actualDmg; a.atkCD = 1.2; playHurt();
               if (this._triggerHitVignette) this._triggerHitVignette();
               this._hitStop(50); // player hit hitstop
@@ -8603,6 +8667,18 @@ class GameScene extends Phaser.Scene {
       ngRec.ngPlusClears = (ngRec.ngPlusClears || 0) + 1;
       RecordManager.save(ngRec);
     }
+    // Record Boss Rush clear
+    if (this._bossRushMode) {
+      const brRec = RecordManager.load();
+      brRec.bossRushClears = (brRec.bossRushClears || 0) + 1;
+      RecordManager.save(brRec);
+    }
+    // Record Hard+ clear
+    if (this._difficulty === 'hard' || this._difficulty === 'hell') {
+      const hRec = RecordManager.load();
+      hRec.hardClears = (hRec.hardClears || 0) + 1;
+      RecordManager.save(hRec);
+    }
 
     const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
     const diffBonus = this._diffMode ? this._diffMode.clearBonus : 10;
@@ -8971,12 +9047,18 @@ class GameScene extends Phaser.Scene {
       }
     }
     // ═══ Class Cooldowns ═══
-    if (this._classRoarCD > 0) this._classRoarCD -= dt;
-    if (this._classBlizzardCD > 0) this._classBlizzardCD -= dt;
-    if (this._classSprintCD > 0) this._classSprintCD -= dt;
-    if (this._classSpiritCD > 0) this._classSpiritCD -= dt;
-    if (this._classShamanStormCD > 0) this._classShamanStormCD -= dt;
-    if (this._classHunterVolleyCD > 0) this._classHunterVolleyCD -= dt;
+    // Class CD zero event: instantly reset all class cooldowns
+    if (this.activeRandomEvents && this.activeRandomEvents.class_cd_zero) {
+      this._classRoarCD = 0; this._classBlizzardCD = 0; this._classSprintCD = 0;
+      this._classSpiritCD = 0; this._classShamanStormCD = 0; this._classHunterVolleyCD = 0;
+    } else {
+      if (this._classRoarCD > 0) this._classRoarCD -= dt;
+      if (this._classBlizzardCD > 0) this._classBlizzardCD -= dt;
+      if (this._classSprintCD > 0) this._classSprintCD -= dt;
+      if (this._classSpiritCD > 0) this._classSpiritCD -= dt;
+      if (this._classShamanStormCD > 0) this._classShamanStormCD -= dt;
+      if (this._classHunterVolleyCD > 0) this._classHunterVolleyCD -= dt;
+    }
     if (this._classSprintActive && this._classSprintTimer !== undefined) {
       this._classSprintTimer -= dt;
       if (this._classSprintTimer <= 0) {
@@ -9856,6 +9938,21 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  _checkAllEpicEquip() {
+    try {
+      const eqRaw = localStorage.getItem(EquipmentManager.STORAGE_KEY);
+      if (!eqRaw) return false;
+      const eqData = JSON.parse(eqRaw);
+      const slots = Object.keys(SLOT_ICONS);
+      for (const slot of slots) {
+        if (!eqData[slot]) return false;
+        const item = EQUIPMENT_TABLE[slot]?.find(i => i.id === eqData[slot].itemId);
+        if (!item || (item.tier !== 'epic' && item.tier !== 'legendary')) return false;
+      }
+      return true;
+    } catch(e) { return false; }
+  }
+
   _checkAchievements() {
     const kills = this.upgradeManager ? this.upgradeManager.totalKills : 0;
     const elapsed = this.gameElapsed || 0;
@@ -9880,6 +9977,21 @@ class GameScene extends Phaser.Scene {
       secret_hidden_boss: this._hiddenBossDefeated === true,
       secret_konami:      this._konamiActivated === true,
       secret_survive_zone: (this._extremeZoneTotalTime || 0) >= 300,
+      // 클래스 마스터리
+      class_warrior:   (() => { try { return JSON.parse(localStorage.getItem('whiteout_class_wins') || '{}').warrior; } catch(e) { return false; } })(),
+      class_mage:      (() => { try { return JSON.parse(localStorage.getItem('whiteout_class_wins') || '{}').mage; } catch(e) { return false; } })(),
+      class_survivor:  (() => { try { return JSON.parse(localStorage.getItem('whiteout_class_wins') || '{}').survivor; } catch(e) { return false; } })(),
+      class_shaman:    (() => { try { return JSON.parse(localStorage.getItem('whiteout_class_wins') || '{}').shaman; } catch(e) { return false; } })(),
+      class_hunter:    (() => { try { return JSON.parse(localStorage.getItem('whiteout_class_wins') || '{}').hunter; } catch(e) { return false; } })(),
+      // 도전 모드
+      boss_rush_clear: (() => { try { return RecordManager.load().bossRushClears >= 1; } catch(e) { return false; } })(),
+      ng_plus_clear:   (() => { try { return RecordManager.load().ngPlusClears >= 1; } catch(e) { return false; } })(),
+      endless_30:      (() => { try { return RecordManager.load().longestEndlessSurvival >= 5400; } catch(e) { return false; } })(),
+      hard_clear:      (() => { try { return RecordManager.load().hardClears >= 1; } catch(e) { return false; } })(),
+      // 수집/탐험
+      all_equipment:   this._checkAllEpicEquip ? this._checkAllEpicEquip() : false,
+      all_zones:       (this._visitedZones && this._visitedZones.size >= 4),
+      all_synergies:   (this.synergyManager && this.synergyManager.activeSynergies && this.synergyManager.activeSynergies.size >= 5),
     };
 
     for (const ach of ACHIEVEMENTS) {
@@ -10264,6 +10376,21 @@ class GameScene extends Phaser.Scene {
       case 'heal_boost':
         this.activeRandomEvents.heal_boost = { endTime: this.gameElapsed + (evt.duration || 30) };
         break;
+      case 'equip_bonus_5x':
+        this.activeRandomEvents.equip_bonus_5x = { endTime: this.gameElapsed + (evt.duration || 30) };
+        break;
+      case 'xp_triple':
+        this.activeRandomEvents.xp_triple = { endTime: this.gameElapsed + (evt.duration || 30) };
+        break;
+      case 'damage_reduce':
+        this.activeRandomEvents.damage_reduce = { endTime: this.gameElapsed + (evt.duration || 30) };
+        break;
+      case 'combo_xp':
+        this.activeRandomEvents.combo_xp = { charges: evt.charges || 10 };
+        break;
+      case 'class_cd_zero':
+        this.activeRandomEvents.class_cd_zero = { endTime: this.gameElapsed + (evt.duration || 30) };
+        break;
     }
   }
 
@@ -10326,6 +10453,24 @@ class GameScene extends Phaser.Scene {
     if (active.heal_boost && now >= active.heal_boost.endTime) {
       delete active.heal_boost;
     }
+
+    // Equip bonus 5x
+    if (active.equip_bonus_5x && now >= active.equip_bonus_5x.endTime) {
+      delete active.equip_bonus_5x;
+    }
+    // XP triple
+    if (active.xp_triple && now >= active.xp_triple.endTime) {
+      delete active.xp_triple;
+    }
+    // Damage reduce
+    if (active.damage_reduce && now >= active.damage_reduce.endTime) {
+      delete active.damage_reduce;
+    }
+    // Class CD zero
+    if (active.class_cd_zero && now >= active.class_cd_zero.endTime) {
+      delete active.class_cd_zero;
+    }
+    // Combo XP (charge-based, no time cleanup needed)
   }
 
   showZoneAlert(text) {
