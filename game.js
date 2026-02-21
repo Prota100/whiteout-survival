@@ -184,6 +184,7 @@ class SaveManager {
         buildings: scene.placedBuildings.map(b => ({ type: b.type, x: b.x, y: b.y })),
         npcs: scene.npcsOwned.map(n => ({ type: n.npcType, x: n.x, y: n.y })),
         upgrades: scene.upgradeManager.toJSON(),
+        synergies: scene.synergyManager.toJSON(),
         playerXP: scene.playerXP,
         playerLevel: scene.playerLevel,
         gameElapsed: scene.gameElapsed,
@@ -417,6 +418,153 @@ const UPGRADE_SYNERGY = {
   DODGE: '💡 신발 장비와 시너지!',
   CAMPFIRE_BOOST: '💡 캠프파이어 HP 회복 강화!',
 };
+
+// ═══ 🔗 SKILL SYNERGY SYSTEM ═══
+const SKILL_SYNERGIES = [
+  {
+    id: 'berserker', name: '🔴 광전사', emoji: '🔴',
+    desc: '공격력+공격속도 → 추가 공격력 +20%',
+    requires: ['DAMAGE_UP', 'ATTACK_SPEED'],
+    bonus: { damageMultiplier: 0.20 }
+  },
+  {
+    id: 'ironwall', name: '🛡️ 철벽', emoji: '🛡️',
+    desc: 'HP강화+방어력 → 15% 확률 데미지 무효',
+    requires: ['MAX_HP', 'ARMOR'],
+    bonus: { blockChance: 0.15 }
+  },
+  {
+    id: 'swift_hunter', name: '🌪️ 신속 사냥꾼', emoji: '🌪️',
+    desc: '이동속도+넉백 → 이동속도 추가 +15%',
+    requires: ['MOVEMENT', 'KNOCKBACK'],
+    bonus: { speedMultiplier: 0.15 }
+  },
+  {
+    id: 'lucky_finder', name: '🍀 행운아', emoji: '🍀',
+    desc: '행운+보물사냥 → 장비 드롭률 +5%',
+    requires: ['LOOT_BONUS', 'TREASURE_HUNTER'],
+    bonus: { extraDropRate: 0.05 }
+  },
+  {
+    id: 'cold_master', name: '❄️ 한파 지배자', emoji: '❄️',
+    desc: '한파저항+HP회복 → 5초마다 한파 무효',
+    requires: ['FROST_RESISTANCE', 'REGEN'],
+    bonus: { coldImmunityPulse: 5 }
+  }
+];
+
+class SynergyManager {
+  constructor() {
+    this.activeSynergies = new Set();
+    this.coldImmunityTimer = 0;
+  }
+
+  checkSynergies(upgradeManager, scene) {
+    SKILL_SYNERGIES.forEach(syn => {
+      if (this.activeSynergies.has(syn.id)) return;
+      const allMet = syn.requires.every(id => upgradeManager.getLevel(id) >= 1);
+      if (allMet) {
+        this.activeSynergies.add(syn.id);
+        this.applySynergy(syn, scene);
+        this.showSynergyPopup(syn, scene);
+      }
+    });
+  }
+
+  applySynergy(syn, scene) {
+    switch (syn.id) {
+      case 'berserker':
+        scene.playerDamage = Math.round(scene.playerDamage * (1 + syn.bonus.damageMultiplier) * 100) / 100;
+        break;
+      case 'ironwall':
+        scene._synergyBlockChance = syn.bonus.blockChance;
+        break;
+      case 'swift_hunter':
+        scene.playerBaseSpeed *= (1 + syn.bonus.speedMultiplier);
+        scene.playerSpeed = scene.playerBaseSpeed;
+        scene.playerBaseSpeed = Math.min(350, scene.playerBaseSpeed);
+        scene.playerSpeed = Math.min(350, scene.playerSpeed);
+        break;
+      case 'lucky_finder':
+        scene._synergyExtraDropRate = syn.bonus.extraDropRate;
+        break;
+      case 'cold_master':
+        scene._synergyColdImmunity = true;
+        this.coldImmunityTimer = 0;
+        break;
+    }
+  }
+
+  updateColdImmunity(dt, scene) {
+    if (!scene._synergyColdImmunity) return;
+    this.coldImmunityTimer += dt;
+    if (this.coldImmunityTimer >= 5) {
+      this.coldImmunityTimer -= 5;
+      scene._coldImmunePulse = true;
+      scene.showFloatingText(scene.player.x, scene.player.y - 40, '❄️ 한파 무효!', '#88DDFF');
+    }
+  }
+
+  showSynergyPopup(syn, scene) {
+    const cam = scene.cameras.main;
+    const t = scene.add.text(cam.width / 2, cam.height * 0.4,
+      '✨ ' + syn.name + ' 시너지 발동!', {
+      fontSize: '28px', fontFamily: 'monospace', color: '#FFD700',
+      stroke: '#000', strokeThickness: 5, fontStyle: 'bold',
+      shadow: { offsetX: 0, offsetY: 0, color: '#FF8C00', blur: 15, fill: true }
+    }).setScrollFactor(0).setDepth(250).setOrigin(0.5).setAlpha(0);
+
+    const desc = scene.add.text(cam.width / 2, cam.height * 0.4 + 35,
+      syn.desc, {
+      fontSize: '16px', fontFamily: 'monospace', color: '#FFFFFF',
+      stroke: '#000', strokeThickness: 3
+    }).setScrollFactor(0).setDepth(250).setOrigin(0.5).setAlpha(0);
+
+    scene.tweens.add({
+      targets: [t, desc], alpha: 1, scale: { from: 0.5, to: 1.1 }, duration: 400, ease: 'Back.Out',
+      onComplete: () => {
+        scene.tweens.add({ targets: [t, desc], alpha: 0, y: '-=30', duration: 1000, delay: 1500,
+          onComplete: () => { t.destroy(); desc.destroy(); }
+        });
+      }
+    });
+
+    scene.cameras.main.flash(300, 255, 200, 0, true);
+  }
+
+  renderHUD(scene) {
+    // Clear old HUD
+    if (this._hudElements) this._hudElements.forEach(e => { try { e.destroy(); } catch(ex) {} });
+    this._hudElements = [];
+    if (this.activeSynergies.size === 0) return;
+
+    const cam = scene.cameras.main;
+    let idx = 0;
+    SKILL_SYNERGIES.forEach(syn => {
+      if (!this.activeSynergies.has(syn.id)) return;
+      const x = 20 + idx * 28;
+      const y = cam.height - 30;
+      const bg = scene.add.circle(x, y, 12, 0x333333, 0.7).setScrollFactor(0).setDepth(150);
+      const icon = scene.add.text(x, y, syn.emoji, {
+        fontSize: '14px'
+      }).setScrollFactor(0).setDepth(151).setOrigin(0.5);
+      this._hudElements.push(bg, icon);
+      idx++;
+    });
+  }
+
+  toJSON() { return { active: [...this.activeSynergies], coldTimer: this.coldImmunityTimer }; }
+  fromJSON(data, scene) {
+    if (!data) return;
+    this.activeSynergies = new Set(data.active || []);
+    this.coldImmunityTimer = data.coldTimer || 0;
+    // Re-apply effects
+    SKILL_SYNERGIES.forEach(syn => {
+      if (this.activeSynergies.has(syn.id)) this.applySynergy(syn, scene);
+    });
+  }
+}
+// ═══ END SKILL SYNERGY ═══
 
 const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5 };
 const RARITY_LABELS = { common: { name: '일반', color: '#9E9E9E' }, rare: { name: '희귀', color: '#2196F3' }, epic: { name: '에픽', color: '#9C27B0' } };
@@ -2050,6 +2198,11 @@ class GameScene extends Phaser.Scene {
     this.buildMode = null;
     this.storageCapacity = 50;
     this.upgradeManager = new UpgradeManager();
+    this.synergyManager = new SynergyManager();
+    this._synergyBlockChance = 0;
+    this._synergyExtraDropRate = 0;
+    this._synergyColdImmunity = false;
+    this._coldImmunePulse = false;
     this.equipmentManager = new EquipmentManager();
     this.equipmentDrops = []; // world items awaiting pickup
     this.supplyCrates = [];
@@ -2311,6 +2464,10 @@ class GameScene extends Phaser.Scene {
     // Upgrades
     if (save.upgrades) {
       this.upgradeManager.fromJSON(save.upgrades, this);
+      if (save.synergies) {
+        this.synergyManager.fromJSON(save.synergies, this);
+        this.synergyManager.renderHUD(this);
+      }
     }
     // Phase 2 state
     if (save.gameElapsed != null) this.gameElapsed = save.gameElapsed;
@@ -2690,6 +2847,28 @@ class GameScene extends Phaser.Scene {
           x: a.x + Math.cos(ang) * dist * 2, y: a.y + Math.sin(ang) * dist * 2,
           alpha: 0, scale: { from: 1.5, to: 0 }, duration: Phaser.Math.Between(600, 1200),
           ease: 'Quad.Out', onComplete: () => p.destroy() });
+      }
+      // 25min boss: guaranteed rare+ equipment drop
+      if (a.isFirstBoss) {
+        const luck = (this._equipBonuses ? this._equipBonuses.luckFlat : 0);
+        // Force rare or better grade
+        const grades = ['rare', 'epic', 'legendary'];
+        const grade = grades[Math.floor(Math.random() * grades.length)];
+        const slots = Object.keys(EQUIPMENT_TABLE);
+        const slot = slots[Math.floor(Math.random() * slots.length)];
+        const items = EQUIPMENT_TABLE[slot];
+        const item = items[Math.floor(Math.random() * items.length)];
+        const drop = { slot, grade, ...item };
+        const color = EQUIP_GRADE_COLORS[grade];
+        const label = this.add.text(a.x, a.y - 10, drop.icon + ' ' + drop.name, {
+          fontSize: '14px', fontFamily: 'monospace', color: color,
+          stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+        }).setDepth(15).setOrigin(0.5);
+        const glow = this.add.circle(a.x, a.y, 14, Phaser.Display.Color.HexStringToColor(color).color, 0.4).setDepth(8);
+        this.tweens.add({ targets: glow, scale: { from: 0.5, to: 1.5 }, alpha: { from: 0.6, to: 0.2 }, yoyo: true, repeat: -1, duration: 800 });
+        this.tweens.add({ targets: label, y: label.y - 8, yoyo: true, repeat: -1, duration: 1000, ease: 'Sine.InOut' });
+        this.equipmentDrops.push({ x: a.x, y: a.y, ...drop, label, glow, lifetime: 30 });
+        this.showCenterAlert('⚗️ 희귀 장비 드롭 확정!', '#2196F3');
       }
     }
     // ═══ 고기 드랍 시스템 (확률 기반) ═══
@@ -3418,7 +3597,8 @@ class GameScene extends Phaser.Scene {
   _tryDropEquipment(x, y) {
     const luck = (this._equipBonuses ? this._equipBonuses.luckFlat : 0);
     const feverMul = (this.activeRandomEvents && this.activeRandomEvents.drop_fever) ? 3 : 1;
-    const dropRate = (0.03 + luck / 1000) * feverMul; // 3% base + luck bonus, ×3 during golden fever
+    const synergyDrop = this._synergyExtraDropRate || 0;
+    const dropRate = (0.03 + luck / 1000 + synergyDrop) * feverMul; // 3% base + luck bonus + synergy, ×3 during golden fever
     if (Math.random() > dropRate) return;
     if (this.equipmentDrops.length >= 5) return;
 
@@ -3734,6 +3914,12 @@ class GameScene extends Phaser.Scene {
                 this.showFloatingText(px, py - 25, '🌀 회피!', '#88DDFF');
                 return;
               }
+              // Ironwall synergy: block chance
+              if (this._synergyBlockChance > 0 && Math.random() < this._synergyBlockChance) {
+                a.atkCD = 1.0;
+                this.showFloatingText(px, py - 25, '🛡️ 무효!', '#FFD700');
+                return;
+              }
               const actualDmg = a.def.damage * (1 - this.upgradeManager.armorReduction);
               this.playerHP -= actualDmg; a.atkCD = 1.2; playHurt();
               this.cameras.main.shake(120, 0.012);
@@ -3747,6 +3933,78 @@ class GameScene extends Phaser.Scene {
             }
           } else this.wander(a, dt, 0.25);
         } else this.wander(a, dt, 0.3);
+      }
+
+      // ═══ BOSS PATTERN AI ═══
+      if (a.isBoss && !a.isMiniboss) {
+        a.bossPatternTimer = (a.bossPatternTimer || 0) + dt;
+        const hpRatio = a.hp / a.maxHP;
+
+        // Final boss (55min) patterns
+        if (a.isFinalBoss) {
+          // Pattern 1: Snowstorm (every 30s)
+          if (a.bossPatternTimer >= 30) {
+            a.bossPatternTimer = 0;
+            // Snowstorm visual + slow
+            const stormG = this.add.graphics().setDepth(14);
+            stormG.fillStyle(0x88CCFF, 0.25);
+            stormG.fillCircle(a.x, a.y, 200);
+            stormG.lineStyle(3, 0xAADDFF, 0.6);
+            stormG.strokeCircle(a.x, a.y, 200);
+            // Snow particles
+            for (let i = 0; i < 20; i++) {
+              const ang = Math.random() * Math.PI * 2;
+              const r = Math.random() * 200;
+              const sx = a.x + Math.cos(ang) * r, sy = a.y + Math.sin(ang) * r;
+              const sp = this.add.circle(sx, sy, 3, 0xFFFFFF, 0.8).setDepth(15);
+              this.tweens.add({ targets: sp, y: sp.y + 30, alpha: 0, duration: 1500, onComplete: () => sp.destroy() });
+            }
+            this.tweens.add({ targets: stormG, alpha: 0, duration: 2000, onComplete: () => stormG.destroy() });
+            // Slow player if in range
+            if (dist < 200) {
+              const origSpeed = this.playerSpeed;
+              this.playerSpeed *= 0.5;
+              this.showFloatingText(this.player.x, this.player.y - 30, '🌨️ 둔화!', '#88CCFF');
+              this.time.delayedCall(2000, () => { this.playerSpeed = origSpeed; });
+            }
+          }
+
+          // Pattern 2: Enrage at 50% HP
+          if (!a.bossEnraged && hpRatio <= 0.5) {
+            a.bossEnraged = true;
+            a.def.speed = Math.round(a.def.speed * 1.5);
+            a.setTint(0xFF2222);
+            this.showCenterAlert('💢 보스 분노!', '#FF2222');
+            this.cameras.main.shake(300, 0.015);
+          }
+
+          // Pattern 3: Minion summon at 33% HP
+          if (!a.bossMinionSpawned && hpRatio <= 0.33) {
+            a.bossMinionSpawned = true;
+            this.showCenterAlert('🐺 증원!', '#FF6644');
+            for (let i = 0; i < 3; i++) {
+              const ea = Math.random() * Math.PI * 2;
+              const ed = 50 + Math.random() * 50;
+              const ex = Phaser.Math.Clamp(a.x + Math.cos(ea) * ed, 80, WORLD_W - 80);
+              const ey = Phaser.Math.Clamp(a.y + Math.sin(ea) * ed, 80, WORLD_H - 80);
+              const esc = this.physics.add.sprite(ex, ey, 'wolf').setCollideWorldBounds(true).setDepth(4);
+              const escDef = { hp: 30, speed: 120, damage: 6, drops: { meat: 1, leather: 1 }, size: 18, behavior: 'chase', name: '🐺 늑대', aggroRange: 250, fleeRange: 0, fleeDistance: 0, color: 0x666688 };
+              esc.animalType = 'wolf'; esc.def = escDef; esc.hp = escDef.hp; esc.maxHP = escDef.hp;
+              esc.wanderTimer = 0; esc.wanderDir = { x: 0, y: 0 }; esc.hitFlash = 0; esc.atkCD = 0; esc.fleeTimer = 0;
+              esc.hpBar = this.add.graphics().setDepth(6);
+              esc.nameLabel = this.add.text(ex, ey - 28, '🐺 늑대', { fontSize: '11px', fontFamily: 'monospace', color: '#FFFFFF', stroke: '#000', strokeThickness: 3 }).setDepth(6).setOrigin(0.5);
+              this.animals.add(esc);
+            }
+          }
+        }
+
+        // First boss (25min) pattern: enrage at 40% HP
+        if (a.isFirstBoss && !a.bossEnraged && hpRatio <= 0.4) {
+          a.bossEnraged = true;
+          a.def.speed = Math.round(a.def.speed * 1.3);
+          a.setTint(0xFF4444);
+          this.showCenterAlert('💢 보스 분노!', '#FF4444');
+        }
       }
 
       // FROST_WALKER: slow nearby enemies when player is moving
@@ -4075,7 +4333,11 @@ class GameScene extends Phaser.Scene {
       }
     });
     this.hunger = Math.max(0, this.hunger - hungerRate * dt);
-    if (this.temperature <= 0) { this.playerHP -= 8 * dt; if (this.playerHP <= 0) this.endGame(); }
+    if (this.temperature <= 0) {
+      // Cold master synergy: pulse immunity
+      if (this._coldImmunePulse) { this._coldImmunePulse = false; }
+      else { this.playerHP -= 8 * dt; if (this.playerHP <= 0) this.endGame(); }
+    }
     if (this.hunger <= 0) { this.playerHP -= 5 * dt; if (this.playerHP <= 0) this.endGame(); }
     if (this.hunger < 30 && this.res.meat > 0) {
       this.res.meat--; this.hunger = Math.min(this.maxHunger, this.hunger + 25);
@@ -4838,6 +5100,10 @@ class GameScene extends Phaser.Scene {
     // Apply upgrade
     this.upgradeManager.applyUpgrade(key, this);
 
+    // Check skill synergies
+    this.synergyManager.checkSynergies(this.upgradeManager, this);
+    this.synergyManager.renderHUD(this);
+
     // Selection burst effect
     for (let i = 0; i < 12; i++) {
       const ang = (i / 12) * Math.PI * 2;
@@ -5338,6 +5604,11 @@ class GameScene extends Phaser.Scene {
     boss.atkCD = 0;
     boss.fleeTimer = 0;
     boss.isBoss = true;
+    boss.isFinalBoss = isFinal;
+    boss.isFirstBoss = !isFinal;
+    boss.bossPatternTimer = 0;
+    boss.bossEnraged = false;
+    boss.bossMinionSpawned = false;
     boss.hpBar = this.add.graphics().setDepth(6);
     boss.nameLabel = this.add.text(bx, by - boss.def.size - 10, bossName, {
       fontSize: '16px', fontFamily: 'monospace', color: '#FF4444', stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
@@ -5718,6 +5989,7 @@ class GameScene extends Phaser.Scene {
     this._updateBuffs(dt);
     this._updateEquipmentDrops(dt);
     this.updateAnimalAI(dt);
+    if (this.synergyManager) this.synergyManager.updateColdImmunity(dt, this);
     this.updateNPCs(dt);
     this.updateCampfireSystem(dt);
     this.updateSurvival(dt);
