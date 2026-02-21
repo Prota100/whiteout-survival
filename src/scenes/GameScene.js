@@ -1102,13 +1102,17 @@ class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: cr, x: a.x + Math.cos(sa)*40, y: a.y + Math.sin(sa)*40, alpha: 0, angle: cr.angle + 90, duration: 600, onComplete: () => cr.destroy() });
       }
     } else if (a.animalType === 'splitting_slime' && !a._isMiniSlime) {
+      // [밸런스 패스3] 미니슬라임 최대 10마리 제한 (무한 증식 방지)
+      const miniCount = this.animals.getChildren().filter(c => c.active && c._isMiniSlime).length;
+      if (miniCount >= 10) { /* skip split if too many minis */ }
       // Spawn 2 mini slimes
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < (miniCount >= 10 ? 0 : 2); i++) {
         const ox = (i === 0 ? -15 : 15);
         const mini = this.physics.add.sprite(a.x + ox, a.y, 'mini_slime').setCollideWorldBounds(true).setDepth(5);
         mini.animalType = 'splitting_slime';
         mini._isMiniSlime = true;
-        const miniDef = { ...ANIMALS.splitting_slime, hp: Math.round(ANIMALS.splitting_slime.hp * 0.3), size: 12, name: '💧 미니슬라임' };
+        // [밸런스 패스3] 미니슬라임 데미지 50%로 감소 (부모와 같은 8→3 수준)
+        const miniDef = { ...ANIMALS.splitting_slime, hp: Math.round(ANIMALS.splitting_slime.hp * 0.3), damage: Math.round(ANIMALS.splitting_slime.damage * 0.5), size: 12, name: '💧 미니슬라임' };
         mini.def = miniDef;
         this._applyDifficultyToAnimal(mini, miniDef);
         mini.setScale(0.5);
@@ -2556,7 +2560,7 @@ class GameScene extends Phaser.Scene {
           const origSpeed = this.playerSpeed;
           this.playerSpeed *= 0.5;
           this.player.setTint(0x88CCFF);
-          this.time.delayedCall(500, () => {
+          this.time.delayedCall(800, () => { // [밸런스 패스3] 500→800ms: 사냥꾼 슬로우가 위협적이어야 함
             this.playerSpeed = Math.max(this.playerSpeed, origSpeed);
             this._playerSlowed = false;
             if (this.player.active) this.player.clearTint();
@@ -2654,7 +2658,7 @@ class GameScene extends Phaser.Scene {
             this.animals.getChildren().forEach(b => {
               if (b === a || !b.active || b.animalType === 'blizzard_shaman') return;
               const bd = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
-              if (bd < 300) {
+              if (bd < 200) { // [밸런스 패스3] 300→200: 300px는 화면 전체 수준으로 너무 넓음
                 if (!b._shamanBuffed) {
                   b._shamanBuffed = true;
                   b._shamanBuffSource = a;
@@ -5376,12 +5380,12 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.shake(200, 0.005);
     this.time.delayedCall(1000, () => {
       if (actNum === 2) {
-        // Elite wolf pack
-        for (let i = 0; i < 6; i++) this.spawnAnimal('wolf');
-        for (let i = 0; i < 2; i++) this.spawnAnimal('dire_wolf');
+        // [밸런스 패스3] dire_wolf→bear 수정 (dire_wolf 미정의), 6→5 늑대 (15분에 8마리 동시는 과다)
+        for (let i = 0; i < 5; i++) this.spawnAnimal('wolf');
+        for (let i = 0; i < 1; i++) this.spawnAnimal('bear');
       } else if (actNum === 3) {
-        // Split slime + ice hunter mix
-        for (let i = 0; i < 3; i++) this.spawnAnimal('split_slime');
+        // [밸런스 패스3] split_slime→splitting_slime 오타 수정
+        for (let i = 0; i < 3; i++) this.spawnAnimal('splitting_slime');
         for (let i = 0; i < 3; i++) this.spawnAnimal('ice_hunter');
         for (let i = 0; i < 2; i++) this.spawnAnimal('wolf');
       } else if (actNum === 4) {

@@ -12,9 +12,12 @@ const ANIMALS = {
   bear:    { hp: 80, speed: 70,  damage: 15, drops: { meat: 6, leather: 3 }, size: 26, behavior: 'chase', name: '🐻 곰', aggroRange: 140, fleeRange: 0, fleeDistance: 0, color: 0xF0EEE8 },
   ice_golem: { hp: 240, speed: 60, damage: 50, drops: { meat: 10, leather: 5, gold: 15 }, size: 24, behavior: 'chase', name: '🧊 얼음골렘', aggroRange: 200, fleeRange: 0, fleeDistance: 0, color: 0x88CCEE },
   snow_leopard: { hp: 45, speed: 220, damage: 20, drops: { meat: 4, leather: 2, gold: 5 }, size: 14, behavior: 'chase', name: '🐆 눈표범', aggroRange: 250, fleeRange: 0, fleeDistance: 0, color: 0xF8F8FF },
-  ice_hunter: { hp: 45, speed: 80, damage: 3, drops: { meat: 3, leather: 2, gold: 3 }, size: 20, behavior: 'ranged', name: '🏹 얼음사냥꾼', aggroRange: 280, fleeRange: 0, fleeDistance: 0, color: 0x4488CC },
-  splitting_slime: { hp: 64, speed: 45, damage: 8, drops: { meat: 4, gold: 5 }, size: 24, behavior: 'chase', name: '💥 분열슬라임', aggroRange: 160, fleeRange: 0, fleeDistance: 0, color: 0x44CC44 },
-  blizzard_shaman: { hp: 25, speed: 70, damage: 2, drops: { meat: 2, gold: 8 }, size: 18, behavior: 'shaman', name: '🔮 눈보라샤먼', aggroRange: 200, fleeRange: 100, fleeDistance: 120, color: 0xAA55FF },
+  // [밸런스 패스3] 사냥꾼: speed 80→85 (도망 약간 더 잘침), damage 3→4 (위협감 상향)
+  ice_hunter: { hp: 45, speed: 85, damage: 4, drops: { meat: 3, leather: 2, gold: 3 }, size: 20, behavior: 'ranged', name: '🏹 얼음사냥꾼', aggroRange: 280, fleeRange: 0, fleeDistance: 0, color: 0x4488CC },
+  // [밸런스 패스3] 슬라임: hp 64→55 (분열 포함 총 체력 풀이 너무 높았음), damage 8→6 (미니슬라임 damage도 이에 연동)
+  splitting_slime: { hp: 55, speed: 45, damage: 6, drops: { meat: 4, gold: 5 }, size: 24, behavior: 'chase', name: '💥 분열슬라임', aggroRange: 160, fleeRange: 0, fleeDistance: 0, color: 0x44CC44 },
+  // [밸런스 패스3] 샤먼: hp 25→30 (너무 빨리 죽어서 위협이 안됨), fleeRange 100→130 (도망 더 일찍 시작)
+  blizzard_shaman: { hp: 30, speed: 70, damage: 2, drops: { meat: 2, gold: 8 }, size: 18, behavior: 'shaman', name: '🔮 눈보라샤먼', aggroRange: 200, fleeRange: 130, fleeDistance: 120, color: 0xAA55FF },
 };
 
 // ── Building Definitions (ENHANCED) ──
@@ -22,7 +25,8 @@ const BUILDINGS = {
   campfire: {
     name: '화덕', cost: { wood: 5 }, warmth: 8, desc: '강력한 생존 기지', icon: '🔥',
     warmthRadius: 150,
-    effects: { healthRegen: 8, goldGeneration: 3, attackSpeedBonus: 1.5, moveSpeedBonus: 1.3, animalRepelRadius: 120 }
+    // [밸런스 패스3] healthRegen 8→4 (8은 거의 무적 수준, 한파 중 8이면 데미지 상쇄됨)
+    effects: { healthRegen: 4, goldGeneration: 3, attackSpeedBonus: 1.5, moveSpeedBonus: 1.3, animalRepelRadius: 120 }
   },
   tent:     { name: '텐트', cost: { wood: 10, leather: 3 }, warmth: 5, desc: '수면 회복 + HP회복', icon: '⛺',
     effects: { healthRegen: 3, hungerSlowdown: 0.5 }

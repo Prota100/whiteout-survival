@@ -1,5 +1,6 @@
 // Equipment constants & tables
-const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5, unique: 3 };
+// [밸런스 패스3] legendary 추가 (클래스 업그레이드가 common 빈도로 나오던 버그 수정)
+const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5, legendary: 2, unique: 3 };
 const RARITY_LABELS = { common: { name: '일반', color: '#9E9E9E' }, rare: { name: '희귀', color: '#2196F3' }, epic: { name: '에픽', color: '#9C27B0' } };
 const GRADE_COLORS = { common: '#9E9E9E', uncommon: '#4CAF50', rare: '#2196F3', epic: '#9C27B0', legend: '#FF9800' };
 
