@@ -2279,6 +2279,29 @@ class TitleScene extends Phaser.Scene {
       allElements.push(lockTxt);
     }
 
+    // ═══ Boss Rush Toggle ═══
+    let bossRushMode = false;
+    const bossRushY = ngPlusY + 28;
+    const bossRushGfx = this.add.graphics().setDepth(201);
+    allElements.push(bossRushGfx);
+    const bossRushTxt = this.add.text(W/2 + 14, bossRushY, '🔴 보스 러시 (보스만 연속 등장)', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#CCDDEE'
+    }).setOrigin(0, 0.5).setDepth(202);
+    allElements.push(bossRushTxt);
+    const drawBossRushToggle = () => {
+      bossRushGfx.clear();
+      const cbx = W/2 - 8, cby = bossRushY - 8;
+      bossRushGfx.fillStyle(bossRushMode ? 0xFF4444 : 0x333344, 0.9);
+      bossRushGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
+      bossRushGfx.lineStyle(1, bossRushMode ? 0xFF6666 : 0x555566, 1);
+      bossRushGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
+      bossRushTxt.setColor(bossRushMode ? '#FF6666' : '#888899');
+    };
+    drawBossRushToggle();
+    const bossRushHit = this.add.rectangle(W/2 + 60, bossRushY, 200, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
+    allElements.push(bossRushHit);
+    bossRushHit.on('pointerdown', () => { bossRushMode = !bossRushMode; drawBossRushToggle(); });
+
     // Confirm button
     const btnW2 = Math.min(200, W * 0.4);
     const btnH2 = 44;
@@ -2298,7 +2321,7 @@ class TitleScene extends Phaser.Scene {
       try { localStorage.setItem('whiteout_difficulty', selectedDifficulty); } catch(e) {}
       try { localStorage.setItem('whiteout_endless', endlessMode ? 'true' : 'false'); } catch(e) {}
       destroy();
-      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty, endlessMode, ngPlus: ngPlusMode });
+      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty, endlessMode, ngPlus: ngPlusMode, bossRush: bossRushMode });
     });
 
     // Cancel / back
@@ -3026,7 +3049,8 @@ class BootScene extends Phaser.Scene {
     const dailyChallenge = this.scene.settings.data?.dailyChallenge || null;
     const endlessMode = this.scene.settings.data?.endlessMode || false;
     const ngPlus = this.scene.settings.data?.ngPlus || false;
-    this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge, endlessMode, ngPlus });
+    const bossRush = this.scene.settings.data?.bossRush || false;
+    this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge, endlessMode, ngPlus, bossRush });
   }
 
   createPlayerTexture() {
@@ -3816,6 +3840,14 @@ class GameScene extends Phaser.Scene {
     this._dailyModifier = this._dailyChallenge ? this._dailyChallenge.modifier : {};
     this._endlessMode = this.scene.settings.data?.endlessMode || localStorage.getItem('whiteout_endless') === 'true';
     this._ngPlus = this.scene.settings.data?.ngPlus || false;
+    this._bossRushMode = this.scene.settings.data?.bossRush || false;
+    this._bossRushWave = 0; // current boss rush wave (0 = not started, 1-4)
+    this._bossRushWaveSpawned = [false, false, false, false];
+    this._bossRushBossAlive = false;
+    this._bossRushBossSpawnTime = 0;
+    this._bossRushPrepPhase = false;
+    this._bossRushPrepTimer = 0;
+    this._bossRushCleared = false;
     this._endlessMultiplier = 1.0;
     this._endlessBossCount = 0;
     this._milestone30Shown = false;
@@ -4705,6 +4737,10 @@ class GameScene extends Phaser.Scene {
     // Boss death special effects
     if (a.isBoss && !a.isMiniboss) {
       this.bossKillCount = (this.bossKillCount || 0) + 1;
+      // Boss Rush mode: handle wave completion
+      if (this._bossRushMode && a._bossRushWaveIdx != null) {
+        this._onBossRushBossKilled(a._bossRushWaveIdx);
+      }
       // Hidden boss kill check
       if (a.isHiddenBoss) { this._onHiddenBossKilled(); }
       this.cameras.main.shake(800, 0.03);
@@ -6446,6 +6482,7 @@ class GameScene extends Phaser.Scene {
     const dailyBlizzard = (this._dailyModifier && this._dailyModifier.alwaysBlizzard) ? 2.0 : 1;
     const effectiveBlizzard = Math.max(this.blizzardMultiplier, dailyBlizzard);
     const ngPlusColdMul = this._ngPlusColdMul || 1;
+    if (!this._bossRushMode) // Boss Rush: no cold waves
     this.temperature = Math.max(0, this.temperature - (baseDecay + Math.abs(zoneDecay)) * effectiveBlizzard * diffColdMul * ngPlusColdMul * (1 - frostRes) * woolMul * sprintFreeze * dt);
     this.placedBuildings.forEach(b => {
       if (b.type === 'campfire') return;
@@ -6934,6 +6971,41 @@ class GameScene extends Phaser.Scene {
     // ═══ Next Event Countdown HUD ═══
     if (d.nextEventText) {
       const t = this.gameElapsed;
+      // Boss Rush HUD override
+      if (this._bossRushMode) {
+        const BOSS_RUSH_TIMES = [60, 240, 420, 720];
+        if (this._bossRushCleared) {
+          d.nextEventText.textContent = '🏆 보스 러시 클리어!';
+          d.nextEventText.style.color = '#FFD700';
+          d.nextEventText.style.animation = 'none';
+          d.nextEventText.style.display = '';
+        } else if (this._bossRushBossAlive) {
+          const timeLeft = Math.max(0, 180 - (t - this._bossRushBossSpawnTime));
+          const rs = Math.floor(timeLeft);
+          d.nextEventText.textContent = `🔴 Wave ${this._bossRushWave}/4 — 제한시간 ${rs}s`;
+          d.nextEventText.style.color = timeLeft <= 30 ? '#FF4444' : '#FF6666';
+          d.nextEventText.style.animation = timeLeft <= 30 ? 'event-pulse-fast 0.4s ease-in-out infinite' : 'none';
+          d.nextEventText.style.display = '';
+        } else {
+          // Find next wave
+          let nextWave = -1;
+          for (let i = 0; i < BOSS_RUSH_TIMES.length; i++) {
+            if (!this._bossRushWaveSpawned[i]) { nextWave = i; break; }
+          }
+          if (nextWave >= 0) {
+            const rem = Math.max(0, BOSS_RUSH_TIMES[nextWave] - t);
+            const rm = Math.floor(rem / 60);
+            const rs = Math.floor(rem % 60);
+            const timeStr = rm > 0 ? `${rm}m ${String(rs).padStart(2,'0')}s` : `${rs}s`;
+            d.nextEventText.textContent = `🔴 Wave ${nextWave+1}/4까지 ${timeStr}`;
+            d.nextEventText.style.color = rem <= 30 ? '#FF4444' : '#FFFFFF';
+            d.nextEventText.style.animation = rem <= 10 ? 'event-pulse-fast 0.4s ease-in-out infinite' : 'none';
+            d.nextEventText.style.display = '';
+          } else {
+            d.nextEventText.style.display = 'none';
+          }
+        }
+      } else {
       const events = [];
       // Boss: 25min, 55min
       if (!this.boss1Spawned) events.push({ time: 25*60, label: '💀 보스까지' });
@@ -6971,6 +7043,7 @@ class GameScene extends Phaser.Scene {
       } else {
         d.nextEventText.style.display = 'none';
       }
+      } // end boss rush else
     }
 
     // ═══ Class HUD ═══
@@ -7902,6 +7975,154 @@ class GameScene extends Phaser.Scene {
     // Epic entrance with camera effects
     playBossSpawn();
     this._triggerBossEntrance(bossName);
+  }
+
+  // ═══ BOSS RUSH MODE SYSTEM ═══
+  _updateBossRush(dt) {
+    if (!this._bossRushMode || this._bossRushCleared || this.gameOver) return;
+    const elapsed = this.gameElapsed;
+    // Boss Rush wave schedule: 60s, 240s, 420s, 720s
+    const BOSS_RUSH_WAVES = [
+      { time: 60,  name: '🐺 알파 울프',   hp: 800,  scale: 1.8, dmg: 15, speed: 55, tint: 0xAABBFF, sprite: 'wolf' },
+      { time: 240, name: '🐻‍❄️ 서리곰',    hp: 1200, scale: 2.0, dmg: 20, speed: 55, tint: 0xAABBFF, sprite: 'bear' },
+      { time: 420, name: '❄️ 블리자드 베어', hp: 2000, scale: 2.2, dmg: 25, speed: 58, tint: 0x8888FF, sprite: 'bear' },
+      { time: 720, name: '❄️ 폭풍왕',       hp: 4500, scale: 2.8, dmg: 38, speed: 60, tint: 0x6666FF, sprite: 'bear' }
+    ];
+
+    // Prep phase (15s after boss kill - spawn weak enemies for XP)
+    if (this._bossRushPrepPhase) {
+      this._bossRushPrepTimer -= dt;
+      if (this._bossRushPrepTimer <= 0) {
+        this._bossRushPrepPhase = false;
+        // Kill remaining prep enemies
+        this.animals.getChildren().filter(a => a.active && !a.isBoss).forEach(a => { if (a.active) this.killAnimal(a); });
+      }
+      return;
+    }
+
+    // Check boss kill timeout (3 min after spawn)
+    if (this._bossRushBossAlive && elapsed - this._bossRushBossSpawnTime >= 180) {
+      this.showCenterAlert('💀 시간 초과! 보스 러시 실패', '#FF2222');
+      this.time.delayedCall(2000, () => this._showBossRushGameOver());
+      this._bossRushBossAlive = false;
+      return;
+    }
+
+    // Spawn next wave boss
+    for (let i = 0; i < BOSS_RUSH_WAVES.length; i++) {
+      if (!this._bossRushWaveSpawned[i] && elapsed >= BOSS_RUSH_WAVES[i].time && !this._bossRushBossAlive) {
+        this._bossRushWaveSpawned[i] = true;
+        this._bossRushWave = i + 1;
+        this._bossRushBossAlive = true;
+        this._bossRushBossSpawnTime = elapsed;
+        this._spawnBossRushBoss(BOSS_RUSH_WAVES[i], i);
+        break;
+      }
+    }
+
+    // Warning 10s before boss spawn
+    for (let i = 0; i < BOSS_RUSH_WAVES.length; i++) {
+      const warnKey = '_bossRushWarn' + i;
+      if (!this[warnKey] && !this._bossRushWaveSpawned[i] && elapsed >= BOSS_RUSH_WAVES[i].time - 10) {
+        this[warnKey] = true;
+        playBossSpawn();
+        this.showCenterAlert(`⚠️ Wave ${i+1} 보스 10초 후 등장!`, '#FF2222');
+      }
+    }
+  }
+
+  _spawnBossRushBoss(cfg, waveIdx) {
+    const bossRushMul = 1.1; // 10% stronger (no cold waves tradeoff)
+    const hp = Math.round(cfg.hp * bossRushMul);
+    const dmg = Math.round(cfg.dmg * bossRushMul);
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 400;
+    const bx = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 80, WORLD_W - 80);
+    const by = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 80, WORLD_H - 80);
+
+    const boss = this.physics.add.sprite(bx, by, cfg.sprite).setCollideWorldBounds(true).setDepth(5);
+    boss.setScale(cfg.scale);
+    boss.setTint(cfg.tint);
+    boss.animalType = 'boss';
+    boss.def = { hp, speed: cfg.speed, damage: dmg, drops: { meat: 15 + waveIdx * 5, leather: 8 + waveIdx * 3 }, size: 26 * cfg.scale, behavior: 'chase', name: cfg.name, aggroRange: 500, fleeRange: 0, fleeDistance: 0, color: cfg.tint };
+    boss.hp = hp;
+    boss.maxHP = hp;
+    boss.wanderTimer = 0;
+    boss.wanderDir = { x: 0, y: 0 };
+    boss.hitFlash = 0;
+    boss.atkCD = 0;
+    boss.fleeTimer = 0;
+    boss.isBoss = true;
+    boss.isFinalBoss = waveIdx === 3;
+    boss.isFirstBoss = waveIdx === 0;
+    boss._bossRushWaveIdx = waveIdx;
+    boss.bossPatternTimer = 0;
+    boss.bossEnraged = false;
+    boss.bossMinionSpawned = false;
+    boss.hpBar = this.add.graphics().setDepth(6);
+    boss.nameLabel = this.add.text(bx, by - boss.def.size - 10, cfg.name, {
+      fontSize: '16px', fontFamily: 'monospace', color: '#FF4444', stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+    }).setDepth(6).setOrigin(0.5);
+    this.animals.add(boss);
+
+    playBossSpawn();
+    this._triggerBossEntrance(cfg.name);
+    this.showCenterAlert(`🔴 Wave ${waveIdx + 1}/4 — ${cfg.name}`, '#FF4444');
+  }
+
+  _onBossRushBossKilled(waveIdx) {
+    this._bossRushBossAlive = false;
+    // Level up instantly
+    this.gainXP(this.xpToNext);
+    // Show upgrade UI (3 cards as boss rush reward)
+    this.time.delayedCall(500, () => {
+      const cards = this.upgradeManager ? this.upgradeManager.pickThreeCards(0, this._playerClass) : [];
+      if (cards.length > 0) this.showUpgradeUI(cards);
+    });
+
+    if (waveIdx === 3) {
+      // Final boss killed - victory!
+      this._bossRushCleared = true;
+      this.time.delayedCall(2000, () => this._showBossRushVictory());
+    } else {
+      // Start prep phase
+      this._bossRushPrepPhase = true;
+      this._bossRushPrepTimer = 15;
+      this.showCenterAlert(`✅ Wave ${waveIdx + 1} 클리어! 15초 준비`, '#44FF44');
+    }
+  }
+
+  _showBossRushVictory() {
+    // Record run with boss rush meta points (20)
+    const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
+    const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0) + 20;
+    RecordManager.recordRun(this.gameElapsed, totalKills, this.playerLevel, this.stats.maxCombo || 0, true, 0);
+    if (this._playerClass) SkinManager.recordClassWin(this._playerClass);
+    playWinSound();
+    this._showEndScreen({
+      isVictory: true,
+      survivalTime: this.gameElapsed,
+      totalKills,
+      maxCombo: this.stats.maxCombo || 0,
+      level: this.playerLevel,
+      earned,
+      equipBonuses: this._equipBonuses
+    });
+  }
+
+  _showBossRushGameOver() {
+    const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
+    const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0);
+    RecordManager.recordRun(this.gameElapsed, totalKills, this.playerLevel, this.stats.maxCombo || 0, false, 0);
+    this._showEndScreen({
+      isVictory: false,
+      survivalTime: this.gameElapsed,
+      totalKills,
+      maxCombo: this.stats.maxCombo || 0,
+      level: this.playerLevel,
+      earned,
+      equipBonuses: this._equipBonuses
+    });
   }
 
   // ═══ BOSS HP BAR SYSTEM ═══
@@ -9139,7 +9360,25 @@ class GameScene extends Phaser.Scene {
       if (storyKeys[newAct]) this.showActStoryText(ACT_STORY[storyKeys[newAct]]);
     }
 
+    // ═══ Boss Rush Mode Update ═══
+    if (this._bossRushMode) {
+      this._updateBossRush(dt);
+    }
+
     // ═══ Wave Spawn (dynamic interval) ═══
+    if (this._bossRushMode && !this._bossRushPrepPhase) { /* skip normal spawns in boss rush */ }
+    else if (this._bossRushMode && this._bossRushPrepPhase) {
+      // During prep phase, spawn a few weak enemies for XP
+      this.waveTimer += dt;
+      if (this.waveTimer >= 3) {
+        this.waveTimer = 0;
+        const currentCount = this.animals.getChildren().filter(a => !a.isBoss).length;
+        if (currentCount < 5) {
+          for (let i = 0; i < 3; i++) this.spawnAnimal('rabbit');
+        }
+      }
+    }
+    if (this._bossRushMode) { /* skip normal wave spawn below */ } else {
     this.waveTimer += dt;
     const spawnConfig = this.getSpawnConfig();
     const rushMul = (this.activeRandomEvents && this.activeRandomEvents.spawn_rush) ? 3 : 1;
@@ -9158,6 +9397,7 @@ class GameScene extends Phaser.Scene {
         }
       }
     }
+    } // end boss rush else block
 
     // ═══ Blizzard Visuals ═══
     this.updateBlizzardVisuals(dt);
@@ -9166,6 +9406,7 @@ class GameScene extends Phaser.Scene {
     this.updateSnowballs(dt);
 
     // ═══ Act Miniboss Spawns ═══
+    if (!this._bossRushMode) {
     if (!this.act2MinibossSpawned && this.gameElapsed >= 12 * 60) {
       this.act2MinibossSpawned = true;
       this.spawnActMiniboss('alpha_wolf');
@@ -9190,17 +9431,18 @@ class GameScene extends Phaser.Scene {
       this.boss2Spawned = true;
       this.spawnBoss('final');
     }
+    } // end !bossRushMode guard for act/boss spawns
 
     // ═══ Act 3: Timed Ice Golem / Snow Leopard Spawns ═══
     const minNow = this.gameElapsed / 60;
-    if (minNow >= 40) {
+    if (!this._bossRushMode && minNow >= 40) {
       this._iceGolemSpawnTimer += dt;
       if (this._iceGolemSpawnTimer >= 45) {
         this._iceGolemSpawnTimer = 0;
         this.spawnAnimal('ice_golem');
       }
     }
-    if (minNow >= 45) {
+    if (!this._bossRushMode && minNow >= 45) {
       this._snowLeopardSpawnTimer += dt;
       if (this._snowLeopardSpawnTimer >= 30) {
         this._snowLeopardSpawnTimer = 0;
@@ -9210,6 +9452,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // ═══ Elite Wave (15min intervals) ═══
+    if (!this._bossRushMode)
     [15, 30, 45].forEach(m => {
       if (!this._eliteWaveTriggered[m] && minNow >= m && minNow < m + 0.5 && !this._challengeActive) {
         this._eliteWaveTriggered[m] = true;
@@ -9243,6 +9486,7 @@ class GameScene extends Phaser.Scene {
     });
 
     // ═══ Siege Wave (25min, 50min) ═══
+    if (!this._bossRushMode)
     [25, 50].forEach(m => {
       if (!this._siegeWaveTriggered[m] && minNow >= m && minNow < m + 0.5) {
         this._siegeWaveTriggered[m] = true;
@@ -9268,6 +9512,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // ═══ Survival Challenge (every 10min, 2min duration) ═══
+    if (this._bossRushMode) { /* skip challenges in boss rush */ } else {
     const challengeMin = Math.floor(minNow / 10) * 10;
     if (challengeMin >= 10 && challengeMin !== this._lastChallengeMin && minNow >= challengeMin && minNow < challengeMin + 2) {
       if (!this._challengeActive) {
@@ -9302,6 +9547,7 @@ class GameScene extends Phaser.Scene {
         }
       }
     }
+    } // end boss rush challenge skip
 
     // ═══ Milestone Banners ═══
     if (!this._milestone30Shown && this.gameElapsed >= 30 * 60) {
@@ -9314,7 +9560,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // ═══ Victory Condition: 60분 생존 ═══
-    if (!this.gameWon && this.gameElapsed >= 60 * 60) {
+    if (!this._bossRushMode && !this.gameWon && this.gameElapsed >= 60 * 60) {
       this.gameWon = true;
       if (this._endlessMode) {
         // Endless mode: show banner and continue
