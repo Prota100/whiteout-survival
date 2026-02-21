@@ -408,6 +408,134 @@ const RARITY_WEIGHTS = { common: 70, rare: 25, epic: 5 };
 const RARITY_LABELS = { common: { name: '일반', color: '#9E9E9E' }, rare: { name: '희귀', color: '#2196F3' }, epic: { name: '에픽', color: '#9C27B0' } };
 const GRADE_COLORS = { common: '#9E9E9E', uncommon: '#4CAF50', rare: '#2196F3', epic: '#9C27B0', legend: '#FF9800' };
 
+// ═══ EQUIPMENT SYSTEM ═══
+const EQUIP_GRADES = ['common','rare','epic','legendary','unique'];
+const EQUIP_GRADE_COLORS = { common:'#9E9E9E', rare:'#2196F3', epic:'#9C27B0', legendary:'#FFD700', unique:'#FF4081' };
+const EQUIP_GRADE_LABELS = { common:'일반', rare:'희귀', epic:'에픽', legendary:'전설', unique:'고유' };
+const EQUIP_GRADE_WEIGHTS = { common:55, rare:30, epic:12, legendary:2.5, unique:0.5 };
+const EQUIP_SLOT_ICONS = { weapon:'⚔️', armor:'🛡️', boots:'👢', helmet:'🎩', ring:'💍' };
+
+const EQUIPMENT_TABLE = {
+  weapon: [
+    { id:'stick', name:'나무작대기', icon:'🪵', effects:{ atkMul:0.10 } },
+    { id:'knife', name:'사냥칼', icon:'🔪', effects:{ atkMul:0.20, aspdMul:0.10 } },
+    { id:'axe', name:'도끼', icon:'🪓', effects:{ atkMul:0.40 } },
+    { id:'spear', name:'얼음창', icon:'🔱', effects:{ atkMul:0.30 } },
+    { id:'fire_sword', name:'화염검', icon:'🗡️', effects:{ atkMul:0.50 } },
+    { id:'legend_sword', name:'전설의검', icon:'⚔️', effects:{ atkMul:0.80, aspdMul:0.20 } }
+  ],
+  armor: [
+    { id:'rabbit_coat', name:'토끼털코트', icon:'🐰', effects:{ hpFlat:20 } },
+    { id:'wolf_hide', name:'늑대가죽', icon:'🐺', effects:{ hpFlat:40, defMul:0.10 } },
+    { id:'bear_hide', name:'곰가죽', icon:'🐻', effects:{ hpFlat:60, defMul:0.20 } },
+    { id:'iron_armor', name:'철갑옷', icon:'🛡️', effects:{ hpFlat:80, defMul:0.30 } },
+    { id:'hero_armor', name:'용사갑옷', icon:'🦸', effects:{ hpFlat:120, defMul:0.40 } }
+  ],
+  boots: [
+    { id:'old_boots', name:'낡은신발', icon:'👞', effects:{ spdMul:0.10 } },
+    { id:'fur_boots', name:'털장화', icon:'🥾', effects:{ spdMul:0.15, coldRes:0.05 } },
+    { id:'swift_boots', name:'빠른장화', icon:'👟', effects:{ spdMul:0.25 } },
+    { id:'snowshoes', name:'설상화', icon:'🎿', effects:{ spdMul:0.20, dodgeMul:0.10 } },
+    { id:'wind_boots', name:'바람장화', icon:'💨', effects:{ spdMul:0.35, dodgeMul:0.15 } }
+  ],
+  helmet: [
+    { id:'fur_hat', name:'털모자', icon:'🧢', effects:{ coldRes:0.10 } },
+    { id:'camp_hat', name:'캠프파이어모자', icon:'🔥', effects:{ regenPS:0.5 } },
+    { id:'battle_helm', name:'전투투구', icon:'⛑️', effects:{ hpFlat:30, defMul:0.10 } },
+    { id:'crystal_helm', name:'수정투구', icon:'💎', effects:{ coldRes:0.20, regenPS:1 } },
+    { id:'hero_helm', name:'용사투구', icon:'👑', effects:{ hpFlat:60, regenPS:2 } }
+  ],
+  ring: [
+    { id:'wood_ring', name:'나무반지', icon:'🟤', effects:{ xpMul:0.10 } },
+    { id:'silver_ring', name:'은반지', icon:'⚪', effects:{ xpMul:0.15, luckFlat:5 } },
+    { id:'gold_ring', name:'금반지', icon:'🟡', effects:{ xpMul:0.20, luckFlat:10 } },
+    { id:'ruby_ring', name:'루비반지', icon:'🔴', effects:{ luckFlat:20, atkMul:0.10 } },
+    { id:'legend_ring', name:'전설반지', icon:'💍', effects:{ xpMul:0.30, luckFlat:30, atkMul:0.10 } }
+  ]
+};
+
+class EquipmentManager {
+  static STORAGE_KEY = 'whiteout_equipment';
+
+  constructor() {
+    this.slots = { weapon:null, armor:null, boots:null, helmet:null, ring:null };
+    this.load();
+  }
+
+  load() {
+    try {
+      const raw = localStorage.getItem(EquipmentManager.STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        Object.keys(this.slots).forEach(s => { if (saved[s]) this.slots[s] = saved[s]; });
+      }
+    } catch(e) {}
+  }
+
+  save() {
+    localStorage.setItem(EquipmentManager.STORAGE_KEY, JSON.stringify(this.slots));
+  }
+
+  // Try equipping; returns true if equipped (upgrade)
+  tryEquip(slot, itemId, grade) {
+    const current = this.slots[slot];
+    const gradeIdx = EQUIP_GRADES.indexOf(grade);
+    if (current) {
+      const curIdx = EQUIP_GRADES.indexOf(current.grade);
+      if (gradeIdx <= curIdx) return false; // not an upgrade
+    }
+    this.slots[slot] = { itemId, grade };
+    this.save();
+    return true;
+  }
+
+  getItemDef(slot) {
+    const eq = this.slots[slot];
+    if (!eq) return null;
+    const list = EQUIPMENT_TABLE[slot];
+    return list ? list.find(i => i.id === eq.itemId) : null;
+  }
+
+  // Aggregate all equipment bonuses
+  getTotalBonuses() {
+    const b = { atkMul:0, aspdMul:0, hpFlat:0, defMul:0, spdMul:0, dodgeMul:0, coldRes:0, regenPS:0, xpMul:0, luckFlat:0 };
+    for (const slot of Object.keys(this.slots)) {
+      const def = this.getItemDef(slot);
+      if (!def) continue;
+      const gradeIdx = EQUIP_GRADES.indexOf(this.slots[slot].grade);
+      const gradeMul = 1 + gradeIdx * 0.25; // common=1x, rare=1.25x, epic=1.5x, legendary=1.75x, unique=2x
+      for (const [k, v] of Object.entries(def.effects)) {
+        if (k === 'hpFlat' || k === 'luckFlat') b[k] += v * gradeMul;
+        else b[k] += v * gradeMul;
+      }
+    }
+    return b;
+  }
+
+  // Roll a random equipment drop
+  static rollDrop(luck) {
+    // Pick grade
+    const roll = Math.random() * 100;
+    let acc = 0; let grade = 'common';
+    for (const g of EQUIP_GRADES) {
+      acc += EQUIP_GRADE_WEIGHTS[g];
+      if (roll < acc) { grade = g; break; }
+    }
+    // Pick random slot
+    const slots = Object.keys(EQUIPMENT_TABLE);
+    const slot = slots[Math.floor(Math.random() * slots.length)];
+    // Pick random item from that slot
+    const items = EQUIPMENT_TABLE[slot];
+    const item = items[Math.floor(Math.random() * items.length)];
+    return { slot, itemId: item.id, grade, name: item.name, icon: item.icon };
+  }
+
+  reset() {
+    this.slots = { weapon:null, armor:null, boots:null, helmet:null, ring:null };
+    localStorage.removeItem(EquipmentManager.STORAGE_KEY);
+  }
+}
+
 class UpgradeManager {
   constructor() {
     this.levels = {}; // { DAMAGE_UP: 2, ... }
@@ -1822,12 +1950,21 @@ class GameScene extends Phaser.Scene {
     this.warmthResist += meta.bonusTempResist;
     this.res.wood += meta.bonusWood;
     this.extraCardChoices = meta.extraCardChoices || 0;
+
+    // ═══ Apply Equipment Bonuses ═══
+    const eqBonus = this.equipmentManager.getTotalBonuses();
+    this.playerMaxHP += eqBonus.hpFlat;
+    this.playerHP = this.playerMaxHP;
+    this.warmthResist += eqBonus.coldRes;
+    this._equipBonuses = eqBonus; // cache for runtime use
     
     this.gameOver = false;
     this.isRespawning = false;
     this.buildMode = null;
     this.storageCapacity = 50;
     this.upgradeManager = new UpgradeManager();
+    this.equipmentManager = new EquipmentManager();
+    this.equipmentDrops = []; // world items awaiting pickup
     this.supplyCrates = [];
     this.upgradeUIActive = false;
     this.playerXP = 0;
@@ -2372,6 +2509,10 @@ class GameScene extends Phaser.Scene {
   }
 
   damageAnimal(a, dmg) {
+    // Equipment attack bonus
+    if (this._equipBonuses && this._equipBonuses.atkMul > 0) {
+      dmg = Math.round(dmg * (1 + this._equipBonuses.atkMul));
+    }
     // Critical hit check
     if (this.upgradeManager.critChance > 0 && Math.random() < this.upgradeManager.critChance) {
       dmg = Math.ceil(dmg * 2);
@@ -2468,6 +2609,9 @@ class GameScene extends Phaser.Scene {
     this.stats.kills[a.animalType]++;
     // ═══ Buff item drop chance ═══
     this._tryDropBuff(a.x, a.y);
+
+    // ═══ Equipment drop chance ═══
+    this._tryDropEquipment(a.x, a.y);
 
     // ═══ Kill Combo ═══
     this.killCombo++;
@@ -2745,7 +2889,8 @@ class GameScene extends Phaser.Scene {
   }
 
   gainXP(source) {
-    const amount = (typeof source === 'number') ? source : (XP_SOURCES[source] ?? XP_SOURCES.default);
+    let amount = (typeof source === 'number') ? source : (XP_SOURCES[source] ?? XP_SOURCES.default);
+    if (this._equipBonuses && this._equipBonuses.xpMul > 0) amount = Math.round(amount * (1 + this._equipBonuses.xpMul));
     this.playerXP += amount;
     while (this.playerXP >= this._getXPRequired(this.playerLevel)) {
       this.playerXP -= this._getXPRequired(this.playerLevel);
@@ -2880,6 +3025,7 @@ class GameScene extends Phaser.Scene {
     };
     // HUD slots
     this._createBuffHUD();
+    this._createEquipHUD();
     // Fire breath damage timer
     this._fireBreathTimer = 0;
   }
@@ -3135,6 +3281,148 @@ class GameScene extends Phaser.Scene {
     }
 
     this._updateBuffHUD();
+  }
+
+  // ═══ EQUIPMENT DROP & PICKUP ═══
+  _tryDropEquipment(x, y) {
+    const luck = (this._equipBonuses ? this._equipBonuses.luckFlat : 0);
+    const dropRate = 0.03 + luck / 1000; // 3% base + luck bonus
+    if (Math.random() > dropRate) return;
+    if (this.equipmentDrops.length >= 5) return;
+
+    const drop = EquipmentManager.rollDrop(luck);
+    const color = EQUIP_GRADE_COLORS[drop.grade];
+    const label = this.add.text(x, y - 10, drop.icon + ' ' + drop.name, {
+      fontSize: '12px', fontFamily: 'monospace', color: color,
+      stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setDepth(15).setOrigin(0.5);
+
+    const glow = this.add.circle(x, y, 14, Phaser.Display.Color.HexStringToColor(color).color, 0.4).setDepth(8);
+    this.tweens.add({ targets: glow, scale: { from: 0.5, to: 1.5 }, alpha: { from: 0.6, to: 0.2 }, yoyo: true, repeat: -1, duration: 800 });
+    this.tweens.add({ targets: label, y: label.y - 8, yoyo: true, repeat: -1, duration: 1000, ease: 'Sine.InOut' });
+
+    const eqDrop = { x, y, ...drop, label, glow, lifetime: 30 };
+    this.equipmentDrops.push(eqDrop);
+  }
+
+  _updateEquipmentDrops(dt) {
+    const px = this.player.x, py = this.player.y;
+    for (let i = this.equipmentDrops.length - 1; i >= 0; i--) {
+      const ed = this.equipmentDrops[i];
+      ed.lifetime -= dt;
+      if (ed.lifetime < 5) {
+        const a = Math.sin(ed.lifetime * 6) * 0.3 + 0.5;
+        if (ed.label) ed.label.setAlpha(a);
+        if (ed.glow) ed.glow.setAlpha(a * 0.4);
+      }
+      if (ed.lifetime <= 0) {
+        if (ed.label) ed.label.destroy();
+        if (ed.glow) ed.glow.destroy();
+        this.equipmentDrops.splice(i, 1);
+        continue;
+      }
+      const dist = Phaser.Math.Distance.Between(px, py, ed.x, ed.y);
+      if (dist < 100) {
+        this._pickupEquipment(ed, i);
+      }
+    }
+  }
+
+  _pickupEquipment(ed, idx) {
+    const equipped = this.equipmentManager.tryEquip(ed.slot, ed.itemId, ed.grade);
+    if (equipped) {
+      const gradeLabel = EQUIP_GRADE_LABELS[ed.grade];
+      const color = EQUIP_GRADE_COLORS[ed.grade];
+      this.showFloatingText(this.player.x, this.player.y - 40,
+        ed.icon + ' ' + ed.name + ' 장착!', color);
+      // Re-apply equipment bonuses
+      this._equipBonuses = this.equipmentManager.getTotalBonuses();
+      this._updateEquipHUD();
+    } else {
+      this.showFloatingText(this.player.x, this.player.y - 40,
+        '이미 더 좋은 장비!', '#888888');
+    }
+    if (ed.label) ed.label.destroy();
+    if (ed.glow) ed.glow.destroy();
+    this.equipmentDrops.splice(idx, 1);
+  }
+
+  // ═══ EQUIPMENT HUD ═══
+  _createEquipHUD() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    this._equipHudGfx = this.add.graphics().setScrollFactor(0).setDepth(105);
+    this._equipHudTexts = [];
+    this._equipHudTooltip = null;
+    const slotKeys = ['weapon','armor','boots','helmet','ring'];
+    const startX = W - 230;
+    const startY = H - 50;
+    for (let i = 0; i < 5; i++) {
+      const sx = startX + i * 45;
+      const txt = this.add.text(sx, startY, '', {
+        fontSize: '18px', fontFamily: 'monospace'
+      }).setScrollFactor(0).setDepth(106).setOrigin(0.5);
+      this._equipHudTexts.push(txt);
+      // Click handler for tooltip
+      const hit = this.add.rectangle(sx, startY, 40, 40, 0, 0)
+        .setScrollFactor(0).setDepth(107).setInteractive();
+      const slotKey = slotKeys[i];
+      hit.on('pointerdown', () => this._showEquipTooltip(slotKey, sx, startY - 50));
+    }
+    this._updateEquipHUD();
+  }
+
+  _updateEquipHUD() {
+    if (!this._equipHudGfx) return;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    this._equipHudGfx.clear();
+    const slotKeys = ['weapon','armor','boots','helmet','ring'];
+    const startX = W - 230;
+    const startY = H - 50;
+    for (let i = 0; i < 5; i++) {
+      const sx = startX + i * 45;
+      const slot = slotKeys[i];
+      const eq = this.equipmentManager.slots[slot];
+      if (eq) {
+        const color = Phaser.Display.Color.HexStringToColor(EQUIP_GRADE_COLORS[eq.grade]).color;
+        this._equipHudGfx.fillStyle(0x222244, 0.9);
+        this._equipHudGfx.fillRoundedRect(sx - 20, startY - 20, 40, 40, 6);
+        this._equipHudGfx.lineStyle(2, color, 1);
+        this._equipHudGfx.strokeRoundedRect(sx - 20, startY - 20, 40, 40, 6);
+        const def = this.equipmentManager.getItemDef(slot);
+        this._equipHudTexts[i].setText(def ? def.icon : EQUIP_SLOT_ICONS[slot]);
+      } else {
+        this._equipHudGfx.fillStyle(0x333344, 0.5);
+        this._equipHudGfx.fillRoundedRect(sx - 20, startY - 20, 40, 40, 6);
+        this._equipHudGfx.lineStyle(1, 0x555566, 0.5);
+        this._equipHudGfx.strokeRoundedRect(sx - 20, startY - 20, 40, 40, 6);
+        this._equipHudTexts[i].setText(EQUIP_SLOT_ICONS[slot]).setAlpha(0.3);
+      }
+    }
+  }
+
+  _showEquipTooltip(slot, x, y) {
+    if (this._equipHudTooltip) { this._equipHudTooltip.destroy(); this._equipHudTooltip = null; }
+    const eq = this.equipmentManager.slots[slot];
+    if (!eq) return;
+    const def = this.equipmentManager.getItemDef(slot);
+    if (!def) return;
+    const gradeLabel = EQUIP_GRADE_LABELS[eq.grade];
+    const color = EQUIP_GRADE_COLORS[eq.grade];
+    const effectStr = Object.entries(def.effects).map(([k,v]) => {
+      const names = { atkMul:'공격력', aspdMul:'공속', hpFlat:'HP', defMul:'방어', spdMul:'이속', dodgeMul:'회피', coldRes:'한파저항', regenPS:'HP회복', xpMul:'XP', luckFlat:'행운' };
+      return (names[k]||k) + (k.includes('Flat') ? '+'+v : '+'+Math.round(v*100)+'%');
+    }).join(', ');
+    const txt = `[${gradeLabel}] ${def.icon} ${def.name}\n${effectStr}`;
+    this._equipHudTooltip = this.add.text(x, y, txt, {
+      fontSize: '11px', fontFamily: 'monospace', color: color,
+      stroke: '#000', strokeThickness: 3, backgroundColor: '#111122',
+      padding: { x: 6, y: 4 }
+    }).setScrollFactor(0).setDepth(200).setOrigin(0.5, 1);
+    this.time.delayedCall(3000, () => {
+      if (this._equipHudTooltip) { this._equipHudTooltip.destroy(); this._equipHudTooltip = null; }
+    });
   }
 
   updateAnimalAI(dt) {
@@ -5038,7 +5326,8 @@ class GameScene extends Phaser.Scene {
       const mag = Math.sqrt(finalMX*finalMX + finalMY*finalMY);
       if (mag > 1) { finalMX /= mag; finalMY /= mag; }
     }
-    const effectiveSpeed = this.playerSpeed * (this.streakBuff?.spdMul || 1);
+    const eqSpdMul = 1 + (this._equipBonuses ? this._equipBonuses.spdMul : 0);
+    const effectiveSpeed = this.playerSpeed * (this.streakBuff?.spdMul || 1) * eqSpdMul;
     this.player.body.setVelocity(finalMX*effectiveSpeed, finalMY*effectiveSpeed);
     // 4방향 스프라이트 전환 (상하좌우) + 뒷모습
     const absX = Math.abs(finalMX);
@@ -5085,6 +5374,7 @@ class GameScene extends Phaser.Scene {
     });
 
     this._updateBuffs(dt);
+    this._updateEquipmentDrops(dt);
     this.updateAnimalAI(dt);
     this.updateNPCs(dt);
     this.updateCampfireSystem(dt);
