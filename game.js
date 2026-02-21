@@ -1367,17 +1367,18 @@ class EquipmentManager {
     return list ? list.find(i => i.id === eq.itemId) : null;
   }
 
-  // Aggregate all equipment bonuses
+  // Aggregate all equipment bonuses (30% nerfed for balance)
   getTotalBonuses() {
     const b = { atkMul:0, aspdMul:0, hpFlat:0, defMul:0, spdMul:0, dodgeMul:0, coldRes:0, regenPS:0, xpMul:0, luckFlat:0 };
+    const EQUIP_NERF = 0.7; // 장비 효과 30% 하향
     for (const slot of Object.keys(this.slots)) {
       const def = this.getItemDef(slot);
       if (!def) continue;
       const gradeIdx = EQUIP_GRADES.indexOf(this.slots[slot].grade);
       const gradeMul = 1 + gradeIdx * 0.25; // common=1x, rare=1.25x, epic=1.5x, legendary=1.75x, unique=2x
       for (const [k, v] of Object.entries(def.effects)) {
-        if (k === 'hpFlat' || k === 'luckFlat') b[k] += v * gradeMul;
-        else b[k] += v * gradeMul;
+        if (k === 'hpFlat' || k === 'luckFlat') b[k] += v * gradeMul * EQUIP_NERF;
+        else b[k] += v * gradeMul * EQUIP_NERF;
       }
     }
     return b;
@@ -1839,10 +1840,10 @@ const NPC_BUBBLES = {
 
 // ── NPC Definitions ──
 const NPC_DEFS = [
-  { type: 'hunter',    name: '사냥꾼', cost: { meat: 8 },  desc: '자동 사냥' },
-  { type: 'gatherer',  name: '채집꾼', cost: { meat: 5 },  desc: '자동 채집' },
-  { type: 'merchant',  name: '상인',   cost: { meat: 20 }, desc: '고기→금화' },
-  { type: 'warrior',   name: '전사',   cost: { meat: 35 }, desc: '강력 전투' },
+  { type: 'hunter',    name: '사냥꾼', cost: { meat: 12 },  desc: '자동 사냥' },
+  { type: 'gatherer',  name: '채집꾼', cost: { meat: 8 },  desc: '자동 채집' },
+  { type: 'merchant',  name: '상인',   cost: { meat: 30 }, desc: '고기→금화' },
+  { type: 'warrior',   name: '전사',   cost: { meat: 50 }, desc: '강력 전투' },
 ];
 
 // ── Resource node types ──
@@ -1851,19 +1852,41 @@ const RESOURCE_NODES = {
   rock:  { name: '바위', resource: 'stone', hp: 4, yield: 2, size: 14, regen: 45 },
 };
 
-// ── Quests ──
+// ── Quests (20+ redesigned with conditions) ──
 const QUESTS = [
-  { id: 'q1', name: '첫 사냥', desc: '토끼 15마리 사냥', check: s => s.kills.rabbit >= 15, reward: { meat: 3 } },
-  { id: 'q2', name: '나무꾼', desc: '나무 10개 채집', check: s => s.woodGathered >= 10, reward: { stone: 5 } },
-  { id: 'q3', name: '화덕 건설', desc: '화덕 1개 건설', check: s => s.built.campfire >= 1, reward: { leather: 3 } },
-  { id: 'q3b', name: '고기 수집', desc: '고기 5개 모으기', check: s => (s.meatCollected||0) >= 5, reward: { gold: 50 }, rewardEffect: { tempBonus: 5 } },
-  { id: 'q4', name: '도구 제작', desc: '도구 1개 제작', check: s => s.crafted >= 1, reward: { meat: 10 } },
-  { id: 'q5', name: '용맹한 사냥꾼', desc: '늑대 10마리 사냥', check: s => s.kills.wolf >= 10, reward: { leather: 5 } },
-  { id: 'q5b', name: '사슴 사냥꾼', desc: '사슴 10마리 사냥', check: s => s.kills.deer >= 10, reward: { leather: 5, meat: 8 } },
-  { id: 'q6', name: '텐트 건설', desc: '텐트 건설하기', check: s => s.built.tent >= 1, reward: { meat: 15 } },
-  { id: 'q6b', name: '대량 납품', desc: '고기 10개 모으기', check: s => (s.meatCollected||0) >= 10, reward: { gold: 100 }, rewardEffect: { maxHPBonus: 20 } },
-  { id: 'q7', name: '곰 사냥', desc: '곰 5마리 사냥', check: s => s.kills.bear >= 5, reward: { leather: 8, meat: 10 } },
-  { id: 'q8', name: 'NPC 고용', desc: 'NPC 1명 고용', check: s => s.npcsHired >= 1, reward: { wood: 10, stone: 10 } },
+  // Act 1: 초반 생존 (0-5분)
+  { id: 'q1', name: '첫 사냥', desc: '토끼 5마리 처치', check: s => (s.kills.rabbit||0) >= 5, reward: { meat: 5 } },
+  { id: 'q2', name: '고기 납품', desc: '고기 5개 모으기', check: s => (s.meatCollected||0) >= 5, reward: { gold: 30 }, rewardEffect: { tempBonus: 5 } },
+  { id: 'q3', name: '나무꾼', desc: '나무 10개 채집', check: s => s.woodGathered >= 10, reward: { stone: 5, meat: 3 } },
+  { id: 'q4', name: '화덕 건설', desc: '화덕 1개 건설', check: s => (s.built.campfire||0) >= 1, reward: { leather: 3 } },
+  { id: 'q5', name: '체온 유지', desc: '화덕 건설 후 30초 체온 유지', check: (s, scene) => (s.built.campfire||0) >= 1 && scene && scene._warmthNearFireTime >= 30, reward: { gold: 50, meat: 5 } },
+
+  // Act 2: 중반 성장 (5-10분)
+  { id: 'q6', name: '도구 제작', desc: '도구 1개 제작', check: s => s.crafted >= 1, reward: { meat: 8 } },
+  { id: 'q7', name: '펭귄 사냥꾼', desc: '펭귄 8마리 처치', check: s => (s.kills.penguin||0) >= 8, reward: { leather: 3, gold: 20 } },
+  { id: 'q8', name: '사슴 사냥꾼', desc: '사슴 10마리 처치', check: s => (s.kills.deer||0) >= 10, reward: { leather: 5, meat: 8 } },
+  { id: 'q9', name: '대량 납품', desc: '고기 15개 모으기', check: s => (s.meatCollected||0) >= 15, reward: { gold: 80 }, rewardEffect: { maxHPBonus: 15 } },
+  { id: 'q10', name: '5분 생존', desc: '5분간 생존하기', check: (s, scene) => scene && scene.gameElapsed >= 300, reward: { meat: 10, wood: 10 } },
+
+  // Act 3: 늑대 시대 (10-15분)
+  { id: 'q11', name: '늑대 사냥', desc: '늑대 3마리 처치', check: s => (s.kills.wolf||0) >= 3, reward: { leather: 5, gold: 40 } },
+  { id: 'q12', name: 'NPC 고용', desc: 'NPC 1명 고용', check: s => s.npcsHired >= 1, reward: { wood: 10, stone: 10 } },
+  { id: 'q13', name: '텐트 건설', desc: '텐트 건설하기', check: s => (s.built.tent||0) >= 1, reward: { meat: 12, gold: 30 } },
+  { id: 'q14', name: '10분 생존', desc: '10분간 생존하기', check: (s, scene) => scene && scene.gameElapsed >= 600, reward: { gold: 100, leather: 5 }, rewardEffect: { maxHPBonus: 20 } },
+  { id: 'q15', name: '연속 처치', desc: '10킬 콤보 달성', check: s => (s.maxCombo||0) >= 10, reward: { gold: 60, meat: 8 } },
+
+  // Act 4: 곰 시대 (15-20분)
+  { id: 'q16', name: '곰 사냥', desc: '곰 3마리 처치 후 고기 8개 납품', check: s => (s.kills.bear||0) >= 3 && (s.meatCollected||0) >= 25, reward: { leather: 10, gold: 100 } },
+  { id: 'q17', name: '무기 장인', desc: '장비 합성 2회', check: s => s.crafted >= 2, reward: { gold: 80, meat: 10 } },
+  { id: 'q18', name: '15분 생존', desc: '15분간 생존하기', check: (s, scene) => scene && scene.gameElapsed >= 900, reward: { gold: 150, leather: 8 }, rewardEffect: { maxHPBonus: 30 } },
+  { id: 'q19', name: '늑대 학살', desc: '늑대 10마리 처치', check: s => (s.kills.wolf||0) >= 10, reward: { leather: 8, gold: 60 } },
+
+  // Act 5: 보스 레이드 (20분+)
+  { id: 'q20', name: '20분 생존', desc: '20분간 생존하기', check: (s, scene) => scene && scene.gameElapsed >= 1200, reward: { gold: 200, meat: 20 }, rewardEffect: { maxHPBonus: 40 } },
+  { id: 'q21', name: '곰 학살', desc: '곰 10마리 처치', check: s => (s.kills.bear||0) >= 10, reward: { leather: 15, gold: 120 } },
+  { id: 'q22', name: '보스 처치', desc: '보스 1마리 처치', check: s => (s.bossKills||0) >= 1, reward: { gold: 300, leather: 20 }, rewardEffect: { maxHPBonus: 50 } },
+  { id: 'q23', name: '대량 학살', desc: '총 100마리 처치', check: s => { let t=0; for(const k in s.kills) t+=s.kills[k]; return t>=100; }, reward: { gold: 200, meat: 15 } },
+  { id: 'q24', name: '30분 생존', desc: '30분간 생존하기', check: (s, scene) => scene && scene.gameElapsed >= 1800, reward: { gold: 500 }, rewardEffect: { maxHPBonus: 60 } },
 ];
 
 // ═══ 🎬 TITLE SCENE ═══
@@ -4625,7 +4648,8 @@ class GameScene extends Phaser.Scene {
       this.safeBottom = 34;
     }
 
-    this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0, maxCombo: 0, meatCollected: 0 };
+    this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0, maxCombo: 0, meatCollected: 0, bossKills: 0 };
+    this._warmthNearFireTime = 0; // 화덕 근처 체온 유지 시간 (퀘스트용)
 
     // ═══ 🏆 Achievement & Random Event System ═══
     this.achievementUnlocked = {}; // { id: true } for this session
@@ -5388,6 +5412,7 @@ class GameScene extends Phaser.Scene {
     if (a.isBoss && !a.isMiniboss) {
       playBossDefeated();
       this.bossKillCount = (this.bossKillCount || 0) + 1;
+      this.stats.bossKills = (this.stats.bossKills || 0) + 1;
       // Speedrun mode: track boss kills for win condition
       if (this._speedrunMode && !this._speedrunCleared) {
         this._speedrunBossKills = (this._speedrunBossKills || 0) + 1;
@@ -6441,10 +6466,13 @@ class GameScene extends Phaser.Scene {
     const luck = (this._equipBonuses ? this._equipBonuses.luckFlat : 0);
     const feverMul = (this.activeRandomEvents && this.activeRandomEvents.drop_fever) ? 3 : (this.activeRandomEvents && this.activeRandomEvents.equip_bonus_5x) ? 5 : 1;
     const synergyDrop = this._synergyExtraDropRate || 0;
-    const timeBonus = Math.min(0.04, (this.gameElapsed || 0) / 60 * 0.002); // +0.2% per min, max +4%
+    const elapsedMin = (this.gameElapsed || 0) / 60;
+    const timeBonus = Math.min(0.04, elapsedMin * 0.002); // +0.2% per min, max +4%
     if (this._dailyModifier && this._dailyModifier.noEquipDrop) return;
     const diffDropMul = this._diffMode ? this._diffMode.dropMul : 1;
-    const dropRate = (0.03 + timeBonus + luck / 1000 + synergyDrop) * feverMul * diffDropMul; // 3% base + time bonus + luck + synergy, ×3 during fever
+    // 초반 10분간 장비 드롭률 대폭 억제 (10분 이후 본격 드롭)
+    const earlyNerf = elapsedMin < 10 ? (0.2 + 0.08 * elapsedMin) : 1.0; // 0~10분: 20%→100% 선형 증가
+    const dropRate = (0.03 + timeBonus + luck / 1000 + synergyDrop) * feverMul * diffDropMul * earlyNerf;
     if (Math.random() > dropRate) return;
     if (this.equipmentDrops.length >= 5) return;
 
@@ -6997,9 +7025,9 @@ class GameScene extends Phaser.Scene {
         }
         case 'merchant': {
           this.followPlayer(npc, 60);
-          if (npc.actionTimer <= 0 && this.res.meat >= 3) {
-            this.res.meat -= 3; this.res.gold += Math.floor(5 * (1 + this.upgradeManager.sellBonus)); npc.actionTimer = 2.5;
-            const t = this.add.text(npc.x, npc.y-15, '💰+5', {fontSize:'15px',fontFamily:'monospace',color:'#FFD700',stroke:'#000',strokeThickness:3}).setDepth(15).setOrigin(0.5);
+          if (npc.actionTimer <= 0 && this.res.meat >= 5) {
+            this.res.meat -= 5; this.res.gold += Math.floor(3 * (1 + this.upgradeManager.sellBonus)); npc.actionTimer = 3.0;
+            const t = this.add.text(npc.x, npc.y-15, '💰+3', {fontSize:'15px',fontFamily:'monospace',color:'#FFD700',stroke:'#000',strokeThickness:3}).setDepth(15).setOrigin(0.5);
             this.tweens.add({targets:t, y:t.y-25, alpha:0, duration:600, onComplete:()=>t.destroy()});
           }
           break;
@@ -7142,6 +7170,7 @@ class GameScene extends Phaser.Scene {
       const pd = Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y);
       if (pd < warmthR) {
         this._nearCampfire = true;
+        this._warmthNearFireTime = (this._warmthNearFireTime || 0) + dt; // 퀘스트 추적
         const intensity = 1 - (pd / warmthR);
         const cfBoost = this.upgradeManager.campfireBoost;
         this.temperature = Math.min(this.maxTemp, this.temperature + effects.healthRegen * intensity * dt * cfBoost);
@@ -7282,7 +7311,7 @@ class GameScene extends Phaser.Scene {
   checkQuests() {
     if (this.questIndex >= QUESTS.length) return;
     const q = QUESTS[this.questIndex];
-    if (q.check(this.stats)) {
+    if (q.check(this.stats, this)) {
       Object.entries(q.reward).forEach(([r, amt]) => this.res[r] = (this.res[r]||0) + amt);
       // Special reward effects
       if (q.rewardEffect) {
@@ -8343,19 +8372,22 @@ class GameScene extends Phaser.Scene {
     const min = this.gameElapsed / 60;
     let weights, maxCount, spawnInterval;
     if (min < 5) {
-      // 초반: 순한 동물 위주 + 늑대 소량
-      weights = { rabbit: 5, deer: 3, penguin: 2, wolf: 1 }; maxCount = 14; spawnInterval = 9000;
+      // 0-5분: 토끼/펭귄만 (안전 구간)
+      weights = { rabbit: 6, penguin: 4 }; maxCount = 12; spawnInterval = 9000;
     } else if (min < 10) {
-      weights = { rabbit: 4, deer: 3, penguin: 2, wolf: 2, bear: 1 }; maxCount = 18; spawnInterval = 8000;
-    } else if (min < 18) {
-      weights = { rabbit: 3, deer: 2, penguin: 2, wolf: 3, bear: 2 }; maxCount = 24; spawnInterval = 7000;
-    } else if (min < 28) {
-      // 중반: 적대 동물 증가
-      weights = { rabbit: 2, deer: 2, penguin: 1, wolf: 3, bear: 2 }; maxCount = 28; spawnInterval = 7000;
-    } else if (min < 40) {
-      weights = { rabbit: 1, deer: 1, wolf: 3, bear: 3, seal: 2 }; maxCount = 34; spawnInterval = 6000;
-    } else if (min < 52) {
-      // 후반: 강적 위주 + Act3 신규 적
+      // 5-10분: 사슴/물개 추가
+      weights = { rabbit: 4, penguin: 3, deer: 3, seal: 2 }; maxCount = 16; spawnInterval = 8000;
+    } else if (min < 15) {
+      // 10-15분: 늑대 등장
+      weights = { rabbit: 3, penguin: 2, deer: 2, seal: 2, wolf: 3 }; maxCount = 22; spawnInterval = 7000;
+    } else if (min < 20) {
+      // 15-20분: 곰 등장
+      weights = { rabbit: 2, deer: 2, wolf: 3, bear: 3, seal: 2 }; maxCount = 28; spawnInterval = 7000;
+    } else if (min < 30) {
+      // 20-30분: 보스 레이드 구간
+      weights = { rabbit: 1, deer: 1, wolf: 3, bear: 4, seal: 2 }; maxCount = 34; spawnInterval = 6000;
+    } else if (min < 45) {
+      // 후반: 강적 위주
       weights = { wolf: 3, bear: 4, seal: 3, ice_golem: 1, snow_leopard: 2 }; maxCount = 40; spawnInterval = 5000;
     } else {
       // 최후반: 극한
@@ -10280,6 +10312,23 @@ class GameScene extends Phaser.Scene {
 
     // ═══ Phase 2: Game Timer & Act ═══
     this.gameElapsed += dt;
+    // ═══ Wave Transition Warnings ═══
+    const _waveMin = this.gameElapsed / 60;
+    if (!this._waveWarnings) this._waveWarnings = {};
+    const waveAlerts = [
+      { min: 4.5, key: 'w5', msg: '⚠️ 30초 후 사슴/물개 등장!', color: '#88CCFF' },
+      { min: 9.5, key: 'w10', msg: '⚠️ 30초 후 늑대 등장!', color: '#FF8844' },
+      { min: 14.5, key: 'w15', msg: '⚠️ 30초 후 곰 등장!', color: '#FF4444' },
+      { min: 19.5, key: 'w20', msg: '⚠️ 30초 후 보스 레이드!', color: '#FF2222' },
+    ];
+    for (const wa of waveAlerts) {
+      if (!this._waveWarnings[wa.key] && _waveMin >= wa.min) {
+        this._waveWarnings[wa.key] = true;
+        this.showCenterAlert(wa.msg, wa.color);
+        this.cameras.main.shake(200, 0.005);
+      }
+    }
+
     const newAct = this.getCurrentAct();
     if (newAct !== this.currentAct) {
       this.currentAct = newAct;
@@ -10355,8 +10404,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // ═══ Phase 2: Boss Spawns ═══
-    const boss1Time = 25 * 60 * _srT;
-    const boss2Time = 55 * 60 * _srT;
+    const boss1Time = 20 * 60 * _srT; // 20분 (레벨디자인 조정)
+    const boss2Time = 45 * 60 * _srT;
     if (!this.boss1Spawned && !this._boss1Warned && this.gameElapsed >= boss1Time - 10) {
       this._boss1Warned = true;
       playBossSpawn();
