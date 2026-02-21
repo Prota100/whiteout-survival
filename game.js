@@ -3061,6 +3061,10 @@ class GameScene extends Phaser.Scene {
     this.killCombo = 0;
     this.killComboTimer = 0; // seconds remaining
     this.killComboText = null;
+    this._hitStopActive = false; // hitstop flag
+    this._killAuraGfx = null; // kill streak aura
+    this._killAuraParticles = null;
+    this._killAuraAngle = 0;
     
     // ═══ Streak Buff System ═══
     this.streakBuff = { dmgMul: 1, spdMul: 1, timer: 0, tier: 0 };
@@ -3671,13 +3675,19 @@ class GameScene extends Phaser.Scene {
     if (this._equipBonuses && this._equipBonuses.atkMul > 0) {
       dmg = Math.round(dmg * (1 + this._equipBonuses.atkMul));
     }
-    // Critical hit check
-    if (this.upgradeManager.critChance > 0 && Math.random() < this.upgradeManager.critChance) {
+    // Critical hit check (base 5%, mage 10%, luck bonus)
+    let critChance = this.upgradeManager.critChance > 0 ? this.upgradeManager.critChance : 0.05;
+    if (this._playerClass === 'mage') critChance = Math.max(critChance, 0.10);
+    if (this._equipBonuses && this._equipBonuses.luckFlat) critChance += this._equipBonuses.luckFlat * 0.001;
+    if (Math.random() < critChance) {
       dmg = Math.ceil(dmg * 2);
       a._lastHitCrit = true;
-      this.showFloatingText(a.x + 15, a.y - 30, '💥CRIT!', '#FF2222');
+      this.showFloatingText(a.x + 15, a.y - 30, '💥CRITICAL!', '#FFD700');
+      this._hitStop(120); // strong hitstop for crits
     }
     const isCrit = a._lastHitCrit || false; a._lastHitCrit = false;
+    // Boss hitstop
+    if (a.isBoss && !isCrit) this._hitStop(80);
     a.hp -= dmg; a.hitFlash = 0.2; a.setTint(0xFF4444); playHit();
     const fs = isCrit ? '28px' : dmg >= 3 ? '20px' : '16px';
     const c = isCrit ? '#FF2222' : '#FFFFFF';
@@ -3689,11 +3699,17 @@ class GameScene extends Phaser.Scene {
     const ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, a.x, a.y);
     const kb = 120 + this.upgradeManager.knockbackBonus;
     if (a.body) a.body.setVelocity(Math.cos(ang) * kb, Math.sin(ang) * kb);
-    for (let i = 0; i < 5; i++) {
-      const p = this.add.image(a.x, a.y, 'hit_particle').setDepth(15).setScale(Phaser.Math.FloatBetween(0.5, 1.2));
-      this.tweens.add({ targets: p, x: a.x + Phaser.Math.Between(-30, 30), y: a.y + Phaser.Math.Between(-30, 30),
-        alpha: 0, scale: 0, duration: 300, onComplete: () => p.destroy() });
+    const pCount = isCrit ? 10 : 5;
+    const pColor = isCrit ? 0xFF8800 : null;
+    for (let i = 0; i < pCount; i++) {
+      const p = this.add.image(a.x, a.y, 'hit_particle').setDepth(15).setScale(Phaser.Math.FloatBetween(0.5, isCrit ? 1.8 : 1.2));
+      if (pColor) p.setTint(pColor);
+      this.tweens.add({ targets: p, x: a.x + Phaser.Math.Between(-40, 40), y: a.y + Phaser.Math.Between(-40, 40),
+        alpha: 0, scale: 0, duration: isCrit ? 400 : 300, onComplete: () => p.destroy() });
     }
+    // White flash on knockback
+    const whiteFlash = this.add.circle(a.x, a.y, 12, 0xFFFFFF, 0.7).setDepth(15);
+    this.tweens.add({ targets: whiteFlash, scale: 2, alpha: 0, duration: 150, onComplete: () => whiteFlash.destroy() });
     // Life Steal %
     if (this.upgradeManager.lifeStealPct > 0) {
       const heal = Math.ceil(dmg * this.upgradeManager.lifeStealPct);
@@ -3723,7 +3739,7 @@ class GameScene extends Phaser.Scene {
     if (a.hp <= 0) this.killAnimal(a);
   }
 
-  killAnimal(a) { playKill();
+  killAnimal(a) { playKill(); this._hitStop(40); // kill hitstop
     // ═══ Type-specific death effects ═══
     if (a.animalType === 'ice_golem') {
       // Ice shard explosion + shockwave
@@ -4082,6 +4098,46 @@ class GameScene extends Phaser.Scene {
     this.streakBuff.timer -= dt;
     if (this.streakBuff.timer <= 0) {
       this.streakBuff = { dmgMul: 1, spdMul: 1, timer: 0, tier: 0 };
+      // Remove aura
+      if (this._killAuraGfx) { this._killAuraGfx.destroy(); this._killAuraGfx = null; }
+      if (this._killAuraParticles) { this._killAuraParticles.forEach(p => p.destroy()); this._killAuraParticles = null; }
+    }
+  }
+
+  // ═══ Kill Streak Aura ═══
+  _updateKillAura(dt) {
+    const combo = this.killCombo || 0;
+    if (combo < 3) {
+      if (this._killAuraGfx) { this._killAuraGfx.destroy(); this._killAuraGfx = null; }
+      if (this._killAuraParticles) { this._killAuraParticles.forEach(p => p.destroy()); this._killAuraParticles = null; }
+      return;
+    }
+    if (!this._killAuraGfx) this._killAuraGfx = this.add.graphics().setDepth(4);
+    this._killAuraAngle = (this._killAuraAngle || 0) + dt * 2;
+    const px = this.player.x, py = this.player.y;
+    const g = this._killAuraGfx;
+    g.clear();
+    let color = 0xFF4444, alpha = 0.12, radius = 35;
+    if (combo >= 15) { color = 0xFF6600; alpha = 0.25; radius = 45; }
+    else if (combo >= 10) { color = 0xFF6600; alpha = 0.2; radius = 40; }
+    g.fillStyle(color, alpha + Math.sin(this._killAuraAngle * 3) * 0.05);
+    g.fillCircle(px, py, radius);
+    // Fire particles for 15+ kills
+    if (combo >= 15) {
+      if (!this._killAuraParticles || this._killAuraParticles.length === 0) {
+        this._killAuraParticles = [];
+        for (let i = 0; i < 4; i++) {
+          const fp = this.add.circle(px, py, 3, 0xFF8800).setDepth(5).setAlpha(0.7);
+          fp._orbAngle = (Math.PI * 2 / 4) * i;
+          this._killAuraParticles.push(fp);
+        }
+      }
+      this._killAuraParticles.forEach(fp => {
+        if (!fp.active) return;
+        fp._orbAngle += dt * 3;
+        fp.x = px + Math.cos(fp._orbAngle) * 28;
+        fp.y = py + Math.sin(fp._orbAngle) * 28;
+      });
     }
   }
 
@@ -4263,6 +4319,13 @@ class GameScene extends Phaser.Scene {
     playLevelUp();
 
     // ═══ ENHANCED LEVEL UP EFFECT (Habby 스타일) ═══
+    // Camera zoom pulse (1.0 → 1.1 → 1.0)
+    const cam = this.cameras.main;
+    const origZoom = cam.zoom;
+    this.tweens.add({ targets: cam, zoom: origZoom * 1.1, duration: 150, ease: 'Quad.Out', yoyo: true,
+      onComplete: () => { cam.zoom = origZoom; } });
+    // White flash (brief 0.1s)
+    cam.flash(100, 255, 255, 255, true);
     // 1. 화면 전체 황금색 플래시 (2단계)
     this.cameras.main.flash(600, 255, 200, 0, true);
     this.cameras.main.shake(400, 0.012);
@@ -4359,6 +4422,38 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: ring, r: 35, a: 0, duration: 250,
       onUpdate: () => { g.clear(); g.lineStyle(hit ? 3 : 2, c, ring.a); g.strokeCircle(x, y, ring.r); },
       onComplete: () => g.destroy() });
+    // ═══ Slash Arc (타격선) ═══
+    if (hit) {
+      const ang = Phaser.Math.Angle.Between(this.player.x, this.player.y, x, y);
+      const arcG = this.add.graphics().setDepth(15);
+      let arcProg = { t: 0 };
+      this.tweens.add({ targets: arcProg, t: 1, duration: 150, ease: 'Quad.Out',
+        onUpdate: () => {
+          arcG.clear();
+          for (let i = 0; i < 3; i++) {
+            const spread = (i - 1) * 0.25;
+            const r = 20 + i * 8;
+            const alpha = (1 - arcProg.t) * (0.6 - i * 0.15);
+            arcG.lineStyle(2 - i * 0.4, 0xFFFFFF, Math.max(0, alpha));
+            arcG.beginPath();
+            arcG.arc(this.player.x, this.player.y, r, ang - 0.5 + spread, ang + 0.5 + spread, false, arcProg.t * 0.3);
+            arcG.strokePath();
+          }
+        },
+        onComplete: () => arcG.destroy()
+      });
+    }
+  }
+
+  // ═══ Hit Stop (타격 정지) ═══
+  _hitStop(duration = 80) {
+    if (this._hitStopActive) return;
+    this._hitStopActive = true;
+    this.physics.world.timeScale = 0;
+    this.time.delayedCall(duration, () => {
+      this.physics.world.timeScale = 1;
+      this._hitStopActive = false;
+    });
   }
 
   // ═══════════════════════════════════════════════
@@ -4913,7 +5008,10 @@ class GameScene extends Phaser.Scene {
     this.animals.getChildren().forEach(a => {
       if (!a.active) return;
       a.atkCD = Math.max(0, a.atkCD - dt);
-      if (a.hitFlash > 0) { a.hitFlash -= dt; if (a.hitFlash <= 0) a.clearTint(); }
+      if (a.hitFlash > 0) { a.hitFlash -= dt; if (a.hitFlash <= 0) { a.clearTint();
+        // Low HP enemy: red pulse
+        if (a.hp > 0 && a.maxHP && a.hp / a.maxHP <= 0.2) { a.setTint(0xFF2222); a.setAlpha(0.7 + Math.sin(Date.now() * 0.01) * 0.3); }
+      } }
       const dist = Phaser.Math.Distance.Between(a.x, a.y, px, py);
 
       // Campfire/wall repel
@@ -4995,6 +5093,7 @@ class GameScene extends Phaser.Scene {
               const actualDmg = a.def.damage * (a._diffDmgMul || 1) * (1 - this.upgradeManager.armorReduction);
               this.playerHP -= actualDmg; a.atkCD = 1.2; playHurt();
               if (this._triggerHitVignette) this._triggerHitVignette();
+              this._hitStop(50); // player hit hitstop
               // Thorns
               if (this.upgradeManager.thornsDamage > 0 && a.active) {
                 a.hp -= this.upgradeManager.thornsDamage;
@@ -7616,6 +7715,7 @@ class GameScene extends Phaser.Scene {
     
     // ═══ Streak Buff Timer ═══
     this._updateStreakBuff(dt);
+    this._updateKillAura(dt);
 
     // ═══ Tutorial Hints ═══
     if (!this.tutorialShown && this.gameElapsed > 0) {
