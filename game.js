@@ -4297,9 +4297,18 @@ class GameScene extends Phaser.Scene {
     this._fogFrameCount = 0;
     this._endlessMultiplier = 1.0;
     this._endlessBossCount = 0;
+    this._milestone5Shown = false;
+    this._milestone10Shown = false;
+    this._milestone20Shown = false;
     this._milestone30Shown = false;
     this._milestone45Shown = false;
     this._milestone60Shown = false;
+    // Wave drama system
+    this._waveWarningActive = false;
+    this._waveWarningTimer = 0;
+    this._lastKillstreakTier = 0; // for RAMPAGE/UNSTOPPABLE/GODLIKE
+    this._killstreakText = null;
+    this._visitedZonesForBanner = new Set(); // session-based zone discovery
     // glass_cannon modifier
     if (this._dailyModifier.hp) {
       this.playerMaxHP = this._dailyModifier.hp;
@@ -5470,6 +5479,8 @@ class GameScene extends Phaser.Scene {
       });
       if (this.killCombo >= 20) this.cameras.main.flash(200, 255, 0, 68, true);
     }
+    // ═══ Killstreak Drama: RAMPAGE / UNSTOPPABLE / GODLIKE ═══
+    this._updateKillstreakDrama();
   }
 
   // ═══ Streak Buff System ═══
@@ -6487,6 +6498,8 @@ class GameScene extends Phaser.Scene {
     const px = this.player.x, py = this.player.y;
     this.animals.getChildren().forEach(a => {
       if (!a.active) return;
+      // Boss cinematic freeze
+      if (a._cinematicFreeze) { if (a.body) a.body.setVelocity(0, 0); return; }
       a.atkCD = Math.max(0, a.atkCD - dt);
       if (a.hitFlash > 0) { a.hitFlash -= dt; if (a.hitFlash <= 0) { a.clearTint();
         // Low HP enemy: red pulse
@@ -8757,6 +8770,9 @@ class GameScene extends Phaser.Scene {
   // ═══ BOSS ENTRANCE CAMERA EFFECT ═══
   _triggerBossEntrance(bossName) {
     const cam = this.cameras.main;
+    // ═══ Cinematic Pause: freeze enemies for 2s ═══
+    this._bossCinematicActive = true;
+    this.animals.getChildren().forEach(a => { if (a.body) a.body.setVelocity(0, 0); a._cinematicFreeze = true; });
     // Step 1: Zoom in
     cam.zoomTo(1.3, 500);
     // Step 2: Double red flash + heavy shake
@@ -8769,9 +8785,28 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: _bp, a: 0.6, duration: 300, yoyo: true, repeat: 2,
       onUpdate: () => { borderGfx.clear(); borderGfx.lineStyle(8, 0xFF0000, _bp.a); borderGfx.strokeRect(0, 0, cam.width, cam.height); },
       onComplete: () => borderGfx.destroy() });
-    // Step 4: Zoom out
+    // Step 4: "보스가 등장했다!" subtitle
+    const subtitle = this.add.text(cam.width / 2, cam.height * 0.65, '보스가 등장했다!', {
+      fontSize: '20px', fontFamily: 'monospace', color: '#FFCC00',
+      stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(301).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({ targets: subtitle, alpha: 1, duration: 300, delay: 400,
+      onComplete: () => this.tweens.add({ targets: subtitle, alpha: 0, duration: 500, delay: 1200, onComplete: () => subtitle.destroy() })
+    });
+    // Step 5: Boss HP bar "full open" animation
+    const hpBarBg = this.add.rectangle(cam.width / 2, cam.height * 0.38, 0, 12, 0x330000, 0.9)
+      .setScrollFactor(0).setDepth(301).setOrigin(0.5);
+    const hpBarFill = this.add.rectangle(cam.width / 2, cam.height * 0.38, 0, 10, 0xFF2222, 1)
+      .setScrollFactor(0).setDepth(302).setOrigin(0.5);
+    const hpBarWidth = cam.width * 0.5;
+    this.tweens.add({ targets: [hpBarBg, hpBarFill], width: hpBarWidth, duration: 800, delay: 500, ease: 'Power2',
+      onComplete: () => this.tweens.add({ targets: [hpBarBg, hpBarFill], alpha: 0, duration: 500, delay: 800,
+        onComplete: () => { hpBarBg.destroy(); hpBarFill.destroy(); }
+      })
+    });
+    // Step 6: Zoom out
     this.time.delayedCall(1200, () => cam.zoomTo(1.0, 500));
-    // Step 5: Big boss name text slide-in
+    // Step 7: Big boss name text slide-in
     const nameText = this.add.text(cam.width / 2, cam.height / 2, bossName, {
       fontSize: '36px', fontFamily: 'monospace', color: '#FF2222',
       stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
@@ -8781,6 +8816,11 @@ class GameScene extends Phaser.Scene {
       onComplete: () => {
         this.tweens.add({ targets: nameText, alpha: 0, y: nameText.y - 40, duration: 600, delay: 600, onComplete: () => nameText.destroy() });
       }
+    });
+    // Unfreeze after 2s
+    this.time.delayedCall(2000, () => {
+      this._bossCinematicActive = false;
+      this.animals.getChildren().forEach(a => { a._cinematicFreeze = false; });
     });
   }
 
@@ -10049,8 +10089,15 @@ class GameScene extends Phaser.Scene {
     const diffSpawnMul = this._diffMode ? this._diffMode.spawnRate : 1;
     const endlessSpawnMul = this._endlessMultiplier || 1;
     const spawnIntervalSec = (spawnConfig.spawnInterval / 1000) / rushMul / challengeMul / diffSpawnMul / endlessSpawnMul;
+    // ═══ Wave Warning Banner (5초 전) ═══
+    const timeToWave = spawnIntervalSec - this.waveTimer;
+    if (timeToWave <= 5 && timeToWave > 0 && !this._waveWarningActive && this.waveNumber >= 3) {
+      this._waveWarningActive = true;
+      this._showWaveWarning(spawnConfig);
+    }
     if (this.waveTimer >= spawnIntervalSec) {
       this.waveTimer = 0;
+      this._waveWarningActive = false;
       this.waveNumber++;
       const currentCount = this.animals.getChildren().length;
       const toSpawn = Math.max(0, Math.min(spawnConfig.maxCount - currentCount, 15));
@@ -10215,9 +10262,28 @@ class GameScene extends Phaser.Scene {
     } // end boss rush challenge skip
 
     // ═══ Milestone Banners ═══
+    if (!this._milestone5Shown && this.gameElapsed >= 5 * 60) {
+      this._milestone5Shown = true;
+      this._showMilestoneBanner('❄️ 첫 번째 한파를 버텼다...', '#FFFFFF');
+    }
+    if (!this._milestone10Shown && this.gameElapsed >= 10 * 60) {
+      this._milestone10Shown = true;
+      this._showMilestoneBanner('🔥 불씨를 지켰다', '#FF8800');
+    }
+    if (!this._milestone20Shown && this.gameElapsed >= 20 * 60) {
+      this._milestone20Shown = true;
+      this._showMilestoneBanner('🐺 야생이 당신을 두려워한다', '#FF2222');
+      this.cameras.main.shake(300, 0.01);
+    }
     if (!this._milestone30Shown && this.gameElapsed >= 30 * 60) {
       this._milestone30Shown = true;
-      this._showMilestoneBanner('💪 절반 돌파!', '#FFD700');
+      this.cameras.main.flash(800, 255, 215, 0, true);
+      this._showMilestoneBanner('⚡ 전설이 시작된다', '#FFD700', 3000);
+      // Fullscreen golden flash
+      const cam = this.cameras.main;
+      const flashOverlay = this.add.rectangle(cam.width/2, cam.height/2, cam.width, cam.height, 0xFFD700, 0.4)
+        .setScrollFactor(0).setDepth(300);
+      this.tweens.add({ targets: flashOverlay, alpha: 0, duration: 1500, onComplete: () => flashOverlay.destroy() });
     }
     if (!this._milestone45Shown && this.gameElapsed >= 45 * 60) {
       this._milestone45Shown = true;
@@ -10360,6 +10426,11 @@ class GameScene extends Phaser.Scene {
       };
       if (zoneAlerts[newZone]) {
         this.showZoneAlert(zoneAlerts[newZone]);
+      }
+      // ═══ Zone Discovery Slide-up Banner (session 1회) ═══
+      if (!this._visitedZonesForBanner.has(newZone) && newZone !== 'safe') {
+        this._visitedZonesForBanner.add(newZone);
+        this._showZoneDiscoveryBanner(newZone);
       }
       // Region name banner + zone exploration milestone
       this.showRegionBanner(newZone);
@@ -11108,6 +11179,121 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({
       targets: alert, alpha: 0, duration: 2000, delay: 500,
       onComplete: () => alert.destroy(),
+    });
+  }
+
+  // ═══ Wave Warning Banner System ═══
+  _showWaveWarning(spawnConfig) {
+    const cam = this.cameras.main;
+    const min = this.gameElapsed / 60;
+    // Determine wave type
+    const isColdWave = this.coldWaveActive;
+    const isBossNear = (!this.boss1Spawned && this.gameElapsed >= 24 * 60) || (!this.boss2Spawned && this.gameElapsed >= 54 * 60);
+    // Enemy type hint
+    const topWeights = Object.entries(spawnConfig.weights).sort((a,b) => b[1] - a[1]).slice(0, 2);
+    const enemyNames = { rabbit: '🐰토끼', deer: '🦌사슴', penguin: '🐧펭귄', wolf: '🐺늑대', bear: '🐻곰', seal: '🦭물범', ice_golem: '🧊골렘', snow_leopard: '🐆표범' };
+    const hint = topWeights.map(([t]) => enemyNames[t] || t).join(' ');
+    // Banner color
+    const bgColor = isBossNear ? 0xFFD700 : isColdWave ? 0x2244CC : 0xCC2222;
+    const bgAlpha = 0.7;
+    // Create banner
+    const bannerBg = this.add.rectangle(cam.width / 2, 30, cam.width + 200, 40, bgColor, bgAlpha)
+      .setScrollFactor(0).setDepth(280).setOrigin(0.5).setX(-cam.width);
+    const bannerText = this.add.text(cam.width / 2, 30, '', {
+      fontSize: '16px', fontFamily: 'monospace', color: '#FFFFFF',
+      stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(281).setOrigin(0.5).setX(-cam.width);
+    // Slide in
+    this.tweens.add({ targets: [bannerBg, bannerText], x: cam.width / 2, duration: 300, ease: 'Power2' });
+    // Countdown
+    let countdown = 5;
+    const updateText = () => {
+      bannerText.setText(`⚠️ 적 무리가 몰려온다! (${countdown}초) — ${hint}`);
+    };
+    updateText();
+    const countdownEvent = this.time.addEvent({
+      delay: 1000, repeat: 4, callback: () => {
+        countdown--;
+        if (countdown <= 0) {
+          // Slide out
+          this.tweens.add({ targets: [bannerBg, bannerText], x: cam.width + cam.width, duration: 300, ease: 'Power2',
+            onComplete: () => { bannerBg.destroy(); bannerText.destroy(); }
+          });
+        } else { updateText(); }
+      }
+    });
+  }
+
+  // ═══ Killstreak Drama: RAMPAGE / UNSTOPPABLE / GODLIKE ═══
+  _updateKillstreakDrama() {
+    const combo = this.killCombo;
+    let tier = 0;
+    if (combo >= 30) tier = 3;
+    else if (combo >= 20) tier = 2;
+    else if (combo >= 10) tier = 1;
+
+    if (tier > this._lastKillstreakTier && tier > 0) {
+      this._lastKillstreakTier = tier;
+      const cam = this.cameras.main;
+      const labels = ['RAMPAGE!', 'UNSTOPPABLE!', 'GODLIKE!'];
+      const colors = ['#FF2222', '#FF8800', '#FFD700'];
+      const label = labels[tier - 1];
+      const color = colors[tier - 1];
+      // Destroy previous
+      if (this._killstreakText) this._killstreakText.destroy();
+      this._killstreakText = this.add.text(cam.width / 2, cam.height * 0.3, label, {
+        fontSize: tier >= 3 ? '48px' : '40px', fontFamily: 'monospace', color,
+        stroke: '#000', strokeThickness: 7, fontStyle: 'bold'
+      }).setScrollFactor(0).setDepth(260).setOrigin(0.5).setAlpha(0);
+      this.tweens.add({ targets: this._killstreakText, alpha: 1, scale: { from: 0.3, to: 1.2 }, duration: 400, ease: 'Back.Out',
+        onComplete: () => this.tweens.add({ targets: this._killstreakText, scale: 1, duration: 200 })
+      });
+      // Tier 2+: screen shake
+      if (tier >= 2) cam.shake(300, 0.02);
+      // Tier 3: particle explosion + flash
+      if (tier >= 3) {
+        cam.flash(300, 255, 215, 0, true);
+        playBossDefeated(); // repurpose victory sound for epic moment
+        const particleCount = Math.min(30, 200 - (this._activeParticles || 0));
+        for (let i = 0; i < particleCount; i++) {
+          const px = cam.centerX + Phaser.Math.Between(-200, 200);
+          const py = cam.centerY + Phaser.Math.Between(-100, 100);
+          const c = [0xFFD700, 0xFF4400, 0xFF0044][Math.floor(Math.random() * 3)];
+          const p = this.add.circle(px, py, Phaser.Math.Between(2, 6), c).setDepth(259).setScrollFactor(0).setAlpha(1);
+          this.tweens.add({
+            targets: p, y: py - Phaser.Math.Between(40, 120), x: px + Phaser.Math.Between(-60, 60),
+            alpha: 0, duration: 800 + Math.random() * 600, onComplete: () => p.destroy()
+          });
+        }
+      }
+    }
+    // Reset when combo breaks
+    if (combo === 0 && this._lastKillstreakTier > 0) {
+      this._lastKillstreakTier = 0;
+      if (this._killstreakText) {
+        this.tweens.add({ targets: this._killstreakText, alpha: 0, duration: 800,
+          onComplete: () => { if (this._killstreakText) { this._killstreakText.destroy(); this._killstreakText = null; } }
+        });
+      }
+    }
+  }
+
+  // ═══ Zone Discovery Slide-up Banner ═══
+  _showZoneDiscoveryBanner(zone) {
+    const cam = this.cameras.main;
+    const dangerLevels = { normal: '위험도: ★☆☆', danger: '위험도: ★★☆', extreme: '위험도: ★★★' };
+    const zoneNames = { normal: '주의 구역', danger: '위험 구역', extreme: '극위험 구역' };
+    const colors = { normal: '#FFDD44', danger: '#FF6644', extreme: '#FF2222' };
+    const name = zoneNames[zone] || zone;
+    const danger = dangerLevels[zone] || '';
+    const displayText = `[ ${name} 진입 ]  ${danger}`;
+    const banner = this.add.text(cam.width / 2, cam.height + 30, displayText, {
+      fontSize: '18px', fontFamily: 'monospace', color: colors[zone] || '#FFFFFF',
+      stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(250).setOrigin(0.5);
+    // Slide up from bottom
+    this.tweens.add({ targets: banner, y: cam.height - 50, duration: 500, ease: 'Power2',
+      onComplete: () => this.tweens.add({ targets: banner, alpha: 0, duration: 1000, delay: 2000, onComplete: () => banner.destroy() })
     });
   }
 
