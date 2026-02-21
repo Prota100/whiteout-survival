@@ -1185,6 +1185,97 @@ class RecordManager {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// 🏆 점수 계산 + 등급 시스템
+// ═══════════════════════════════════════════════════════════════════
+class ScoreSystem {
+  static GRADE_TABLE = [
+    { min: 1000000, grade: 'S+', title: '전설의 생존자', color: '#FFD700' },
+    { min: 500000,  grade: 'S',  title: '눈폭풍의 지배자', color: '#C0C0C0' },
+    { min: 200000,  grade: 'A',  title: '얼음의 투사', color: '#4488FF' },
+    { min: 100000,  grade: 'B',  title: '혹한의 전사', color: '#44DD44' },
+    { min: 50000,   grade: 'C',  title: '생존자', color: '#CCDDEE' },
+    { min: 0,       grade: 'D',  title: '겨울의 초보자', color: '#888888' },
+  ];
+
+  static PERCENTILE_TABLE = [
+    { min: 1000000, pct: 1 },
+    { min: 500000,  pct: 5 },
+    { min: 200000,  pct: 15 },
+    { min: 100000,  pct: 30 },
+    { min: 50000,   pct: 50 },
+    { min: 20000,   pct: 70 },
+    { min: 0,       pct: 95 },
+  ];
+
+  static calculate(opts) {
+    const { survivalTime, kills, maxCombo, level, difficulty, handicap, equipmentManager, isSpeedrun, speedrunRemaining } = opts;
+    let base = Math.floor(survivalTime) * 100
+      + kills * 10
+      + maxCombo * 50
+      + level * 200;
+    // Equipment grade sum
+    if (equipmentManager) {
+      const gradeValues = { common: 1, rare: 2, epic: 3, legendary: 4, unique: 5 };
+      for (const item of Object.values(equipmentManager.slots || {})) {
+        if (item && item.grade) base += (gradeValues[item.grade] || 0) * 300;
+      }
+    }
+    // Difficulty multiplier
+    const diffMul = { normal: 1, hard: 1.5, hell: 2.5 };
+    base = Math.floor(base * (diffMul[difficulty] || 1));
+    // Handicap bonus (+10% each)
+    if (handicap && handicap !== 'none') {
+      base = Math.floor(base * 1.1);
+    }
+    // Speedrun time bonus
+    if (isSpeedrun && speedrunRemaining > 0) {
+      base += Math.floor(speedrunRemaining) * 50;
+    }
+    return base;
+  }
+
+  static getGrade(score) {
+    for (const entry of ScoreSystem.GRADE_TABLE) {
+      if (score >= entry.min) return entry;
+    }
+    return ScoreSystem.GRADE_TABLE[ScoreSystem.GRADE_TABLE.length - 1];
+  }
+
+  static getPercentile(score) {
+    for (const entry of ScoreSystem.PERCENTILE_TABLE) {
+      if (score >= entry.min) return entry.pct;
+    }
+    return 99;
+  }
+
+  static SCORES_KEY = 'whiteout_scores';
+  static saveScore(scoreData) {
+    try {
+      let arr = JSON.parse(localStorage.getItem(ScoreSystem.SCORES_KEY) || '[]');
+      arr.unshift(scoreData);
+      if (arr.length > 5) arr = arr.slice(0, 5);
+      localStorage.setItem(ScoreSystem.SCORES_KEY, JSON.stringify(arr));
+    } catch(e) {}
+    // Update bestScore in RecordManager
+    try {
+      const rec = RecordManager.load();
+      if (!rec.bestScore || scoreData.score > rec.bestScore) {
+        rec.bestScore = scoreData.score;
+        RecordManager.save(rec);
+      }
+    } catch(e) {}
+  }
+
+  static loadScores() {
+    try { return JSON.parse(localStorage.getItem(ScoreSystem.SCORES_KEY) || '[]'); } catch(e) { return []; }
+  }
+
+  static formatScore(n) {
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // 🎨 플레이어 스킨 시스템
 // ═══════════════════════════════════════════════════════════════════
 const PLAYER_SKINS = [
@@ -2132,7 +2223,13 @@ class TitleScene extends Phaser.Scene {
       this.add.text(W / 2, recordY + 4, '🏅 내 기록', {
         fontSize: '13px', fontFamily: 'monospace', color: '#FFD700'
       }).setOrigin(0.5, 0).setDepth(11);
-      this.add.text(W / 2, recordY + 22, `최장 ${bestTimeStr} | 최다 ${rec.bestKills}킬 | 클리어 ${rec.wins}회 | ${rec.totalPlays}판`, {
+      if (rec.bestScore) {
+        const bgi = ScoreSystem.getGrade(rec.bestScore);
+        this.add.text(W / 2, recordY + 22, `🏆 최고점수: [${bgi.grade}] ${ScoreSystem.formatScore(rec.bestScore)}점`, {
+          fontSize: '12px', fontFamily: 'monospace', color: bgi.color
+        }).setOrigin(0.5, 0).setDepth(11);
+      }
+      this.add.text(W / 2, recordY + (rec.bestScore ? 38 : 22), `최장 ${bestTimeStr} | 최다 ${rec.bestKills}킬 | 클리어 ${rec.wins}회 | ${rec.totalPlays}판`, {
         fontSize: '11px', fontFamily: 'monospace', color: '#8899bb'
       }).setOrigin(0.5, 0).setDepth(11);
       this.add.text(W / 2, recordY + 38, `🏆 성취: ${achCount} / ${ACHIEVEMENTS.length}`, {
@@ -2151,11 +2248,37 @@ class TitleScene extends Phaser.Scene {
       }).setOrigin(0.5, 0.5).setDepth(11);
     }
 
+    // ═══ 📊 최근 점수 기록 (최근 5판) ═══
+    const scoreHistory = ScoreSystem.loadScores();
+    let scoreHistoryEndY = recordY + recordBoxH;
+    if (scoreHistory.length > 0) {
+      const shY = recordY + recordBoxH + 12;
+      const shH = 18 + scoreHistory.length * 18 + 8;
+      const shGfx = this.add.graphics().setDepth(10);
+      shGfx.fillStyle(0x0A0E1A, 0.7);
+      shGfx.fillRoundedRect(W/2 - btnW/2 - 10, shY - 4, btnW + 20, shH, 8);
+      this.add.text(W/2, shY + 4, '📊 최근 점수', {
+        fontSize: '12px', fontFamily: 'monospace', color: '#FFD700'
+      }).setOrigin(0.5, 0).setDepth(11);
+      const bestInHistory = Math.max(...scoreHistory.map(s => s.score));
+      scoreHistory.forEach((s, i) => {
+        const gi = ScoreSystem.getGrade(s.score);
+        const isBest = s.score === bestInHistory;
+        const color = isBest ? '#FFD700' : '#8899bb';
+        const prefix = isBest ? '★ ' : '  ';
+        this.add.text(W/2, shY + 20 + i * 18,
+          prefix + s.date + '  [' + gi.grade + '] ' + ScoreSystem.formatScore(s.score) + '점', {
+          fontSize: '10px', fontFamily: 'monospace', color: color
+        }).setOrigin(0.5, 0).setDepth(11);
+      });
+      scoreHistoryEndY = shY + shH;
+    }
+
     // ═══ 📅 데일리 챌린지 ═══
     const dailyCh = getTodayChallenge();
     const dailyKey = getDailyChallengeKey();
     const dailyCleared = localStorage.getItem('daily_clear_' + dailyKey) === 'true';
-    const dailyY = recordY + recordBoxH + 16;
+    const dailyY = scoreHistoryEndY + 16;
     const dailyBoxH = 70;
     const dailyGfx = this.add.graphics().setDepth(10);
     dailyGfx.fillStyle(0x1A1E2E, 0.8);
@@ -9861,10 +9984,32 @@ class GameScene extends Phaser.Scene {
     // ═══ 런 히스토리 저장 ═══
     this._saveRunHistory(isVictory, survivalTime, totalKills, maxCombo, level, earned);
 
+    // ═══ 점수 계산 ═══
+    const finalScore = ScoreSystem.calculate({
+      survivalTime, kills: totalKills, maxCombo, level,
+      difficulty: this._difficulty || 'normal',
+      handicap: this._handicap,
+      equipmentManager: this.equipmentManager,
+      isSpeedrun: this._speedrunMode,
+      speedrunRemaining: this._speedrunTimer || 0
+    });
+    const gradeInfo = ScoreSystem.getGrade(finalScore);
+    const percentile = ScoreSystem.getPercentile(finalScore);
+    const classInfo = this._playerClass && PLAYER_CLASSES[this._playerClass] ? PLAYER_CLASSES[this._playerClass] : null;
+    const diffName = this._diffMode ? this._diffMode.name.replace(/[^가-힣a-zA-Z]/g, '') : '일반';
+
+    // Save score
+    ScoreSystem.saveScore({
+      score: finalScore, grade: gradeInfo.grade,
+      date: new Date().toLocaleDateString('ko-KR'),
+      survivalTime: Math.floor(survivalTime), kills: totalKills, level, maxCombo,
+      difficulty: this._difficulty || 'normal',
+      playerClass: this._playerClass || 'unknown', isWin: !!isVictory
+    });
+
     const cam = this.cameras.main;
     const W = cam.width, H = cam.height;
 
-    // Hide HUD elements on end
     const tl = document.getElementById('timeline-bar');
     if (tl) tl.style.display = 'none';
     const ne = document.getElementById('next-event-text');
@@ -9872,27 +10017,19 @@ class GameScene extends Phaser.Scene {
     const ch = document.getElementById('class-hud');
     if (ch) ch.style.display = 'none';
 
-    // ═══ 기록 저장 + 신기록 체크 ═══
     let achCount = 0;
     try { achCount = Object.keys(JSON.parse(localStorage.getItem('achievements_whiteout') || '{}')).length; } catch(e) {}
     const newRecords = RecordManager.recordRun(survivalTime, totalKills, level, maxCombo, isVictory, achCount);
     const hasNewRecord = newRecords.length > 0;
 
-    if (isVictory) {
-      cam.flash(1000, 200, 255, 200);
-      cam.shake(500, 0.01);
-    } else {
-      cam.flash(400, 255, 0, 0);
-      cam.shake(500, 0.02);
-    }
+    if (isVictory) { cam.flash(1000, 200, 255, 200); cam.shake(500, 0.01); }
+    else { cam.flash(400, 255, 0, 0); cam.shake(500, 0.02); }
 
-    // Dark overlay
     const ov = this.add.graphics().setScrollFactor(0).setDepth(300);
     ov.fillStyle(0x0A0E1A, 0).fillRect(0, 0, W, H);
     this.tweens.add({ targets: ov, alpha: 0.85, duration: 600 });
 
-    // Panel background (taller for share button)
-    const panelW = Math.min(340, W - 40), panelH = 420;
+    const panelW = Math.min(360, W - 30), panelH = 500;
     const px = W/2, py = H/2;
     const panel = this.add.graphics().setScrollFactor(0).setDepth(301);
     panel.fillStyle(0x1A1E2E, 0.95);
@@ -9901,156 +10038,168 @@ class GameScene extends Phaser.Scene {
     panel.strokeRoundedRect(px - panelW/2, py - panelH/2, panelW, panelH, 16);
     panel.setAlpha(0);
 
-    // Icon
-    const icon = this.add.text(px, py - panelH/2 + 50, isVictory ? '🏆' : '💀', {
-      fontSize: '48px'
+    // ═══ 등급 (최상단) ═══
+    const gradeLabel = this.add.text(px, py - panelH/2 + 38, gradeInfo.grade, {
+      fontSize: '48px', fontFamily: 'monospace', color: gradeInfo.color,
+      stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
     }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
 
-    // Title
-    const titleColor = isVictory ? '#FFD700' : '#FF4444';
-    const ngPlusTag = (isVictory && this._ngPlus) ? ` ⭐NG+${(RecordManager.load().ngPlusClears || 1)}` : '';
-    const titleText = isVictory ? `60분 생존 성공!${ngPlusTag}` : '생존 실패';
-    const title = this.add.text(px, py - panelH/2 + 100, titleText, {
-      fontSize: '28px', fontFamily: 'monospace', color: titleColor,
+    const gradeTitle = this.add.text(px, py - panelH/2 + 72, gradeInfo.title, {
+      fontSize: '15px', fontFamily: 'monospace', color: gradeInfo.color,
+      stroke: '#000', strokeThickness: 3
+    }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
+
+    // ═══ 점수 ═══
+    const scoreDisplay = this.add.text(px, py - panelH/2 + 100, ScoreSystem.formatScore(finalScore) + '점', {
+      fontSize: '24px', fontFamily: 'monospace', color: '#FFFFFF',
       stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
     }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
 
-    // Stats with new record markers
-    const survMin = Math.floor(survivalTime / 60);
-    const survSec = Math.floor(survivalTime % 60);
-    const nr = (key) => newRecords.includes(key) ? '  🆕' : '';
-    const statsLines = [
-      `⏱️ 생존 시간: ${survMin}분 ${survSec}초${nr('survivalTime')}`,
-      `⚔️ 처치한 적: ${totalKills}${nr('kills')}`,
-      `🔥 최대 콤보: ${maxCombo}킬${nr('combo')}`,
-      `⭐ 달성 레벨: Lv.${level}${nr('level')}`,
-      `💎 획득 포인트: +0`
-    ];
-    if (this._diffMode && this._difficulty !== 'normal') {
-      statsLines.push(`🎮 난이도: ${this._diffMode.name}`);
-    }
-    if (this._endlessMode) {
-      statsLines.push(`♾️ 무한 모드`);
-    }
-    if (this._speedrunMode) {
-      statsLines.push(`⚡ 스피드런 (+15 포인트)`);
-    }
-    if (this._handicap && this._handicap !== 'none') {
-      const hNames = { glass_body: '유리몸', no_equipment: '맨손', random_build: '랜덤 빌드', low_vision: '저시력' };
-      const hBonus = { glass_body: 15, no_equipment: 20, random_build: 10, low_vision: 25 };
-      statsLines.push(`🎯 핸디캡: ${hNames[this._handicap] || this._handicap} (+${hBonus[this._handicap] || 0} 포인트)`);
-    }
-    if (this._dailyChallenge) {
-      const dcCleared = isVictory;
-      statsLines.push(dcCleared ? `📅 데일리 클리어! (${this._dailyChallenge.name})` : `📅 데일리: ${this._dailyChallenge.name}`);
-    }
-    if (equipBonuses) {
-      const bonusStrs = [];
-      if (equipBonuses.atkMul > 0) bonusStrs.push(`공격력+${Math.round(equipBonuses.atkMul*100)}%`);
-      if (equipBonuses.defMul > 0) bonusStrs.push(`방어+${Math.round(equipBonuses.defMul*100)}%`);
-      if (equipBonuses.spdMul > 0) bonusStrs.push(`이속+${Math.round(equipBonuses.spdMul*100)}%`);
-      if (equipBonuses.hpFlat > 0) bonusStrs.push(`HP+${Math.round(equipBonuses.hpFlat)}`);
-      if (bonusStrs.length > 0) statsLines.push(`🛡️ 장비 보너스: ${bonusStrs.join(', ')}`);
-    }
-    const stats = this.add.text(px, py - 30, statsLines.join('\n'), {
-      fontSize: '14px', fontFamily: 'monospace', color: '#CCDDEE',
-      stroke: '#000', strokeThickness: 2, align: 'center', lineSpacing: 6
+    const percentileText = this.add.text(px, py - panelH/2 + 125, '🌍 상위 ' + percentile + '%', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#AADDFF',
+      stroke: '#000', strokeThickness: 2
     }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
 
-    // 신기록 텍스트
+    const icon = this.add.text(px, py - panelH/2 + 155, isVictory ? '🏆' : '💀', {
+      fontSize: '28px'
+    }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
+
+    const titleColor = isVictory ? '#FFD700' : '#FF4444';
+    const ngPlusTag = (isVictory && this._ngPlus) ? ' NG+' + (RecordManager.load().ngPlusClears || 1) : '';
+    const titleText = isVictory ? '생존 성공!' + ngPlusTag : '생존 실패';
+    const title = this.add.text(px, py - panelH/2 + 185, titleText, {
+      fontSize: '22px', fontFamily: 'monospace', color: titleColor,
+      stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
+
+    const survMin = Math.floor(survivalTime / 60);
+    const survSec = Math.floor(survivalTime % 60);
+    const nr = (key) => newRecords.includes(key) ? ' 🆕' : '';
+    const statsLines = [
+      '⏱️ ' + survMin + '분 ' + survSec + '초' + nr('survivalTime') + '  ⚔️ ' + totalKills + '킬' + nr('kills'),
+      '🔥 콤보 ' + maxCombo + nr('combo') + '  ⭐ Lv.' + level + nr('level'),
+      '💎 포인트: +0'
+    ];
+    if (this._diffMode && this._difficulty !== 'normal') statsLines.push('🎮 ' + this._diffMode.name);
+    if (this._endlessMode) statsLines.push('♾️ 무한 모드');
+    if (this._speedrunMode) statsLines.push('⚡ 스피드런');
+    if (this._handicap && this._handicap !== 'none') {
+      const hNames = { glass_body: '유리몸', no_equipment: '맨손', random_build: '랜덤 빌드', low_vision: '저시력' };
+      statsLines.push('🎯 핸디캡: ' + (hNames[this._handicap] || this._handicap));
+    }
+    if (this._dailyChallenge) statsLines.push(isVictory ? '📅 데일리 클리어!' : '📅 ' + this._dailyChallenge.name);
+    if (equipBonuses) {
+      const bs = [];
+      if (equipBonuses.atkMul > 0) bs.push('공+' + Math.round(equipBonuses.atkMul*100) + '%');
+      if (equipBonuses.defMul > 0) bs.push('방+' + Math.round(equipBonuses.defMul*100) + '%');
+      if (equipBonuses.spdMul > 0) bs.push('속+' + Math.round(equipBonuses.spdMul*100) + '%');
+      if (equipBonuses.hpFlat > 0) bs.push('HP+' + Math.round(equipBonuses.hpFlat));
+      if (bs.length) statsLines.push('🛡️ ' + bs.join(' '));
+    }
+    const stats = this.add.text(px, py + 10, statsLines.join('\n'), {
+      fontSize: '13px', fontFamily: 'monospace', color: '#CCDDEE',
+      stroke: '#000', strokeThickness: 2, align: 'center', lineSpacing: 5
+    }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
+
     let newRecordLabel = null;
     if (hasNewRecord) {
-      newRecordLabel = this.add.text(px, py - panelH/2 + 125, '🆕 신기록 달성!', {
-        fontSize: '16px', fontFamily: 'monospace', color: '#FFD700',
+      newRecordLabel = this.add.text(px, py - panelH/2 + 205, '🆕 신기록!', {
+        fontSize: '14px', fontFamily: 'monospace', color: '#FFD700',
         stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
       }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
     }
 
-    // ═══ 이번 빌드 업그레이드 요약 ═══
     let buildSummary = null;
     if (this._currentRunUpgrades && this._currentRunUpgrades.length > 0) {
-      // Count upgrades and show top 5
       const counts = {};
       this._currentRunUpgrades.forEach(k => { counts[k] = (counts[k] || 0) + 1; });
       const sorted = Object.entries(counts).sort((a,b) => b[1] - a[1]).slice(0, 5);
       const buildStr = sorted.map(([k, c]) => {
         const u = UPGRADES[k];
-        return u ? `${u.icon}${u.name}${c > 1 ? 'x'+c : ''}` : k;
+        return u ? u.icon + u.name + (c > 1 ? 'x'+c : '') : k;
       }).join('  ');
-      buildSummary = this.add.text(px, py + 85, '🔧 빌드: ' + buildStr, {
-        fontSize: '11px', fontFamily: 'monospace', color: '#AADDFF',
+      buildSummary = this.add.text(px, py + 70, '🔧 ' + buildStr, {
+        fontSize: '10px', fontFamily: 'monospace', color: '#AADDFF',
         stroke: '#000', strokeThickness: 2, wordWrap: { width: panelW - 20 }, align: 'center'
       }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
     }
 
-    // Buttons row 1: retry + title
-    const btnW = 90, btnH = 34, btnGap = 8;
-    const btnY = py + panelH/2 - 90;
+    // ═══ Buttons: 2 rows ═══
+    const btnW = 130, btnH = 32, btnGap = 8;
+    const btnRow1Y = py + panelH/2 - 80;
+    const btnRow2Y = py + panelH/2 - 42;
 
     const retryBg = this.add.graphics().setScrollFactor(0).setDepth(302);
     retryBg.fillStyle(0xFF6B35, 1);
-    retryBg.fillRoundedRect(px - btnW*1.5 - btnGap, btnY, btnW, btnH, 8);
+    retryBg.fillRoundedRect(px - btnW - btnGap/2, btnRow1Y, btnW, btnH, 8);
     retryBg.setAlpha(0);
-    const retryText = this.add.text(px - btnW - btnGap/2, btnY + btnH/2, '🔄 재도전', {
+    const retryText = this.add.text(px - btnW/2 - btnGap/2, btnRow1Y + btnH/2, '🔄 재도전', {
       fontSize: '13px', fontFamily: 'monospace', color: '#FFFFFF',
       stroke: '#000', strokeThickness: 2, fontStyle: 'bold'
     }).setScrollFactor(0).setDepth(303).setOrigin(0.5).setAlpha(0);
-    const retryHit = this.add.rectangle(px - btnW - btnGap/2, btnY + btnH/2, btnW, btnH)
+    const retryHit = this.add.rectangle(px - btnW/2 - btnGap/2, btnRow1Y + btnH/2, btnW, btnH)
       .setScrollFactor(0).setDepth(304).setOrigin(0.5).setInteractive().setAlpha(0.001);
 
     const titleBg = this.add.graphics().setScrollFactor(0).setDepth(302);
     titleBg.fillStyle(0x2A2E3E, 1);
-    titleBg.fillRoundedRect(px - btnW/2, btnY, btnW, btnH, 8);
+    titleBg.fillRoundedRect(px + btnGap/2, btnRow1Y, btnW, btnH, 8);
     titleBg.lineStyle(1, 0x555577, 0.6);
-    titleBg.strokeRoundedRect(px - btnW/2, btnY, btnW, btnH, 8);
+    titleBg.strokeRoundedRect(px + btnGap/2, btnRow1Y, btnW, btnH, 8);
     titleBg.setAlpha(0);
-    const titleBtnText = this.add.text(px, btnY + btnH/2, '🏠 타이틀', {
+    const titleBtnText = this.add.text(px + btnW/2 + btnGap/2, btnRow1Y + btnH/2, '🏠 타이틀', {
       fontSize: '13px', fontFamily: 'monospace', color: '#AABBCC',
       stroke: '#000', strokeThickness: 2
     }).setScrollFactor(0).setDepth(303).setOrigin(0.5).setAlpha(0);
-    const titleHit = this.add.rectangle(px, btnY + btnH/2, btnW, btnH)
+    const titleHit = this.add.rectangle(px + btnW/2 + btnGap/2, btnRow1Y + btnH/2, btnW, btnH)
       .setScrollFactor(0).setDepth(304).setOrigin(0.5).setInteractive().setAlpha(0.001);
 
-    // 📋 결과 복사 버튼
+    // Row 2: share buttons
     const shareBg = this.add.graphics().setScrollFactor(0).setDepth(302);
     shareBg.fillStyle(0x225566, 1);
-    shareBg.fillRoundedRect(px + btnW/2 + btnGap, btnY, btnW, btnH, 8);
+    shareBg.fillRoundedRect(px - btnW - btnGap/2, btnRow2Y, btnW, btnH, 8);
     shareBg.setAlpha(0);
-    const shareText = this.add.text(px + btnW + btnGap/2, btnY + btnH/2, '📋 복사', {
+    const shareText = this.add.text(px - btnW/2 - btnGap/2, btnRow2Y + btnH/2, '📋 결과 복사', {
       fontSize: '13px', fontFamily: 'monospace', color: '#88CCDD',
       stroke: '#000', strokeThickness: 2
     }).setScrollFactor(0).setDepth(303).setOrigin(0.5).setAlpha(0);
-    const shareHit = this.add.rectangle(px + btnW + btnGap/2, btnY + btnH/2, btnW, btnH)
+    const shareHit = this.add.rectangle(px - btnW/2 - btnGap/2, btnRow2Y + btnH/2, btnW, btnH)
       .setScrollFactor(0).setDepth(304).setOrigin(0.5).setInteractive().setAlpha(0.001);
 
-    // Button handlers
+    const twitterBg = this.add.graphics().setScrollFactor(0).setDepth(302);
+    twitterBg.fillStyle(0x1DA1F2, 0.8);
+    twitterBg.fillRoundedRect(px + btnGap/2, btnRow2Y, btnW, btnH, 8);
+    twitterBg.setAlpha(0);
+    const twitterText = this.add.text(px + btnW/2 + btnGap/2, btnRow2Y + btnH/2, '🐦 X 공유', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#FFFFFF',
+      stroke: '#000', strokeThickness: 2
+    }).setScrollFactor(0).setDepth(303).setOrigin(0.5).setAlpha(0);
+    const twitterHit = this.add.rectangle(px + btnW/2 + btnGap/2, btnRow2Y + btnH/2, btnW, btnH)
+      .setScrollFactor(0).setDepth(304).setOrigin(0.5).setInteractive().setAlpha(0.001);
+
+    const _buildShareMsg = () => {
+      const cn = classInfo ? classInfo.name : '미선택';
+      return '❄️ 화이트아웃 서바이벌\n등급: [' + gradeInfo.grade + '] ' + gradeInfo.title + '\n점수: ' + ScoreSystem.formatScore(finalScore) + '점\n생존: ' + survMin + '분 ' + String(survSec).padStart(2,'0') + '초 | 킬: ' + totalKills + ' | 레벨: ' + level + '\n최고콤보: ' + maxCombo + ' | 클래스: ' + cn + '\n난이도: ' + diffName + '\nhttps://prota100.github.io/whiteout-survival/';
+    };
+
     retryHit.on('pointerdown', () => { this.scene.start('Boot', { loadSave: false, difficulty: this._difficulty, dailyChallenge: this._dailyChallenge, endlessMode: this._endlessMode, speedrun: this._speedrunMode, handicap: this._handicap }); });
     titleHit.on('pointerdown', () => { this.scene.start('Title'); });
     shareHit.on('pointerdown', () => {
-      // Build equipment string
-      let equipStr = '';
-      if (this.equipmentManager) {
-        const slots = this.equipmentManager.slots || {};
-        const parts = [];
-        const slotNames = { weapon:'무기', armor:'방어구', boots:'신발', helmet:'투구', ring:'반지' };
-        for (const [slot, item] of Object.entries(slots)) {
-          if (item && item.grade) parts.push(`[${slotNames[slot] || slot}:${EQUIP_GRADE_LABELS[item.grade] || item.grade}]`);
-        }
-        if (parts.length) equipStr = `장비: ${parts.join(' ')}\n`;
-      }
-      const shareMsg = `🏔️ 화이트아웃 서바이벌\n생존시간: ${survMin}분 ${survSec}초 | 킬: ${totalKills}마리\n레벨: ${level} | 최대콤보: ${maxCombo}킬\n${equipStr}성취: ${achCount}/${ACHIEVEMENTS.length} 달성\nhttps://prota100.github.io/whiteout-survival/`;
+      const msg = _buildShareMsg();
       try {
-        navigator.clipboard.writeText(shareMsg).then(() => {
+        navigator.clipboard.writeText(msg).then(() => {
           shareText.setText('✅ 복사됨!');
-          this.time.delayedCall(1500, () => { if(shareText.active) shareText.setText('📋 복사'); });
+          this.time.delayedCall(1500, () => { if(shareText.active) shareText.setText('📋 결과 복사'); });
         }).catch(() => {});
       } catch(e) {}
     });
+    twitterHit.on('pointerdown', () => {
+      const msg = _buildShareMsg();
+      window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(msg), '_blank');
+    });
 
-    // Slide-in + fade animation
-    const allElements = [panel, icon, title, stats, retryBg, retryText, titleBg, titleBtnText, shareBg, shareText];
-    if (buildSummary) allElements.splice(4, 0, buildSummary);
-    if (newRecordLabel) allElements.splice(3, 0, newRecordLabel);
+    const allElements = [panel, gradeLabel, gradeTitle, scoreDisplay, percentileText, icon, title, stats, retryBg, retryText, titleBg, titleBtnText, shareBg, shareText, twitterBg, twitterText];
+    if (buildSummary) allElements.splice(8, 0, buildSummary);
+    if (newRecordLabel) allElements.splice(7, 0, newRecordLabel);
     allElements.forEach((el, i) => {
       if (el.y !== undefined) el.y -= 40;
       this.tweens.add({
