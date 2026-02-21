@@ -389,6 +389,38 @@ const UPGRADES = {
   XP_SCAVENGER:      { name: '수집가', desc: 'XP 획득 범위 +50%', icon: '🧲', category: 'economy', maxLevel: 2, rarity: 'common' },
   ADRENALINE:        { name: '아드레날린', desc: 'HP 30% 이하 시 공격속도 +50%', icon: '💉', category: 'combat', maxLevel: 2, rarity: 'rare' },
   BLIZZARD_CLOAK:    { name: '설원 망토', desc: '한파 중 이동속도 패널티 없음', icon: '🧥', category: 'survival', maxLevel: 1, rarity: 'rare' },
+  // ═══ 클래스 고유 업그레이드 ═══
+  CLASS_WARRIOR_ROAR: { name: '전사의 포효', desc: '주변 100px 적 2초 공포(이동정지)', icon: '🪓', category: 'combat', maxLevel: 1, rarity: 'legendary', classOnly: 'warrior' },
+  CLASS_MAGE_BLIZZARD: { name: '얼음 폭풍', desc: '전체 적 1초 동결 (쿨다운 30초)', icon: '🧊', category: 'special', maxLevel: 1, rarity: 'legendary', classOnly: 'mage' },
+  CLASS_SURVIVOR_SPRINT: { name: '질주', desc: '3초간 이속 3배+무적 (쿨다운 20초)', icon: '🏃', category: 'survival', maxLevel: 1, rarity: 'legendary', classOnly: 'survivor' },
+};
+
+// ═══ 플레이어 클래스 시스템 ═══
+const PLAYER_CLASSES = {
+  warrior: {
+    name: '전사', icon: '🪓', color: '#FF4444', colorHex: 0xFF4444,
+    desc: '근접 전투 특화. 높은 체력과 공격력.',
+    stats: { hp: 120, damageMul: 1.3, speedMul: 0.9, attackSpeedMul: 1.0, attackRangeMul: 1.0, warmthResist: 0 },
+    passives: ['킬 시 5% HP+2 회복', 'HP 50% 이하→공격력 1.5x (분노)'],
+    startItem: { slot: 'weapon', itemId: 'knife', grade: 'common' },
+    ratings: { hp: 4, atk: 4, spd: 3, surv: 5 },
+  },
+  mage: {
+    name: '마법사', icon: '🧊', color: '#4488FF', colorHex: 0x4488FF,
+    desc: '범위 공격 특화. 관통+동결 효과.',
+    stats: { hp: 80, damageMul: 1.1, speedMul: 1.0, attackSpeedMul: 1.3, attackRangeMul: 1.5, warmthResist: 0 },
+    passives: ['공격 관통 (다수 적 히트)', '킬 시 10% 얼음 폭발'],
+    startItem: { slot: 'ring', itemId: 'ruby_ring', grade: 'common' },
+    ratings: { hp: 3, atk: 3, spd: 4, surv: 2 },
+  },
+  survivor: {
+    name: '생존가', icon: '🏃', color: '#44DD44', colorHex: 0x44DD44,
+    desc: '빠른 이동과 한파 저항. 생존 특화.',
+    stats: { hp: 90, damageMul: 1.0, speedMul: 1.4, attackSpeedMul: 1.0, attackRangeMul: 1.0, warmthResist: 0.3 },
+    passives: ['이동 중 15% 회피', '한파 이속 패널티 없음'],
+    startItem: { slot: 'boots', itemId: 'wind_boots', grade: 'common' },
+    ratings: { hp: 3.5, atk: 2, spd: 5, surv: 4 },
+  },
 };
 
 // ═══ 경험치(XP) 시스템 ═══
@@ -876,12 +908,18 @@ class UpgradeManager {
   getLevel(key) { return this.levels[key] || 0; }
   isMaxed(key) { return this.getLevel(key) >= UPGRADES[key].maxLevel; }
 
-  getAvailableUpgrades() {
-    return Object.keys(UPGRADES).filter(k => !this.isMaxed(k));
+  getAvailableUpgrades(playerClass) {
+    return Object.keys(UPGRADES).filter(k => {
+      if (this.isMaxed(k)) return false;
+      const u = UPGRADES[k];
+      // Class-only cards: only show for matching class
+      if (u.classOnly) return u.classOnly === playerClass;
+      return true;
+    });
   }
 
-  pickThreeCards(extra = 0) {
-    const available = this.getAvailableUpgrades();
+  pickThreeCards(extra = 0, playerClass = null) {
+    const available = this.getAvailableUpgrades(playerClass);
     if (available.length === 0) return [];
 
     // Weighted by rarity
@@ -1009,6 +1047,10 @@ class UpgradeManager {
       case 'XP_SCAVENGER': this.xpScavengerBonus = lv * 0.50; this.magnetRange = Math.round((70 + this.getLevel('MAGNET') * 50) * (1 + this.xpScavengerBonus)); break;
       case 'ADRENALINE': this.adrenalineLevel = lv; break;
       case 'BLIZZARD_CLOAK': this.blizzardCloakActive = true; break;
+      // ═══ Class Upgrades ═══
+      case 'CLASS_WARRIOR_ROAR': this._classWarriorRoar = true; break;
+      case 'CLASS_MAGE_BLIZZARD': this._classMageBlizzard = true; break;
+      case 'CLASS_SURVIVOR_SPRINT': this._classSurvivorSprint = true; break;
     }
   }
 
@@ -1246,9 +1288,9 @@ class TitleScene extends Phaser.Scene {
     const newBtnY = hasSave ? btnY + btnH + 40 : btnY;
     this._createButton(W / 2, newBtnY, btnW, btnH, '🆕 새로하기', hasSave ? 0x444466 : 0x2255aa, () => {
       if (hasSave) {
-        this._showConfirmDialog();
+        this._showConfirmDialogThenClass();
       } else {
-        this.scene.start('Boot', { loadSave: false });
+        this._showClassSelection();
       }
     });
     
@@ -1408,6 +1450,165 @@ class TitleScene extends Phaser.Scene {
     });
   }
   
+  _showConfirmDialogThenClass() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.7).setInteractive().setDepth(100);
+    const dlg = this.add.graphics().setDepth(101);
+    const dw = Math.min(320, W * 0.7); const dh = 180;
+    dlg.fillStyle(0x1a1a2e, 0.95); dlg.fillRoundedRect(W/2-dw/2, H/2-dh/2, dw, dh, 12);
+    dlg.lineStyle(2, 0xff6644, 0.8); dlg.strokeRoundedRect(W/2-dw/2, H/2-dh/2, dw, dh, 12);
+    const title = this.add.text(W/2, H/2-50, '⚠️ 경고', { fontSize:'20px', fontFamily:'monospace', color:'#ff8866' }).setOrigin(0.5).setDepth(102);
+    const msg = this.add.text(W/2, H/2-15, '기존 저장 데이터가 삭제됩니다.\n정말 새로 시작하시겠습니까?', { fontSize:'14px', fontFamily:'monospace', color:'#ccccdd', align:'center' }).setOrigin(0.5).setDepth(102);
+    const confirmBg = this.add.graphics().setDepth(102);
+    confirmBg.fillStyle(0xcc3322, 0.9); confirmBg.fillRoundedRect(W/2-70-50, H/2+40, 100, 36, 6);
+    const confirmTxt = this.add.text(W/2-70, H/2+58, '삭제 후 시작', { fontSize:'13px', fontFamily:'monospace', color:'#fff' }).setOrigin(0.5).setDepth(102);
+    const confirmHit = this.add.rectangle(W/2-70, H/2+58, 100, 36, 0, 0).setInteractive({ useHandCursor:true }).setDepth(103);
+    confirmHit.on('pointerdown', () => {
+      SaveManager.delete();
+      [overlay, dlg, title, msg, confirmBg, confirmTxt, confirmHit, cancelBg, cancelTxt, cancelHit].forEach(o => o.destroy());
+      this._showClassSelection();
+    });
+    const cancelBg = this.add.graphics().setDepth(102);
+    cancelBg.fillStyle(0x334466, 0.9); cancelBg.fillRoundedRect(W/2+70-50, H/2+40, 100, 36, 6);
+    const cancelTxt = this.add.text(W/2+70, H/2+58, '취소', { fontSize:'13px', fontFamily:'monospace', color:'#aabbcc' }).setOrigin(0.5).setDepth(102);
+    const cancelHit = this.add.rectangle(W/2+70-50, H/2+58, 100, 36, 0, 0).setInteractive({ useHandCursor:true }).setDepth(103);
+    cancelHit.on('pointerdown', () => {
+      [overlay, dlg, title, msg, confirmBg, confirmTxt, confirmHit, cancelBg, cancelTxt, cancelHit].forEach(o => o.destroy());
+    });
+  }
+
+  _showClassSelection() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const allElements = [];
+    const destroy = () => allElements.forEach(o => { try { o.destroy(); } catch(e) {} });
+
+    // Overlay
+    const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.85).setInteractive().setDepth(200);
+    allElements.push(overlay);
+
+    // Title
+    const titleTxt = this.add.text(W/2, H*0.12, '⚔️ 클래스를 선택하세요', {
+      fontSize: Math.min(28, W*0.05)+'px', fontFamily:'monospace', color:'#e0e8ff', stroke:'#000', strokeThickness:3
+    }).setOrigin(0.5).setDepth(201);
+    allElements.push(titleTxt);
+
+    let selectedClass = localStorage.getItem('whiteout_class') || 'warrior';
+    const classKeys = ['warrior', 'mage', 'survivor'];
+    const cardW = Math.min(110, W * 0.25);
+    const cardH = 170;
+    const gap = Math.min(20, W * 0.03);
+    const totalW = cardW * 3 + gap * 2;
+    const startX = W/2 - totalW/2 + cardW/2;
+    const cardY = H * 0.42;
+
+    // Description text (updated on selection)
+    const descTxt = this.add.text(W/2, H*0.72, '', {
+      fontSize:'13px', fontFamily:'monospace', color:'#ccddee', align:'center', wordWrap:{width:W*0.8}
+    }).setOrigin(0.5).setDepth(201);
+    allElements.push(descTxt);
+
+    // Star rating helper
+    const stars = (val, max=5) => '★'.repeat(Math.round(val)) + '☆'.repeat(max - Math.round(val));
+
+    const cardElements = []; // track per-card elements for highlight updates
+    const cardGfx = [];
+
+    const updateSelection = () => {
+      const cls = PLAYER_CLASSES[selectedClass];
+      descTxt.setText(`${cls.icon} ${cls.name}: ${cls.desc}\n패시브: ${cls.passives.join(' / ')}`);
+      // Update card highlights
+      classKeys.forEach((k, i) => {
+        const isSelected = k === selectedClass;
+        const g = cardGfx[i];
+        const cx = startX + i * (cardW + gap);
+        g.clear();
+        // Background
+        g.fillStyle(isSelected ? 0x2a2a4e : 0x1a1a2e, 0.95);
+        g.fillRoundedRect(cx - cardW/2, cardY - cardH/2, cardW, cardH, 8);
+        // Border
+        const borderColor = PLAYER_CLASSES[k].colorHex;
+        g.lineStyle(isSelected ? 3 : 1, borderColor, isSelected ? 1 : 0.5);
+        g.strokeRoundedRect(cx - cardW/2, cardY - cardH/2, cardW, cardH, 8);
+        if (isSelected) {
+          // Glow effect
+          g.lineStyle(1, borderColor, 0.3);
+          g.strokeRoundedRect(cx - cardW/2 - 3, cardY - cardH/2 - 3, cardW + 6, cardH + 6, 10);
+        }
+      });
+    };
+
+    classKeys.forEach((k, i) => {
+      const cls = PLAYER_CLASSES[k];
+      const cx = startX + i * (cardW + gap);
+
+      // Card background graphics
+      const g = this.add.graphics().setDepth(201);
+      allElements.push(g);
+      cardGfx.push(g);
+
+      // Icon + name
+      const iconTxt = this.add.text(cx, cardY - cardH/2 + 22, cls.icon, {
+        fontSize:'24px'
+      }).setOrigin(0.5).setDepth(202);
+      allElements.push(iconTxt);
+
+      const nameTxt = this.add.text(cx, cardY - cardH/2 + 45, cls.name, {
+        fontSize:'14px', fontFamily:'monospace', color: cls.color, fontStyle:'bold'
+      }).setOrigin(0.5).setDepth(202);
+      allElements.push(nameTxt);
+
+      // Stats
+      const statY = cardY - cardH/2 + 65;
+      const statStyle = { fontSize:'10px', fontFamily:'monospace', color:'#aabbcc' };
+      const labels = [
+        `HP: ${stars(cls.ratings.hp)}`,
+        `공격: ${stars(cls.ratings.atk)}`,
+        `속도: ${stars(cls.ratings.spd)}`,
+        `생존: ${stars(cls.ratings.surv)}`,
+      ];
+      labels.forEach((lbl, li) => {
+        const st = this.add.text(cx, statY + li * 16, lbl, statStyle).setOrigin(0.5).setDepth(202);
+        allElements.push(st);
+      });
+
+      // Clickable area
+      const hitArea = this.add.rectangle(cx, cardY, cardW, cardH, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
+      allElements.push(hitArea);
+      hitArea.on('pointerdown', () => { selectedClass = k; updateSelection(); });
+    });
+
+    updateSelection();
+
+    // Confirm button
+    const btnW2 = Math.min(200, W * 0.4);
+    const btnH2 = 44;
+    const btnY2 = H * 0.85;
+    const btnBg = this.add.graphics().setDepth(201);
+    btnBg.fillStyle(0x2255aa, 0.9); btnBg.fillRoundedRect(W/2 - btnW2/2, btnY2 - btnH2/2, btnW2, btnH2, 8);
+    btnBg.lineStyle(2, 0x4488ff, 0.8); btnBg.strokeRoundedRect(W/2 - btnW2/2, btnY2 - btnH2/2, btnW2, btnH2, 8);
+    allElements.push(btnBg);
+    const btnTxt = this.add.text(W/2, btnY2, '▶ 선택', {
+      fontSize:'18px', fontFamily:'monospace', color:'#ffffff', fontStyle:'bold'
+    }).setOrigin(0.5).setDepth(202);
+    allElements.push(btnTxt);
+    const btnHit = this.add.rectangle(W/2, btnY2, btnW2, btnH2, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
+    allElements.push(btnHit);
+    btnHit.on('pointerdown', () => {
+      try { localStorage.setItem('whiteout_class', selectedClass); } catch(e) {}
+      destroy();
+      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass });
+    });
+
+    // Cancel / back
+    const backTxt = this.add.text(W*0.05, H*0.05, '← 뒤로', {
+      fontSize:'14px', fontFamily:'monospace', color:'#8899aa'
+    }).setDepth(202).setInteractive({ useHandCursor: true });
+    allElements.push(backTxt);
+    backTxt.on('pointerdown', () => destroy());
+  }
+
   _showMetaUpgradeUI(activeTab) {
     const W = this.scale.width;
     const H = this.scale.height;
@@ -1756,7 +1957,8 @@ class BootScene extends Phaser.Scene {
     this.createParticleTextures();
     this.createCrateTexture();
     const loadSave = this.scene.settings.data?.loadSave || false;
-    this.scene.start('Game', { loadSave });
+    const playerClass = this.scene.settings.data?.playerClass || null;
+    this.scene.start('Game', { loadSave, playerClass });
   }
 
   createPlayerTexture() {
@@ -2485,7 +2687,40 @@ class GameScene extends Phaser.Scene {
     this.playerHP = this.playerMaxHP;
     this.warmthResist += eqBonus.coldRes;
     this._equipBonuses = eqBonus; // cache for runtime use
-    
+
+    // ═══ Apply Player Class ═══
+    this._playerClass = this.scene.settings.data?.playerClass || localStorage.getItem('whiteout_class') || null;
+    this._classRoarCD = 0; // warrior roar cooldown
+    this._classBlizzardCD = 0; // mage blizzard cooldown
+    this._classSprintCD = 0; // survivor sprint cooldown
+    this._classSprintActive = false;
+    if (this._playerClass && PLAYER_CLASSES[this._playerClass]) {
+      const cls = PLAYER_CLASSES[this._playerClass];
+      // Override HP
+      this.playerMaxHP = cls.stats.hp + meta.bonusHP + eqBonus.hpFlat;
+      this.playerHP = this.playerMaxHP;
+      // Apply multipliers
+      this.playerDamage = Math.round(this.playerDamage * cls.stats.damageMul);
+      this.playerBaseSpeed = Math.round(this.playerBaseSpeed * cls.stats.speedMul);
+      this.playerSpeed = this.playerBaseSpeed;
+      this.baseAttackSpeed *= (1 / cls.stats.attackSpeedMul); // faster = lower cooldown
+      this._classAttackRangeMul = cls.stats.attackRangeMul;
+      this.warmthResist += cls.stats.warmthResist;
+      // Survivor: blizzard cloak by default
+      if (this._playerClass === 'survivor') {
+        this._survivorBlizzardCloak = true;
+      }
+      // Start item
+      if (cls.startItem) {
+        this.equipmentManager.tryEquip(cls.startItem.slot, cls.startItem.itemId, cls.startItem.grade);
+        // Recompute equipment bonuses
+        const eqBonus2 = this.equipmentManager.getTotalBonuses();
+        this._equipBonuses = eqBonus2;
+      }
+    } else {
+      this._classAttackRangeMul = 1;
+    }
+
     this.gameOver = false;
     this.isRespawning = false;
     this.buildMode = null;
@@ -2999,7 +3234,7 @@ class GameScene extends Phaser.Scene {
   performAttack(pointer) {
     if (this.attackCooldown > 0) return;
     this.attackCooldown = this.getAttackCooldown();
-    const wx = pointer.worldX, wy = pointer.worldY, range = 55;
+    const wx = pointer.worldX, wy = pointer.worldY, range = 55 * (this._classAttackRangeMul || 1);
     this.player.setTexture('player_attack');
     this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
     let hit = false;
@@ -3017,7 +3252,7 @@ class GameScene extends Phaser.Scene {
 
   performAttackNearest() {
     if (this.attackCooldown > 0) return;
-    const range = 55;
+    const range = 55 * (this._classAttackRangeMul || 1);
     // Multi-hit: find N nearest
     const nearAnimals = [];
     this.animals.getChildren().forEach(a => {
@@ -3038,8 +3273,8 @@ class GameScene extends Phaser.Scene {
     this.player.setTexture('player_attack');
     this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
     if (best && bestD <= bestND) {
-      // Multi-hit
-      const hitCount = Math.min(this.upgradeManager.multiHitCount, nearAnimals.length);
+      // Multi-hit (mage: pierce all)
+      const hitCount = (this._playerClass === 'mage') ? nearAnimals.length : Math.min(this.upgradeManager.multiHitCount, nearAnimals.length);
       for (let h = 0; h < hitCount; h++) {
         this.damageAnimal(nearAnimals[h].a, Math.round(this.playerDamage * (this.streakBuff?.dmgMul || 1)));
         this.showAttackFX(nearAnimals[h].a.x, nearAnimals[h].a.y, true);
@@ -3080,6 +3315,8 @@ class GameScene extends Phaser.Scene {
   }
 
   damageAnimal(a, dmg) {
+    // Warrior rage mode: 1.5x damage when HP <= 50%
+    if (this._warriorRageActive) dmg = Math.round(dmg * 1.5);
     // Shield Bash: stun on ready
     if (this.upgradeManager.shieldBashReady) {
       this.upgradeManager.shieldBashReady = false;
@@ -3318,6 +3555,31 @@ class GameScene extends Phaser.Scene {
     }
     this.gainXP(_xpAmt);
     this.showFloatingText(a.x + 15, a.y - 30, '+' + _xpAmt + ' XP' + (this.killCombo >= 10 ? ' 🔥x2' : ''), '#44AAFF');
+
+    // ═══ Class Kill Passives ═══
+    if (this._playerClass === 'warrior') {
+      // 5% chance HP+2
+      if (Math.random() < 0.05) {
+        this.playerHP = Math.min(this.playerMaxHP, this.playerHP + 2);
+        this.showFloatingText(this.player.x, this.player.y - 30, '🪓+2 HP', '#FF8888');
+      }
+    }
+    if (this._playerClass === 'mage') {
+      // 10% ice explosion on kill
+      if (Math.random() < 0.10) {
+        const iceR = 80;
+        const iceVfx = this.add.circle(a.x, a.y, 10, 0x88CCFF, 0.6).setDepth(15);
+        this.tweens.add({ targets: iceVfx, scale: iceR/10, alpha: 0, duration: 400, onComplete: () => iceVfx.destroy() });
+        this.showFloatingText(a.x, a.y - 20, '🧊 얼음 폭발!', '#88CCFF');
+        this.animals.getChildren().forEach(b => {
+          if (!b.active || b === a) return;
+          if (Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y) < iceR) {
+            b.body.setVelocity(0, 0); b.body.moves = false; b.setTint(0x88CCFF);
+            this.time.delayedCall(3000, () => { if (b.active) { b.body.moves = true; b.clearTint(); } });
+          }
+        });
+      }
+    }
 
     // Combo gold bonus drops
     if (this.killCombo >= 5) {
@@ -3698,7 +3960,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Show upgrade card selection
-    const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0);
+    const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0, this._playerClass);
     if (cards.length > 0) {
       this.showUpgradeUI(cards);
     }
@@ -4329,9 +4591,11 @@ class GameScene extends Phaser.Scene {
             a.body.setVelocity(Math.cos(ang)*a.def.speed, Math.sin(ang)*a.def.speed);
             if (dist < 28 && a.atkCD <= 0) {
               // Sprint invincibility
-              if (this.activeBuffs.sprint) { a.atkCD = 0.5; return; }
+              if (this.activeBuffs.sprint || this._classSprintActive) { a.atkCD = 0.5; return; }
+              // Survivor class: 15% dodge while moving
+              const survivorDodge = (this._playerClass === 'survivor' && (this.moveDir.x !== 0 || this.moveDir.y !== 0)) ? 0.15 : 0;
               // Dodge check
-              if (this.upgradeManager.dodgeChance > 0 && Math.random() < this.upgradeManager.dodgeChance) {
+              if ((this.upgradeManager.dodgeChance + survivorDodge) > 0 && Math.random() < (this.upgradeManager.dodgeChance + survivorDodge)) {
                 a.atkCD = 0.8;
                 this.showFloatingText(px, py - 25, '🌀 회피!', '#88DDFF');
                 return;
@@ -4698,7 +4962,7 @@ class GameScene extends Phaser.Scene {
     });
 
     if (!this._nearCampfire) {
-      const blizzardSlow = (this.blizzardActive && !this.upgradeManager.blizzardCloakActive) ? 0.8 : 1;
+      const blizzardSlow = (this.blizzardActive && !this.upgradeManager.blizzardCloakActive && !this._survivorBlizzardCloak) ? 0.8 : 1;
       this.playerSpeed = this.playerBaseSpeed * blizzardSlow;
     }
 
@@ -5293,7 +5557,7 @@ class GameScene extends Phaser.Scene {
 
   openCrate(crate) {
     if (!crate.active || this.upgradeUIActive) return;
-    const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0);
+    const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0, this._playerClass);
     if (cards.length === 0) {
       this.showFloatingText(crate.x, crate.y - 20, '✅ 모든 업그레이드 최대!', '#88FF88');
       if (crate._label) crate._label.destroy();
@@ -6393,6 +6657,76 @@ class GameScene extends Phaser.Scene {
     if (this.gameOver || this.upgradeUIActive || this.isRespawning || this._gamePaused) return;
     const dt = deltaMs / 1000;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+
+    // ═══ Class Passive: Warrior Rage Mode ═══
+    if (this._playerClass === 'warrior') {
+      if (this.playerHP <= this.playerMaxHP * 0.5) {
+        if (!this._warriorRageActive) {
+          this._warriorRageActive = true;
+          this.player.setTint(0xFF2222);
+          this.showFloatingText(this.player.x, this.player.y - 40, '🔥 분노 모드!', '#FF2222');
+        }
+      } else {
+        if (this._warriorRageActive) {
+          this._warriorRageActive = false;
+          this.player.clearTint();
+        }
+      }
+    }
+    // ═══ Class Cooldowns ═══
+    if (this._classRoarCD > 0) this._classRoarCD -= dt;
+    if (this._classBlizzardCD > 0) this._classBlizzardCD -= dt;
+    if (this._classSprintCD > 0) this._classSprintCD -= dt;
+    if (this._classSprintActive && this._classSprintTimer !== undefined) {
+      this._classSprintTimer -= dt;
+      if (this._classSprintTimer <= 0) {
+        this._classSprintActive = false;
+        this.playerBaseSpeed /= 3;
+        this.playerSpeed = this.playerBaseSpeed;
+        if (!this._warriorRageActive) this.player.clearTint();
+      }
+    }
+    // ═══ Class Ability: Warrior Roar (auto on cooldown) ═══
+    if (this.upgradeManager._classWarriorRoar && this._classRoarCD <= 0) {
+      const nearEnemies = this.animals.getChildren().filter(a => a.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y) < 100);
+      if (nearEnemies.length > 0) {
+        this._classRoarCD = 15; // 15s cooldown
+        this.showFloatingText(this.player.x, this.player.y - 40, '🪓 포효!', '#FF4444');
+        const roarFx = this.add.circle(this.player.x, this.player.y, 10, 0xFF4444, 0.4).setDepth(15);
+        this.tweens.add({ targets: roarFx, scale: 10, alpha: 0, duration: 500, onComplete: () => roarFx.destroy() });
+        nearEnemies.forEach(a => {
+          a.body.setVelocity(0, 0); a.body.moves = false; a.setTint(0x888888);
+          this.time.delayedCall(2000, () => { if (a.active) { a.body.moves = true; a.clearTint(); } });
+        });
+      }
+    }
+    // ═══ Class Ability: Mage Blizzard (auto on cooldown) ═══
+    if (this.upgradeManager._classMageBlizzard && this._classBlizzardCD <= 0) {
+      const anyEnemy = this.animals.getChildren().some(a => a.active);
+      if (anyEnemy) {
+        this._classBlizzardCD = 30;
+        this.showFloatingText(this.player.x, this.player.y - 40, '🧊 얼음 폭풍!', '#88CCFF');
+        this.cameras.main.flash(300, 100, 180, 255);
+        this.animals.getChildren().forEach(a => {
+          if (!a.active) return;
+          a.body.setVelocity(0, 0); a.body.moves = false; a.setTint(0x88CCFF);
+          this.time.delayedCall(1000, () => { if (a.active) { a.body.moves = true; a.clearTint(); } });
+        });
+      }
+    }
+    // ═══ Class Ability: Survivor Sprint (auto on cooldown when enemies near) ═══
+    if (this.upgradeManager._classSurvivorSprint && this._classSprintCD <= 0 && !this._classSprintActive) {
+      const dangerClose = this.animals.getChildren().some(a => a.active && a.def && a.def.hostile && Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y) < 80);
+      if (dangerClose) {
+        this._classSprintCD = 20;
+        this._classSprintActive = true;
+        this._classSprintTimer = 3;
+        this.playerBaseSpeed *= 3;
+        this.playerSpeed = this.playerBaseSpeed;
+        this.player.setTint(0x44FF44);
+        this.showFloatingText(this.player.x, this.player.y - 40, '🏃 질주!', '#44FF44');
+      }
+    }
 
     // ═══ Kill Combo Timer ═══
     if (this.killComboTimer > 0) {
