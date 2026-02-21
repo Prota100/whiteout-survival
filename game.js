@@ -423,6 +423,38 @@ const PLAYER_CLASSES = {
   },
 };
 
+// ═══ 난이도 모드 시스템 ═══
+const DIFFICULTY_MODES = {
+  normal: { id: 'normal', name: '🌿 일반', color: '#44DD44', colorHex: 0x44DD44, warn: '',
+    enemyHP: 1.0, enemyDmg: 1.0, spawnRate: 1.0, coldDmg: 1.0, xpMul: 1.0, dropMul: 1.0, clearBonus: 10 },
+  hard: { id: 'hard', name: '🔥 하드', color: '#FF8800', colorHex: 0xFF8800, warn: '적이 강해집니다',
+    enemyHP: 1.5, enemyDmg: 1.5, spawnRate: 1.3, coldDmg: 1.5, xpMul: 1.2, dropMul: 1.2, clearBonus: 25 },
+  hell: { id: 'hell', name: '💀 지옥', color: '#FF2222', colorHex: 0xFF2222, warn: '💀 살아남을 수 있을까?',
+    enemyHP: 2.5, enemyDmg: 2.5, spawnRate: 2.0, coldDmg: 2.0, xpMul: 1.5, dropMul: 1.5, clearBonus: 50 },
+};
+
+// ═══ 데일리 챌린지 시스템 ═══
+const DAILY_CHALLENGES = [
+  { id: 'no_equipment', name: '맨손 도전', desc: '장비 드롭 없음. 스킬만으로 생존!', modifier: { noEquipDrop: true } },
+  { id: 'speed_run', name: '스피드런', desc: '30분 안에 레벨 20 달성 시 클리어!', modifier: { winCondition: 'level20in30' } },
+  { id: 'one_upgrade', name: '단일 빌드', desc: '업그레이드를 1종류만 선택 가능', modifier: { singleUpgrade: true } },
+  { id: 'blizzard_always', name: '영구 한파', desc: '항상 한파 활성화', modifier: { alwaysBlizzard: true } },
+  { id: 'glass_cannon', name: '유리 대포', desc: 'HP 30, 공격력 3배', modifier: { hp: 30, damageMult: 3.0 } },
+  { id: 'pacifist', name: '평화주의', desc: '30분 생존 시 클리어 (공격 불가!)', modifier: { noAttack: true, winCondition: 'survive30' } },
+  { id: 'boss_rush', name: '보스 러시', desc: '보스가 10분마다 등장', modifier: { bossInterval: 600 } },
+];
+
+function getTodayChallenge() {
+  const today = new Date();
+  const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+  return DAILY_CHALLENGES[seed % DAILY_CHALLENGES.length];
+}
+
+function getDailyChallengeKey() {
+  const today = new Date();
+  return `daily_${today.getFullYear()}_${today.getMonth()+1}_${today.getDate()}`;
+}
+
 // ═══ 경험치(XP) 시스템 ═══
 const XP_TABLE = [0, 12, 20, 30, 42, 55, 70, 90, 115, 145, 180, 220, 270, 330, 400, 490, 600, 730, 900, 1100, 1350];
 const XP_SOURCES = {
@@ -1339,8 +1371,45 @@ class TitleScene extends Phaser.Scene {
       }).setOrigin(0.5, 0.5).setDepth(11);
     }
 
+    // ═══ 📅 데일리 챌린지 ═══
+    const dailyCh = getTodayChallenge();
+    const dailyKey = getDailyChallengeKey();
+    const dailyCleared = localStorage.getItem('daily_clear_' + dailyKey) === 'true';
+    const dailyY = recordY + recordBoxH + 16;
+    const dailyBoxH = 70;
+    const dailyGfx = this.add.graphics().setDepth(10);
+    dailyGfx.fillStyle(0x1A1E2E, 0.8);
+    dailyGfx.fillRoundedRect(W/2 - btnW/2 - 10, dailyY - 8, btnW + 20, dailyBoxH, 8);
+    dailyGfx.lineStyle(1, 0xFFAA00, 0.4);
+    dailyGfx.strokeRoundedRect(W/2 - btnW/2 - 10, dailyY - 8, btnW + 20, dailyBoxH, 8);
+
+    this.add.text(W / 2, dailyY + 4, `📅 오늘의 챌린지: ${dailyCh.name}`, {
+      fontSize: '13px', fontFamily: 'monospace', color: '#FFD700'
+    }).setOrigin(0.5, 0).setDepth(11);
+    this.add.text(W / 2, dailyY + 22, dailyCh.desc, {
+      fontSize: '11px', fontFamily: 'monospace', color: '#aabbcc', wordWrap: { width: btnW - 20 }, align: 'center'
+    }).setOrigin(0.5, 0).setDepth(11);
+
+    if (dailyCleared) {
+      this.add.text(W / 2, dailyY + 44, '✅ 클리어 완료!', {
+        fontSize: '12px', fontFamily: 'monospace', color: '#44DD44'
+      }).setOrigin(0.5, 0).setDepth(11);
+    } else {
+      const dailyBtnW2 = 80, dailyBtnH2 = 24;
+      const dbg = this.add.graphics().setDepth(11);
+      dbg.fillStyle(0xFF6B35, 0.9);
+      dbg.fillRoundedRect(W/2 - dailyBtnW2/2, dailyY + 42, dailyBtnW2, dailyBtnH2, 6);
+      this.add.text(W / 2, dailyY + 42 + dailyBtnH2/2, '🎯 도전', {
+        fontSize: '12px', fontFamily: 'monospace', color: '#fff', fontStyle: 'bold'
+      }).setOrigin(0.5).setDepth(12);
+      const dailyHit = this.add.rectangle(W/2, dailyY + 42 + dailyBtnH2/2, dailyBtnW2, dailyBtnH2, 0, 0).setInteractive({ useHandCursor: true }).setDepth(13);
+      dailyHit.on('pointerdown', () => {
+        this.scene.start('Boot', { loadSave: false, playerClass: localStorage.getItem('whiteout_class') || 'warrior', dailyChallenge: dailyCh });
+      });
+    }
+
     // Version
-    this.add.text(W - 10, H - 10, 'v1.0', {
+    this.add.text(W - 10, H - 10, 'v1.1', {
       fontSize: '11px', fontFamily: 'monospace', color: '#334'
     }).setOrigin(1, 1);
     
@@ -1495,13 +1564,15 @@ class TitleScene extends Phaser.Scene {
     allElements.push(titleTxt);
 
     let selectedClass = localStorage.getItem('whiteout_class') || 'warrior';
+    let selectedDifficulty = localStorage.getItem('whiteout_difficulty') || 'normal';
     const classKeys = ['warrior', 'mage', 'survivor'];
+    const diffKeys = ['normal', 'hard', 'hell'];
     const cardW = Math.min(110, W * 0.25);
     const cardH = 170;
     const gap = Math.min(20, W * 0.03);
     const totalW = cardW * 3 + gap * 2;
     const startX = W/2 - totalW/2 + cardW/2;
-    const cardY = H * 0.42;
+    const cardY = H * 0.38;
 
     // Description text (updated on selection)
     const descTxt = this.add.text(W/2, H*0.72, '', {
@@ -1581,10 +1652,67 @@ class TitleScene extends Phaser.Scene {
 
     updateSelection();
 
+    // ═══ 난이도 선택 ═══
+    const diffY = H * 0.68;
+    const diffBtnW = Math.min(80, W * 0.2);
+    const diffBtnH = 32;
+    const diffGap = Math.min(10, W * 0.02);
+    const diffTotalW = diffBtnW * 3 + diffGap * 2;
+    const diffStartX = W/2 - diffTotalW/2 + diffBtnW/2;
+
+    const diffLabel = this.add.text(W/2, diffY - 22, '난이도', {
+      fontSize: '13px', fontFamily: 'monospace', color: '#8899aa'
+    }).setOrigin(0.5).setDepth(201);
+    allElements.push(diffLabel);
+
+    const diffWarnTxt = this.add.text(W/2, diffY + diffBtnH/2 + 14, '', {
+      fontSize: '11px', fontFamily: 'monospace', color: '#FF8800'
+    }).setOrigin(0.5).setDepth(201);
+    allElements.push(diffWarnTxt);
+
+    const diffGfxArr = [];
+    const diffTxtArr = [];
+
+    const updateDiffSelection = () => {
+      const dm = DIFFICULTY_MODES[selectedDifficulty];
+      diffWarnTxt.setText(dm.warn);
+      diffWarnTxt.setColor(dm.color);
+      diffKeys.forEach((dk, di) => {
+        const isSelected = dk === selectedDifficulty;
+        const ddm = DIFFICULTY_MODES[dk];
+        const dx = diffStartX + di * (diffBtnW + diffGap);
+        const g = diffGfxArr[di];
+        g.clear();
+        g.fillStyle(isSelected ? ddm.colorHex : 0x1a1a2e, isSelected ? 0.9 : 0.6);
+        g.fillRoundedRect(dx - diffBtnW/2, diffY - diffBtnH/2, diffBtnW, diffBtnH, 6);
+        g.lineStyle(isSelected ? 2 : 1, ddm.colorHex, isSelected ? 1 : 0.4);
+        g.strokeRoundedRect(dx - diffBtnW/2, diffY - diffBtnH/2, diffBtnW, diffBtnH, 6);
+        diffTxtArr[di].setColor(isSelected ? '#ffffff' : '#888888');
+      });
+    };
+
+    diffKeys.forEach((dk, di) => {
+      const ddm = DIFFICULTY_MODES[dk];
+      const dx = diffStartX + di * (diffBtnW + diffGap);
+      const g = this.add.graphics().setDepth(201);
+      allElements.push(g);
+      diffGfxArr.push(g);
+      const t = this.add.text(dx, diffY, ddm.name, {
+        fontSize: '12px', fontFamily: 'monospace', color: '#888888', fontStyle: 'bold'
+      }).setOrigin(0.5).setDepth(202);
+      allElements.push(t);
+      diffTxtArr.push(t);
+      const hit = this.add.rectangle(dx, diffY, diffBtnW, diffBtnH, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
+      allElements.push(hit);
+      hit.on('pointerdown', () => { selectedDifficulty = dk; updateDiffSelection(); });
+    });
+
+    updateDiffSelection();
+
     // Confirm button
     const btnW2 = Math.min(200, W * 0.4);
     const btnH2 = 44;
-    const btnY2 = H * 0.85;
+    const btnY2 = H * 0.88;
     const btnBg = this.add.graphics().setDepth(201);
     btnBg.fillStyle(0x2255aa, 0.9); btnBg.fillRoundedRect(W/2 - btnW2/2, btnY2 - btnH2/2, btnW2, btnH2, 8);
     btnBg.lineStyle(2, 0x4488ff, 0.8); btnBg.strokeRoundedRect(W/2 - btnW2/2, btnY2 - btnH2/2, btnW2, btnH2, 8);
@@ -1597,8 +1725,9 @@ class TitleScene extends Phaser.Scene {
     allElements.push(btnHit);
     btnHit.on('pointerdown', () => {
       try { localStorage.setItem('whiteout_class', selectedClass); } catch(e) {}
+      try { localStorage.setItem('whiteout_difficulty', selectedDifficulty); } catch(e) {}
       destroy();
-      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass });
+      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty });
     });
 
     // Cancel / back
@@ -1958,7 +2087,9 @@ class BootScene extends Phaser.Scene {
     this.createCrateTexture();
     const loadSave = this.scene.settings.data?.loadSave || false;
     const playerClass = this.scene.settings.data?.playerClass || null;
-    this.scene.start('Game', { loadSave, playerClass });
+    const difficulty = this.scene.settings.data?.difficulty || null;
+    const dailyChallenge = this.scene.settings.data?.dailyChallenge || null;
+    this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge });
   }
 
   createPlayerTexture() {
@@ -2722,6 +2853,24 @@ class GameScene extends Phaser.Scene {
       this._classAttackRangeMul = 1;
     }
 
+    // ═══ Apply Difficulty Mode ═══
+    this._difficulty = this.scene.settings.data?.difficulty || localStorage.getItem('whiteout_difficulty') || 'normal';
+    this._diffMode = DIFFICULTY_MODES[this._difficulty] || DIFFICULTY_MODES.normal;
+
+    // ═══ Apply Daily Challenge ═══
+    this._dailyChallenge = this.scene.settings.data?.dailyChallenge || null;
+    this._dailyModifier = this._dailyChallenge ? this._dailyChallenge.modifier : {};
+    // glass_cannon modifier
+    if (this._dailyModifier.hp) {
+      this.playerMaxHP = this._dailyModifier.hp;
+      this.playerHP = this.playerMaxHP;
+    }
+    if (this._dailyModifier.damageMult) {
+      this.playerDamage = Math.round(this.playerDamage * this._dailyModifier.damageMult);
+    }
+    // alwaysBlizzard handled in update
+    // noEquipDrop handled in _tryDropEquipment
+
     this.gameOver = false;
     this.isRespawning = false;
     this.buildMode = null;
@@ -2774,8 +2923,8 @@ class GameScene extends Phaser.Scene {
     this.waveNumber = 0;
 
     // ═══ Blizzard (한파) System ═══
-    this.blizzardActive = false;
-    this.blizzardMultiplier = 1;
+    this.blizzardActive = (this._dailyModifier && this._dailyModifier.alwaysBlizzard) ? true : false;
+    this.blizzardMultiplier = (this._dailyModifier && this._dailyModifier.alwaysBlizzard) ? 2.0 : 1;
     this.blizzardIndex = 0;
     this.blizzardWarned = false;
     this.blizzardWarningEndTime = 0;
@@ -2933,7 +3082,8 @@ class GameScene extends Phaser.Scene {
           Phaser.Math.Clamp(ry, 60, WORLD_H-60),
           type
         ).setCollideWorldBounds(true).setDepth(5);
-        a.animalType = type; a.def = def; a.hp = def.hp; a.maxHP = def.hp;
+        a.animalType = type; a.def = def;
+        this._applyDifficultyToAnimal(a, def);
         a.wanderTimer = 0; a.wanderDir = {x:0,y:0}; a.hitFlash = 0; a.atkCD = 0; a.fleeTimer = 0;
         const lc = '#AADDFF';
         a.nameLabel = this.add.text(a.x, a.y - def.size - 10, def.name, {
@@ -3216,15 +3366,23 @@ class GameScene extends Phaser.Scene {
     .forEach(e => { for (let i = 0; i < e.count; i++) this.spawnAnimal(e.type); });
   }
 
+  _applyDifficultyToAnimal(a, def) {
+    const hpMul = this._diffMode ? this._diffMode.enemyHP : 1;
+    a.hp = Math.round(def.hp * hpMul);
+    a.maxHP = a.hp;
+    a._diffDmgMul = this._diffMode ? this._diffMode.enemyDmg : 1;
+  }
+
   spawnAnimal(type) {
     const def = ANIMALS[type], m = 60;
     let x = Phaser.Math.Between(m, WORLD_W-m), y = Phaser.Math.Between(m, WORLD_H-m);
     if (Phaser.Math.Distance.Between(x, y, this.player?.x || WORLD_W/2, this.player?.y || WORLD_H/2) < 200)
       { x = Phaser.Math.Between(m, WORLD_W-m); y = Phaser.Math.Between(m, WORLD_H-m); }
     const a = this.physics.add.sprite(x, y, type).setCollideWorldBounds(true).setDepth(5);
-    a.animalType = type; a.def = def; a.hp = def.hp; a.maxHP = def.hp;
+    a.animalType = type; a.def = def;
+    this._applyDifficultyToAnimal(a, def);
     a.wanderTimer = 0; a.wanderDir = {x:0,y:0}; a.hitFlash = 0; a.atkCD = 0; a.fleeTimer = 0;
-    if (def.hp > 2) a.hpBar = this.add.graphics().setDepth(6);
+    if (a.maxHP > 2) a.hpBar = this.add.graphics().setDepth(6);
     const lc = def.behavior === 'chase' ? '#FF4444' : def.behavior === 'flee' ? '#88DDFF' : '#AADDFF';
     a.nameLabel = this.add.text(x, y - def.size - 10, def.name, {
       fontSize: '11px', fontFamily: 'monospace', color: lc, stroke: '#000', strokeThickness: 3
@@ -3867,6 +4025,7 @@ class GameScene extends Phaser.Scene {
 
   gainXP(source) {
     let amount = (typeof source === 'number') ? source : (XP_SOURCES[source] ?? XP_SOURCES.default);
+    if (this._diffMode) amount = Math.round(amount * this._diffMode.xpMul);
     if (this._equipBonuses && this._equipBonuses.xpMul > 0) amount = Math.round(amount * (1 + this._equipBonuses.xpMul));
     this.playerXP += amount;
     while (this.playerXP >= this._getXPRequired(this.playerLevel)) {
@@ -4266,7 +4425,9 @@ class GameScene extends Phaser.Scene {
     const feverMul = (this.activeRandomEvents && this.activeRandomEvents.drop_fever) ? 3 : 1;
     const synergyDrop = this._synergyExtraDropRate || 0;
     const timeBonus = Math.min(0.04, (this.gameElapsed || 0) / 60 * 0.002); // +0.2% per min, max +4%
-    const dropRate = (0.03 + timeBonus + luck / 1000 + synergyDrop) * feverMul; // 3% base + time bonus + luck + synergy, ×3 during fever
+    if (this._dailyModifier && this._dailyModifier.noEquipDrop) return;
+    const diffDropMul = this._diffMode ? this._diffMode.dropMul : 1;
+    const dropRate = (0.03 + timeBonus + luck / 1000 + synergyDrop) * feverMul * diffDropMul; // 3% base + time bonus + luck + synergy, ×3 during fever
     if (Math.random() > dropRate) return;
     if (this.equipmentDrops.length >= 5) return;
 
@@ -4607,7 +4768,7 @@ class GameScene extends Phaser.Scene {
                 this.showFloatingText(px, py - 25, '🛡️ 무효!', '#FFD700');
                 return;
               }
-              const actualDmg = a.def.damage * (1 - this.upgradeManager.armorReduction);
+              const actualDmg = a.def.damage * (a._diffDmgMul || 1) * (1 - this.upgradeManager.armorReduction);
               this.playerHP -= actualDmg; a.atkCD = 1.2; playHurt();
               // Thorns
               if (this.upgradeManager.thornsDamage > 0 && a.active) {
@@ -5043,7 +5204,10 @@ class GameScene extends Phaser.Scene {
     const frostRes = this.upgradeManager ? this.upgradeManager.frostResistance : 0;
     const woolMul = this.activeBuffs.wool ? 0.5 : 1; // 양털슈트: 체온 소모 50% 감소
     const sprintFreeze = this.activeBuffs.sprint ? 0 : 1; // 달리기: 체온 소모 없음
-    this.temperature = Math.max(0, this.temperature - (baseDecay + Math.abs(zoneDecay)) * this.blizzardMultiplier * (1 - frostRes) * woolMul * sprintFreeze * dt);
+    const diffColdMul = this._diffMode ? this._diffMode.coldDmg : 1;
+    const dailyBlizzard = (this._dailyModifier && this._dailyModifier.alwaysBlizzard) ? 2.0 : 1;
+    const effectiveBlizzard = Math.max(this.blizzardMultiplier, dailyBlizzard);
+    this.temperature = Math.max(0, this.temperature - (baseDecay + Math.abs(zoneDecay)) * effectiveBlizzard * diffColdMul * (1 - frostRes) * woolMul * sprintFreeze * dt);
     this.placedBuildings.forEach(b => {
       if (b.type === 'campfire') return;
       if (!b.def.warmth) return;
@@ -5061,7 +5225,7 @@ class GameScene extends Phaser.Scene {
     if (this.temperature <= 0) {
       // Cold master synergy: pulse immunity
       if (this._coldImmunePulse) { this._coldImmunePulse = false; }
-      else { this.playerHP -= 8 * dt; if (this.playerHP <= 0) this.endGame(); }
+      else { this.playerHP -= 8 * (this._diffMode ? this._diffMode.coldDmg : 1) * dt; if (this.playerHP <= 0) this.endGame(); }
     }
     if (this.hunger <= 0) { this.playerHP -= 5 * dt; if (this.playerHP <= 0) this.endGame(); }
     if (this.hunger < 30 && this.res.meat > 0) {
@@ -6122,6 +6286,10 @@ class GameScene extends Phaser.Scene {
   }
 
   endBlizzard(reward) {
+    if (this._dailyModifier && this._dailyModifier.alwaysBlizzard) {
+      // Don't end blizzard in alwaysBlizzard mode
+      return;
+    }
     this.blizzardActive = false;
     this.blizzardMultiplier = 1;
     this.playerSpeed = this.playerBaseSpeed;
@@ -6512,8 +6680,13 @@ class GameScene extends Phaser.Scene {
     this.gameOver = true;
     
     const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
-    const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0);
+    const diffBonus = this._diffMode ? this._diffMode.clearBonus : 10;
+    const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0) + diffBonus;
     playWinSound();
+    // Save daily challenge clear
+    if (this._dailyChallenge) {
+      try { localStorage.setItem('daily_clear_' + getDailyChallengeKey(), 'true'); } catch(e) {}
+    }
 
     this._showEndScreen({
       isVictory: true,
@@ -6593,6 +6766,13 @@ class GameScene extends Phaser.Scene {
       `⭐ 달성 레벨: Lv.${level}${nr('level')}`,
       `💎 획득 포인트: +${earned}`
     ];
+    if (this._diffMode && this._difficulty !== 'normal') {
+      statsLines.push(`🎮 난이도: ${this._diffMode.name}`);
+    }
+    if (this._dailyChallenge) {
+      const dcCleared = isVictory;
+      statsLines.push(dcCleared ? `📅 데일리 클리어! (${this._dailyChallenge.name})` : `📅 데일리: ${this._dailyChallenge.name}`);
+    }
     if (equipBonuses) {
       const bonusStrs = [];
       if (equipBonuses.atkMul > 0) bonusStrs.push(`공격력+${Math.round(equipBonuses.atkMul*100)}%`);
@@ -6656,7 +6836,7 @@ class GameScene extends Phaser.Scene {
       .setScrollFactor(0).setDepth(304).setOrigin(0.5).setInteractive().setAlpha(0.001);
 
     // Button handlers
-    retryHit.on('pointerdown', () => { this.scene.start('Boot', { loadSave: false }); });
+    retryHit.on('pointerdown', () => { this.scene.start('Boot', { loadSave: false, difficulty: this._difficulty, dailyChallenge: this._dailyChallenge }); });
     titleHit.on('pointerdown', () => { this.scene.start('Title'); });
     shareHit.on('pointerdown', () => {
       // Build equipment string
@@ -6981,7 +7161,8 @@ class GameScene extends Phaser.Scene {
     const spawnConfig = this.getSpawnConfig();
     const rushMul = (this.activeRandomEvents && this.activeRandomEvents.spawn_rush) ? 3 : 1;
     const challengeMul = this._challengeActive ? (this._challengeSpawnMul || 1) : 1;
-    const spawnIntervalSec = (spawnConfig.spawnInterval / 1000) / rushMul / challengeMul;
+    const diffSpawnMul = this._diffMode ? this._diffMode.spawnRate : 1;
+    const spawnIntervalSec = (spawnConfig.spawnInterval / 1000) / rushMul / challengeMul / diffSpawnMul;
     if (this.waveTimer >= spawnIntervalSec) {
       this.waveTimer = 0;
       this.waveNumber++;
@@ -7416,9 +7597,10 @@ class GameScene extends Phaser.Scene {
     const x = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 60, WORLD_W - 60);
     const y = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 60, WORLD_H - 60);
     const a = this.physics.add.sprite(x, y, type).setCollideWorldBounds(true).setDepth(5);
-    a.animalType = type; a.def = def; a.hp = def.hp; a.maxHP = def.hp;
+    a.animalType = type; a.def = def;
+    this._applyDifficultyToAnimal(a, def);
     a.wanderTimer = 0; a.wanderDir = {x:0,y:0}; a.hitFlash = 0; a.atkCD = 0; a.fleeTimer = 0;
-    if (def.hp > 2) a.hpBar = this.add.graphics().setDepth(6);
+    if (a.maxHP > 2) a.hpBar = this.add.graphics().setDepth(6);
     const lc = def.behavior === 'chase' ? '#FF4444' : def.behavior === 'flee' ? '#88DDFF' : '#AADDFF';
     a.nameLabel = this.add.text(x, y - def.size - 10, def.name, {
       fontSize: '11px', fontFamily: 'monospace', color: lc, stroke: '#000', strokeThickness: 3
