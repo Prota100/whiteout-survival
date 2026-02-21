@@ -516,6 +516,8 @@ class GameScene extends Phaser.Scene {
       this.time.delayedCall(3500, () => this.showActStoryText(ACT_STORY.start));
 
       // ═══ FTUE: Spawn 2 rabbits near player for early kill ═══
+      // DISABLED: Rabbit spawn causing browser crash
+      /*
       for (let i = 0; i < 2; i++) {
         const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
         const dist = Phaser.Math.Between(80, 120);
@@ -537,6 +539,7 @@ class GameScene extends Phaser.Scene {
         }).setDepth(6).setOrigin(0.5);
         this.animals.add(a);
       }
+      */
 
       // ═══ FTUE: Hint text (disappears after 10s or first level-up) ═══
       this._ftueHint = this.add.text(
@@ -1041,10 +1044,15 @@ class GameScene extends Phaser.Scene {
     // DEBUG: Skip killAnimal for rabbit
     if (a.hp <= 0) {
       if (a.animalType === 'rabbit') {
-        console.log('[DEBUG] RABBIT DEATH - bypassing killAnimal');
+        console.log('[DEBUG] RABBIT DEATH - safe destroy');
+        a._isDying = true;  // Mark as dying
+        if (a.body) a.body.stop();  // Stop movement
+        if (a.body) a.body.moves = false;  // Disable physics
+        this.animals.remove(a);  // Remove from group first
         if (a.hpBar) a.hpBar.destroy();
         if (a.nameLabel) a.nameLabel.destroy();
         a.destroy();
+        return;
       } else {
         this.killAnimal(a);
       }
@@ -2250,6 +2258,7 @@ class GameScene extends Phaser.Scene {
     this._frameCount = (this._frameCount || 0) + 1;
     animalChildren.forEach((a, idx) => {
       if (!a.active) return;
+      if (a._isDying) return;  // Skip update if dying
       // Boss cinematic freeze
       if (a._cinematicFreeze) { if (a.body) a.body.setVelocity(0, 0); return; }
       a.atkCD = Math.max(0, a.atkCD - dt);
