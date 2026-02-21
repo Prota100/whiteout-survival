@@ -428,6 +428,8 @@ const UPGRADES = {
   CLASS_SURVIVOR_SPRINT: { name: '질주', desc: '3초간 이속 3배+무적 (쿨다운 20초)', icon: '🏃', category: 'survival', maxLevel: 1, rarity: 'legendary', classOnly: 'survivor' },
   CLASS_SHAMAN_SPIRIT: { name: '정령 소환', desc: '정령이 10초간 적에 초당 15 데미지+XP 자동 수집 (쿨다운 30초)', icon: '🔮', category: 'special', maxLevel: 1, rarity: 'legendary', classOnly: 'shaman' },
   CLASS_SHAMAN_STORM: { name: '정령의 폭풍', desc: '정령이 30초간 화면 전체를 돌며 50 데미지 광역 공격 (쿨다운 45초)', icon: '🌀', category: 'special', maxLevel: 1, rarity: 'legendary', classOnly: 'shaman' },
+  CLASS_HUNTER_VOLLEY: { name: '집중 사격', desc: '가장 가까운 적 5마리에게 3초간 연속 화살 발사 (쿨다운 25초)', icon: '🏹', category: 'combat', maxLevel: 1, rarity: 'legendary', classOnly: 'hunter' },
+  CLASS_HUNTER_POISON: { name: '독화살', desc: '공격이 DoT 독 효과 (초당 10 데미지, 5초, 중첩 가능)', icon: '☠️', category: 'combat', maxLevel: 1, rarity: 'legendary', classOnly: 'hunter' },
   // ═══ 엔드게임 전용 업그레이드 (60분 이후 무한 모드) ═══
   GODLIKE_POWER:     { name: '신의 축복', desc: '모든 스탯 +50%', icon: '👑', category: 'special', maxLevel: 1, rarity: 'unique', endgameOnly: true },
   IMMORTAL_WILL:     { name: '불멸의 의지', desc: 'HP+200, HP회복 +5/s', icon: '💖', category: 'survival', maxLevel: 1, rarity: 'unique', endgameOnly: true },
@@ -469,6 +471,14 @@ const PLAYER_CLASSES = {
     passives: ['처치 시 10% 영혼 구슬 (HP+5)', '캠프파이어 150px내 전 스탯+15%'],
     startItem: { slot: 'ring', itemId: 'legend_ring', grade: 'common' },
     ratings: { hp: 3, atk: 2, spd: 3, surv: 4, special: 5 },
+  },
+  hunter: {
+    name: '사냥꾼', icon: '🏹', color: '#8B4513', colorHex: 0x8B4513,
+    desc: '원거리 공격 특화. 멀리서 더 강한 데미지.',
+    stats: { hp: 85, damageMul: 1.2, speedMul: 1.2, attackSpeedMul: 1.0, attackRangeMul: 2.0, warmthResist: 0 },
+    passives: ['원거리 1.5x / 근접 0.7x (저격수)', '15초마다 함정 설치 (동결+50dmg)'],
+    startItem: { slot: 'weapon', itemId: 'spear', grade: 'common' },
+    ratings: { hp: 2, atk: 4, spd: 3, surv: 2, special: 4 },
   },
 };
 
@@ -777,7 +787,7 @@ class RecordManager {
     return {
       bestSurvivalTime: 0, bestKills: 0, bestLevel: 0, bestCombo: 0,
       totalPlays: 0, totalKills: 0, totalPlayTime: 0, wins: 0, achievementsUnlocked: 0,
-      longestEndlessSurvival: 0, totalQuestsCompleted: 0
+      longestEndlessSurvival: 0, totalQuestsCompleted: 0, ngPlusClears: 0
     };
   }
 
@@ -834,6 +844,7 @@ const PLAYER_SKINS = [
   { id: 'icy',           name: '얼음 군주',    color: 0xAAEEFF, outline: 0x66CCEE, unlockCondition: 'achievements_5' },
   { id: 'legendary',     name: '전설의 자',    color: 0xFF8C00, outline: 0xFF4500, unlockCondition: 'endless_60min' },
   { id: 'shaman_purple', name: '무당의 영혼',  color: 0x9B59B6, outline: 0x6C3483, unlockCondition: 'class_shaman_win' },
+  { id: 'hunter_brown',  name: '설원의 사냥꾼', color: 0x8B4513, outline: 0x6B3A2A, unlockCondition: 'class_hunter_win' },
 ];
 
 const ACHIEVEMENT_REWARDS = {
@@ -898,6 +909,8 @@ class SkinManager {
       case 'class_warrior_win': return SkinManager._classWin('warrior');
       case 'class_mage_win': return SkinManager._classWin('mage');
       case 'class_survivor_win': return SkinManager._classWin('survivor');
+      case 'class_shaman_win': return SkinManager._classWin('shaman');
+      case 'class_hunter_win': return SkinManager._classWin('hunter');
       default: return false;
     }
   }
@@ -923,6 +936,8 @@ class SkinManager {
       'class_warrior_win': '전사로 60분 클리어',
       'class_mage_win': '마법사로 60분 클리어',
       'class_survivor_win': '생존가로 60분 클리어',
+      'class_shaman_win': '무당으로 60분 클리어',
+      'class_hunter_win': '사냥꾼으로 60분 클리어',
       'win_once': '1회 클리어',
       'kills_100_total': '누적 킬 100 이상',
       'achievements_5': '성취 5개 이상 달성',
@@ -1314,6 +1329,8 @@ class UpgradeManager {
       case 'CLASS_SURVIVOR_SPRINT': this._classSurvivorSprint = true; break;
       case 'CLASS_SHAMAN_SPIRIT': this._classShamanSpirit = true; break;
       case 'CLASS_SHAMAN_STORM': this._classShamanStorm = true; break;
+      case 'CLASS_HUNTER_VOLLEY': this._classHunterVolley = true; break;
+      case 'CLASS_HUNTER_POISON': this._classHunterPoison = true; break;
       // ═══ Endgame Upgrades ═══
       case 'GODLIKE_POWER':
         scene.playerDamage = Math.round(scene.playerDamage * 1.5);
@@ -2036,12 +2053,12 @@ class TitleScene extends Phaser.Scene {
 
     let selectedClass = localStorage.getItem('whiteout_class') || 'warrior';
     let selectedDifficulty = localStorage.getItem('whiteout_difficulty') || 'normal';
-    const classKeys = ['warrior', 'mage', 'survivor', 'shaman'];
+    const classKeys = ['warrior', 'mage', 'survivor', 'shaman', 'hunter'];
     const diffKeys = ['normal', 'hard', 'hell'];
-    const cardW = Math.min(90, W * 0.2);
+    const cardW = Math.min(75, W * 0.17);
     const cardH = 170;
-    const gap = Math.min(15, W * 0.02);
-    const totalW = cardW * 4 + gap * 3;
+    const gap = Math.min(10, W * 0.015);
+    const totalW = cardW * 5 + gap * 4;
     const startX = W/2 - totalW/2 + cardW/2;
     const cardY = H * 0.38;
 
@@ -2218,6 +2235,50 @@ class TitleScene extends Phaser.Scene {
     allElements.push(endlessHit);
     endlessHit.on('pointerdown', () => { endlessMode = !endlessMode; drawEndlessToggle(); });
 
+    // ═══ NEW GAME+ 토글 ═══
+    const rec = RecordManager.load();
+    const ngPlusUnlocked = rec.wins > 0;
+    let ngPlusMode = false;
+    const ngPlusY = endlessY + 28;
+    const ngPlusGfx = this.add.graphics().setDepth(201);
+    allElements.push(ngPlusGfx);
+    const ngPlusLevel = rec.ngPlusClears || 0;
+    const ngPlusLabel = ngPlusLevel > 0 ? `⭐ NEW GAME+ (NG+${ngPlusLevel + 1})` : '⭐ NEW GAME+';
+    const ngPlusTxt = this.add.text(W/2 + 14, ngPlusY, ngPlusLabel, {
+      fontSize: '12px', fontFamily: 'monospace', color: ngPlusUnlocked ? '#CCDDEE' : '#555566'
+    }).setOrigin(0, 0.5).setDepth(202);
+    allElements.push(ngPlusTxt);
+
+    const drawNgPlusToggle = () => {
+      ngPlusGfx.clear();
+      const cbx = W/2 - 8, cby = ngPlusY - 8;
+      if (!ngPlusUnlocked) {
+        ngPlusGfx.fillStyle(0x222233, 0.5);
+        ngPlusGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
+        ngPlusGfx.lineStyle(1, 0x333344, 0.5);
+        ngPlusGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
+        ngPlusTxt.setColor('#555566');
+      } else {
+        ngPlusGfx.fillStyle(ngPlusMode ? 0xFFD700 : 0x333344, 0.9);
+        ngPlusGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
+        ngPlusGfx.lineStyle(1, ngPlusMode ? 0xFFAA00 : 0x555566, 1);
+        ngPlusGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
+        ngPlusTxt.setColor(ngPlusMode ? '#FFD700' : '#888899');
+      }
+    };
+    drawNgPlusToggle();
+
+    if (ngPlusUnlocked) {
+      const ngPlusHit = this.add.rectangle(W/2 + 60, ngPlusY, 200, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
+      allElements.push(ngPlusHit);
+      ngPlusHit.on('pointerdown', () => { ngPlusMode = !ngPlusMode; drawNgPlusToggle(); });
+    } else {
+      const lockTxt = this.add.text(W/2 + 160, ngPlusY, '🔒 60분 클리어 필요', {
+        fontSize: '10px', fontFamily: 'monospace', color: '#555566'
+      }).setOrigin(0, 0.5).setDepth(202);
+      allElements.push(lockTxt);
+    }
+
     // Confirm button
     const btnW2 = Math.min(200, W * 0.4);
     const btnH2 = 44;
@@ -2237,7 +2298,7 @@ class TitleScene extends Phaser.Scene {
       try { localStorage.setItem('whiteout_difficulty', selectedDifficulty); } catch(e) {}
       try { localStorage.setItem('whiteout_endless', endlessMode ? 'true' : 'false'); } catch(e) {}
       destroy();
-      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty, endlessMode });
+      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty, endlessMode, ngPlus: ngPlusMode });
     });
 
     // Cancel / back
@@ -2825,6 +2886,7 @@ class TitleScene extends Phaser.Scene {
       `💀 누적 킬:         ${rec.totalKills.toLocaleString()}마리`,
       `⏰ 총 플레이 시간:  ${totalTime}`,
       `🏆 60분 클리어:     ${rec.wins}회`,
+      (rec.ngPlusClears || 0) > 0 ? `⭐ NG+ 달성:        ${rec.ngPlusClears}회` : null,
       rec.longestEndlessSurvival > 0 ? `🔥 최장생존: ${Math.floor(rec.longestEndlessSurvival/60)}분 ${Math.floor(rec.longestEndlessSurvival%60)}초` : null,
       `🥇 달성 성취:       ${rec.achievementsUnlocked} / ${totalAch}`,
     ];
@@ -2963,7 +3025,8 @@ class BootScene extends Phaser.Scene {
     const difficulty = this.scene.settings.data?.difficulty || null;
     const dailyChallenge = this.scene.settings.data?.dailyChallenge || null;
     const endlessMode = this.scene.settings.data?.endlessMode || false;
-    this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge, endlessMode });
+    const ngPlus = this.scene.settings.data?.ngPlus || false;
+    this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge, endlessMode, ngPlus });
   }
 
   createPlayerTexture() {
@@ -3705,6 +3768,10 @@ class GameScene extends Phaser.Scene {
     this._classSprintActive = false;
     this._classSpiritCD = 0; // shaman spirit cooldown
     this._classShamanStormCD = 0; // shaman storm cooldown
+    this._classHunterVolleyCD = 0; // hunter volley cooldown
+    this._hunterTraps = []; // hunter trap positions
+    this._hunterTrapTimer = 0; // 15s trap placement timer
+    this._hunterSniperHits = 0; // sniper bonus hit count for HUD
     this._spiritOrbs = []; // soul harvest orbs
     this._shamanSpirit = null; // active spirit entity
     this._shamanSpiritTimer = 0;
@@ -3748,6 +3815,7 @@ class GameScene extends Phaser.Scene {
     this._dailyChallenge = this.scene.settings.data?.dailyChallenge || null;
     this._dailyModifier = this._dailyChallenge ? this._dailyChallenge.modifier : {};
     this._endlessMode = this.scene.settings.data?.endlessMode || localStorage.getItem('whiteout_endless') === 'true';
+    this._ngPlus = this.scene.settings.data?.ngPlus || false;
     this._endlessMultiplier = 1.0;
     this._endlessBossCount = 0;
     this._milestone30Shown = false;
@@ -3764,11 +3832,31 @@ class GameScene extends Phaser.Scene {
     // alwaysBlizzard handled in update
     // noEquipDrop handled in _tryDropEquipment
 
+    // ═══ Apply New Game+ Mode ═══
+    if (this._ngPlus) {
+      // Enemy strength 1.3x (applied via diffMode override)
+      this._ngPlusEnemyMul = 1.3;
+      this._ngPlusColdMul = 1.5;
+      // Start weapon from previous run's best (simplified: give uncommon weapon)
+      this.equipmentManager.tryEquip('weapon', 'knife', 'uncommon');
+    } else {
+      this._ngPlusEnemyMul = 1.0;
+      this._ngPlusColdMul = 1.0;
+    }
+
     this.gameOver = false;
     this.isRespawning = false;
     this.buildMode = null;
     this.storageCapacity = 50;
     this.upgradeManager = new UpgradeManager();
+    // NG+ starting upgrades (3 random)
+    if (this._ngPlus) {
+      const basicUpgrades = ['DAMAGE_UP', 'MAX_HP', 'MOVEMENT', 'ATTACK_SPEED', 'REGEN', 'DODGE', 'ARMOR', 'MAGNET', 'CRITICAL'];
+      const shuffled = basicUpgrades.sort(() => Math.random() - 0.5);
+      for (let i = 0; i < 3; i++) {
+        this.upgradeManager.apply(shuffled[i], this);
+      }
+    }
     this.synergyManager = new SynergyManager();
     this._synergyBlockChance = 0;
     this._synergyExtraDropRate = 0;
@@ -4326,10 +4414,10 @@ class GameScene extends Phaser.Scene {
   }
 
   _applyDifficultyToAnimal(a, def) {
-    const hpMul = (this._diffMode ? this._diffMode.enemyHP : 1) * (this._endlessMultiplier || 1);
+    const hpMul = (this._diffMode ? this._diffMode.enemyHP : 1) * (this._endlessMultiplier || 1) * (this._ngPlusEnemyMul || 1);
     a.hp = Math.round(def.hp * hpMul);
     a.maxHP = a.hp;
-    a._diffDmgMul = (this._diffMode ? this._diffMode.enemyDmg : 1) * (this._endlessMultiplier || 1);
+    a._diffDmgMul = (this._diffMode ? this._diffMode.enemyDmg : 1) * (this._endlessMultiplier || 1) * (this._ngPlusEnemyMul || 1);
   }
 
   spawnAnimal(type) {
@@ -4434,6 +4522,17 @@ class GameScene extends Phaser.Scene {
 
   damageAnimal(a, dmg) {
     if (!a || !a.active) return;
+    // Hunter Sniper passive: distance-based damage
+    if (this._playerClass === 'hunter' && this.player && this.player.active) {
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
+      if (dist >= 100) { dmg = Math.round(dmg * 1.5); this._hunterSniperHits = (this._hunterSniperHits || 0) + 1; }
+      else if (dist <= 50) { dmg = Math.round(dmg * 0.7); }
+    }
+    // Hunter Poison DoT
+    if (this._playerClass === 'hunter' && this.upgradeManager._classHunterPoison) {
+      if (!a._poisonStacks) a._poisonStacks = [];
+      a._poisonStacks.push({ dmgPerSec: 10, remaining: 5 });
+    }
     // Warrior rage mode: 1.5x damage when HP <= 50%
     if (this._warriorRageActive) dmg = Math.round(dmg * 1.5);
     // Shaman: Nature's Blessing +15% damage near campfire
@@ -4723,6 +4822,8 @@ class GameScene extends Phaser.Scene {
         });
       }
     }
+
+    // ═══ Hunter: no specific kill passive (passives are sniper + traps) ═══
 
     // ═══ Shaman: Soul Harvest (10% chance spirit orb on kill) ═══
     if (this._playerClass === 'shaman') {
@@ -6344,7 +6445,8 @@ class GameScene extends Phaser.Scene {
     const diffColdMul = this._diffMode ? this._diffMode.coldDmg : 1;
     const dailyBlizzard = (this._dailyModifier && this._dailyModifier.alwaysBlizzard) ? 2.0 : 1;
     const effectiveBlizzard = Math.max(this.blizzardMultiplier, dailyBlizzard);
-    this.temperature = Math.max(0, this.temperature - (baseDecay + Math.abs(zoneDecay)) * effectiveBlizzard * diffColdMul * (1 - frostRes) * woolMul * sprintFreeze * dt);
+    const ngPlusColdMul = this._ngPlusColdMul || 1;
+    this.temperature = Math.max(0, this.temperature - (baseDecay + Math.abs(zoneDecay)) * effectiveBlizzard * diffColdMul * ngPlusColdMul * (1 - frostRes) * woolMul * sprintFreeze * dt);
     this.placedBuildings.forEach(b => {
       if (b.type === 'campfire') return;
       if (!b.def.warmth) return;
@@ -6883,6 +6985,7 @@ class GameScene extends Phaser.Scene {
       else if (this._playerClass === 'mage') { cd = this._classBlizzardCD; maxCd = 30; skillIcon = '🧊'; }
       else if (this._playerClass === 'survivor') { cd = this._classSprintCD; maxCd = 20; skillIcon = '🏃'; }
       else if (this._playerClass === 'shaman') { cd = this._classSpiritCD; maxCd = 30; skillIcon = '🔮'; }
+      else if (this._playerClass === 'hunter') { cd = this._classHunterVolleyCD; maxCd = 25; skillIcon = '🏹'; }
       if (cd > 0) {
         d.classSkillCd.textContent = Math.ceil(cd);
         d.classSkillCd.style.background = 'rgba(0,0,0,0.7)';
@@ -8236,10 +8339,17 @@ class GameScene extends Phaser.Scene {
     if (this._playerClass) {
       SkinManager.recordClassWin(this._playerClass);
     }
+    // Record NG+ clear
+    if (this._ngPlus) {
+      const ngRec = RecordManager.load();
+      ngRec.ngPlusClears = (ngRec.ngPlusClears || 0) + 1;
+      RecordManager.save(ngRec);
+    }
 
     const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
     const diffBonus = this._diffMode ? this._diffMode.clearBonus : 10;
-    const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0) + diffBonus;
+    const ngPlusBonus = this._ngPlus ? 30 : 0;
+    const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0) + diffBonus + ngPlusBonus;
     playWinSound();
     // Save daily challenge clear
     if (this._dailyChallenge) {
@@ -8311,7 +8421,8 @@ class GameScene extends Phaser.Scene {
 
     // Title
     const titleColor = isVictory ? '#FFD700' : '#FF4444';
-    const titleText = isVictory ? '60분 생존 성공!' : '생존 실패';
+    const ngPlusTag = (isVictory && this._ngPlus) ? ` ⭐NG+${(RecordManager.load().ngPlusClears || 1)}` : '';
+    const titleText = isVictory ? `60분 생존 성공!${ngPlusTag}` : '생존 실패';
     const title = this.add.text(px, py - panelH/2 + 100, titleText, {
       fontSize: '28px', fontFamily: 'monospace', color: titleColor,
       stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
@@ -8607,6 +8718,7 @@ class GameScene extends Phaser.Scene {
     if (this._classSprintCD > 0) this._classSprintCD -= dt;
     if (this._classSpiritCD > 0) this._classSpiritCD -= dt;
     if (this._classShamanStormCD > 0) this._classShamanStormCD -= dt;
+    if (this._classHunterVolleyCD > 0) this._classHunterVolleyCD -= dt;
     if (this._classSprintActive && this._classSprintTimer !== undefined) {
       this._classSprintTimer -= dt;
       if (this._classSprintTimer <= 0) {
@@ -8788,6 +8900,82 @@ class GameScene extends Phaser.Scene {
             });
             _stormKills.forEach(a => { if (a.active) this.killAnimal(a); });
           }
+        }});
+      }
+    }
+
+    // ═══ Hunter: Trap Placement (every 15s) ═══
+    if (this._playerClass === 'hunter' && this.player && this.player.active) {
+      this._hunterTrapTimer = (this._hunterTrapTimer || 0) + dt;
+      if (this._hunterTrapTimer >= 15) {
+        this._hunterTrapTimer = 0;
+        const tx = this.player.x, ty = this.player.y;
+        const trapGfx = this.add.circle(tx, ty, 60, 0xFF8800, 0.15).setDepth(3);
+        const trapBorder = this.add.circle(tx, ty, 60).setDepth(3);
+        trapBorder.setStrokeStyle(1, 0xFF8800, 0.3);
+        this._hunterTraps.push({ x: tx, y: ty, gfx: trapGfx, border: trapBorder });
+        if (this._hunterTraps.length > 3) {
+          const old = this._hunterTraps.shift();
+          old.gfx.destroy(); old.border.destroy();
+        }
+      }
+      // Check trap collisions with enemies
+      for (const trap of this._hunterTraps) {
+        this.animals.getChildren().forEach(a => {
+          if (!a.active || a._trapFrozen) return;
+          if (Phaser.Math.Distance.Between(trap.x, trap.y, a.x, a.y) < 60) {
+            a._trapFrozen = true;
+            a.hp -= 50;
+            this.showFloatingText(a.x, a.y - 20, '🪤 함정! -50', '#FF8800');
+            if (a.body) { a.body.setVelocity(0, 0); a.body.moves = false; a.setTint(0x88CCFF); }
+            this.time.delayedCall(3000, () => { if (a.active) { a.body.moves = true; a.clearTint(); a._trapFrozen = false; } });
+            if (a.hp <= 0) this.killAnimal(a);
+          }
+        });
+      }
+    }
+
+    // ═══ Hunter: Poison DoT tick ═══
+    if (this._playerClass === 'hunter') {
+      this.animals.getChildren().forEach(a => {
+        if (!a.active || !a._poisonStacks || a._poisonStacks.length === 0) return;
+        for (let i = a._poisonStacks.length - 1; i >= 0; i--) {
+          a._poisonStacks[i].remaining -= dt;
+          if (a._poisonStacks[i].remaining <= 0) { a._poisonStacks.splice(i, 1); continue; }
+          a._poisonStacks[i]._tick = (a._poisonStacks[i]._tick || 0) + dt;
+          if (a._poisonStacks[i]._tick >= 1) {
+            a._poisonStacks[i]._tick -= 1;
+            a.hp -= 10;
+            this.showFloatingText(a.x, a.y - 15, '☠️-10', '#44FF00');
+            if (a.hp <= 0) { this.killAnimal(a); break; }
+          }
+        }
+      });
+    }
+
+    // ═══ Hunter: Focused Fire Volley (auto 25s cooldown) ═══
+    if (this.upgradeManager._classHunterVolley && this._classHunterVolleyCD <= 0 && this.player && this.player.active) {
+      const enemies = this.animals.getChildren().filter(a => a.active);
+      if (enemies.length > 0) {
+        this._classHunterVolleyCD = 25;
+        playClassSkill();
+        this.showFloatingText(this.player.x, this.player.y - 50, '🏹 집중 사격!', '#FF8800');
+        // Sort by distance, pick 5 closest
+        enemies.sort((a, b) => Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y) - Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y));
+        const targets = enemies.slice(0, 5);
+        let volleyIdx = 0;
+        const volleyTimer = this.time.addEvent({ delay: 100, repeat: 29, callback: () => {
+          const target = targets[volleyIdx % targets.length];
+          if (target && target.active) {
+            const baseDmg = 60 + (this.upgradeManager.getLevel('DAMAGE_UP') || 0) * 5;
+            // Draw arrow line
+            const line = this.add.graphics().setDepth(15);
+            line.lineStyle(2, 0xFF8800, 0.8);
+            line.lineBetween(this.player.x, this.player.y, target.x, target.y);
+            this.time.delayedCall(100, () => line.destroy());
+            this.damageAnimal(target, baseDmg);
+          }
+          volleyIdx++;
         }});
       }
     }
