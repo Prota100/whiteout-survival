@@ -4659,9 +4659,9 @@ class GameScene extends Phaser.Scene {
       this.stats.meatCollected = (this.stats.meatCollected || 0) + 1;
     }
 
-    const def = a.def;
-    const lootMul = 1 + this.upgradeManager.lootBonus;
-    Object.entries(def.drops).forEach(([res, amt]) => {
+    const def = a.def || ANIMALS[a.animalType] || { name: '?', drops: {}, hp: 1 };
+    const lootMul = 1 + (this.upgradeManager ? this.upgradeManager.lootBonus || 0 : 0);
+    Object.entries(def.drops || {}).forEach(([res, amt]) => {
       const finalAmt = Math.floor(amt * lootMul) + (Math.random() < (amt * lootMul) % 1 ? 1 : 0);
       for (let i = 0; i < finalAmt; i++) {
         const ang = Phaser.Math.FloatBetween(0, Math.PI*2), dist = Phaser.Math.Between(15, 40);
@@ -5547,13 +5547,15 @@ class GameScene extends Phaser.Scene {
     if (this.equipmentDrops.length >= 5) return;
 
     const drop = EquipmentManager.rollDrop(luck);
-    const color = EQUIP_GRADE_COLORS[drop.grade];
-    const label = this.add.text(x, y - 10, drop.icon + ' ' + drop.name, {
+    if (!drop || !drop.grade || !drop.itemId) return;
+    const color = EQUIP_GRADE_COLORS[drop.grade] || '#9E9E9E';
+    const label = this.add.text(x, y - 10, (drop.icon || '?') + ' ' + (drop.name || '?'), {
       fontSize: '12px', fontFamily: 'monospace', color: color,
       stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
     }).setDepth(15).setOrigin(0.5);
 
-    const glow = this.add.circle(x, y, 14, Phaser.Display.Color.HexStringToColor(color).color, 0.4).setDepth(8);
+    const parsedColor = Phaser.Display.Color.HexStringToColor(color);
+    const glow = this.add.circle(x, y, 14, parsedColor ? parsedColor.color : 0x9E9E9E, 0.4).setDepth(8);
     this.tweens.add({ targets: glow, scale: { from: 0.5, to: 1.5 }, alpha: { from: 0.6, to: 0.2 }, yoyo: true, repeat: -1, duration: 800 });
     this.tweens.add({ targets: label, y: label.y - 8, yoyo: true, repeat: -1, duration: 1000, ease: 'Sine.InOut' });
 
