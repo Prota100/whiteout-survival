@@ -263,7 +263,7 @@ class MetaManager {
   }
   
   static save(meta) {
-    localStorage.setItem(MetaManager.META_KEY, JSON.stringify(meta));
+    try { localStorage.setItem(MetaManager.META_KEY, JSON.stringify(meta)); } catch(e) { console.error('Meta save failed:', e); }
   }
   
   static earnPoints(survivalSeconds, totalKills, maxCombo) {
@@ -329,7 +329,7 @@ class MetaManager {
   }
   
   static reset() {
-    localStorage.removeItem(MetaManager.META_KEY);
+    try { localStorage.removeItem(MetaManager.META_KEY); } catch(e) {}
   }
 }
 // ═══ END META PROGRESSION ═══
@@ -716,7 +716,7 @@ class EquipmentManager {
 
   save() {
     const data = { ...this.slots, _inventory: this.inventory };
-    localStorage.setItem(EquipmentManager.STORAGE_KEY, JSON.stringify(data));
+    try { localStorage.setItem(EquipmentManager.STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
   }
 
   // Try equipping; returns true if equipped (upgrade)
@@ -820,7 +820,7 @@ class EquipmentManager {
   reset() {
     this.slots = { weapon:null, armor:null, boots:null, helmet:null, ring:null };
     this.inventory = { weapon:[], armor:[], boots:[], helmet:[], ring:[] };
-    localStorage.removeItem(EquipmentManager.STORAGE_KEY);
+    try { localStorage.removeItem(EquipmentManager.STORAGE_KEY); } catch(e) {}
   }
 }
 
@@ -2555,6 +2555,11 @@ class GameScene extends Phaser.Scene {
     this.createVirtualJoystick();
     // ═══ WASD + Arrow Key Support ═══
     this.wasd = this.input.keyboard.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT');
+    // ═══ Pause (ESC / P) ═══
+    this._gamePaused = false;
+    this._pauseOverlay = null;
+    this.input.keyboard.on('keydown-ESC', () => this._togglePause());
+    this.input.keyboard.on('keydown-P', () => this._togglePause());
     // ═══ BUFF ITEM SYSTEM ═══
     this._initBuffSystem();
     this.createUI();
@@ -3864,7 +3869,8 @@ class GameScene extends Phaser.Scene {
     const luck = (this._equipBonuses ? this._equipBonuses.luckFlat : 0);
     const feverMul = (this.activeRandomEvents && this.activeRandomEvents.drop_fever) ? 3 : 1;
     const synergyDrop = this._synergyExtraDropRate || 0;
-    const dropRate = (0.03 + luck / 1000 + synergyDrop) * feverMul; // 3% base + luck bonus + synergy, ×3 during golden fever
+    const timeBonus = Math.min(0.04, (this.gameElapsed || 0) / 60 * 0.002); // +0.2% per min, max +4%
+    const dropRate = (0.03 + timeBonus + luck / 1000 + synergyDrop) * feverMul; // 3% base + time bonus + luck + synergy, ×3 during fever
     if (Math.random() > dropRate) return;
     if (this.equipmentDrops.length >= 5) return;
 
@@ -6213,7 +6219,7 @@ class GameScene extends Phaser.Scene {
   }
 
   update(time, deltaMs) {
-    if (this.gameOver || this.upgradeUIActive || this.isRespawning) return;
+    if (this.gameOver || this.upgradeUIActive || this.isRespawning || this._gamePaused) return;
     const dt = deltaMs / 1000;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
@@ -6592,7 +6598,7 @@ class GameScene extends Phaser.Scene {
 
     // ═══ 🎲 Random Event System (5min interval) ═══
     this.randomEventTimer = (this.randomEventTimer || 0) + dt;
-    if (this.randomEventTimer >= 300) {
+    if (this.randomEventTimer >= 180) {
       this.randomEventTimer = 0;
       this._triggerRandomEvent();
     }
@@ -6604,6 +6610,23 @@ class GameScene extends Phaser.Scene {
   }
 
   // ═══ 🏆 ACHIEVEMENT METHODS ═══
+  _togglePause() {
+    if (this.gameOver) return;
+    this._gamePaused = !this._gamePaused;
+    if (this._gamePaused) {
+      this.physics.pause();
+      const cam = this.cameras.main;
+      const overlay = this.add.rectangle(cam.centerX, cam.centerY, cam.width, cam.height, 0x000000, 0.6).setScrollFactor(0).setDepth(500);
+      const txt = this.add.text(cam.centerX, cam.centerY, '⏸ 일시정지\nESC / P 로 계속', {
+        fontSize: '28px', fontFamily: 'monospace', color: '#FFFFFF', align: 'center', stroke: '#000', strokeThickness: 4
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(501);
+      this._pauseOverlay = [overlay, txt];
+    } else {
+      this.physics.resume();
+      if (this._pauseOverlay) { this._pauseOverlay.forEach(e => e.destroy()); this._pauseOverlay = null; }
+    }
+  }
+
   _checkAchievements() {
     const kills = this.upgradeManager ? this.upgradeManager.totalKills : 0;
     const elapsed = this.gameElapsed || 0;
