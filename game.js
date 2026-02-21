@@ -805,6 +805,120 @@ class RecordManager {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// 🎨 플레이어 스킨 시스템
+// ═══════════════════════════════════════════════════════════════════
+const PLAYER_SKINS = [
+  { id: 'default',       name: '기본',         color: 0xFFFFFF, outline: 0x888888, unlockCondition: 'always' },
+  { id: 'warrior_red',   name: '전사의 붉음',  color: 0xFF4444, outline: 0xCC0000, unlockCondition: 'class_warrior_win' },
+  { id: 'mage_blue',     name: '마법사의 푸름', color: 0x44AAFF, outline: 0x0066CC, unlockCondition: 'class_mage_win' },
+  { id: 'survivor_green',name: '생존가의 초록', color: 0x44FF88, outline: 0x00AA44, unlockCondition: 'class_survivor_win' },
+  { id: 'golden',        name: '황금 영웅',    color: 0xFFD700, outline: 0xB8860B, unlockCondition: 'win_once' },
+  { id: 'shadow',        name: '어둠의 전사',  color: 0x444444, outline: 0x222222, unlockCondition: 'kills_100_total' },
+  { id: 'icy',           name: '얼음 군주',    color: 0xAAEEFF, outline: 0x66CCEE, unlockCondition: 'achievements_5' },
+  { id: 'legendary',     name: '전설의 자',    color: 0xFF8C00, outline: 0xFF4500, unlockCondition: 'endless_60min' },
+];
+
+const ACHIEVEMENT_REWARDS = {
+  first_blood:    { type: 'meta_points', amount: 2 },
+  survivor_5:     { type: 'meta_points', amount: 5 },
+  combo_10:       { type: 'meta_points', amount: 10 },
+  level_10:       { type: 'meta_points', amount: 8 },
+  equipment_rare: { type: 'skin_unlock', skinId: 'default' },
+  equipment_epic: { type: 'meta_points', amount: 15 },
+  boss_kill:      { type: 'meta_points', amount: 20 },
+  craft_1:        { type: 'meta_points', amount: 5 },
+  survivor_30:    { type: 'meta_points', amount: 30 },
+  kills_100:      { type: 'skin_unlock', skinId: 'shadow' },
+};
+
+class SkinManager {
+  static KEY = 'whiteout_skins';
+  static SELECTED_KEY = 'whiteout_selected_skin';
+
+  static load() {
+    try {
+      return JSON.parse(localStorage.getItem(SkinManager.KEY) || '{}');
+    } catch(e) { return {}; }
+  }
+
+  static save(data) {
+    try { localStorage.setItem(SkinManager.KEY, JSON.stringify(data)); } catch(e) {}
+  }
+
+  static getSelectedId() {
+    return localStorage.getItem(SkinManager.SELECTED_KEY) || 'default';
+  }
+
+  static getCurrentSkin() {
+    const id = SkinManager.getSelectedId();
+    return PLAYER_SKINS.find(s => s.id === id) || PLAYER_SKINS[0];
+  }
+
+  static select(skinId) {
+    if (SkinManager.isUnlocked(skinId)) {
+      try { localStorage.setItem(SkinManager.SELECTED_KEY, skinId); } catch(e) {}
+    }
+  }
+
+  static isUnlocked(skinId) {
+    const skin = PLAYER_SKINS.find(s => s.id === skinId);
+    if (!skin) return false;
+    return SkinManager._checkCondition(skin.unlockCondition);
+  }
+
+  static _checkCondition(cond) {
+    if (cond === 'always') return true;
+    const rec = RecordManager.load();
+    let achCount = 0;
+    try { achCount = Object.keys(JSON.parse(localStorage.getItem('achievements_whiteout') || '{}')).length; } catch(e) {}
+
+    switch (cond) {
+      case 'win_once': return rec.wins >= 1;
+      case 'kills_100_total': return rec.totalKills >= 100;
+      case 'achievements_5': return achCount >= 5;
+      case 'endless_60min': return (rec.longestEndlessSurvival || 0) >= 3600;
+      case 'class_warrior_win': return SkinManager._classWin('warrior');
+      case 'class_mage_win': return SkinManager._classWin('mage');
+      case 'class_survivor_win': return SkinManager._classWin('survivor');
+      default: return false;
+    }
+  }
+
+  static _classWin(cls) {
+    try {
+      const data = JSON.parse(localStorage.getItem('whiteout_class_wins') || '{}');
+      return !!data[cls];
+    } catch(e) { return false; }
+  }
+
+  static recordClassWin(cls) {
+    try {
+      const data = JSON.parse(localStorage.getItem('whiteout_class_wins') || '{}');
+      data[cls] = true;
+      localStorage.setItem('whiteout_class_wins', JSON.stringify(data));
+    } catch(e) {}
+  }
+
+  static getUnlockDescription(cond) {
+    const descs = {
+      'always': '기본 해제',
+      'class_warrior_win': '전사로 60분 클리어',
+      'class_mage_win': '마법사로 60분 클리어',
+      'class_survivor_win': '생존가로 60분 클리어',
+      'win_once': '1회 클리어',
+      'kills_100_total': '누적 킬 100 이상',
+      'achievements_5': '성취 5개 이상 달성',
+      'endless_60min': '무한 모드 60분 생존',
+    };
+    return descs[cond] || '???';
+  }
+
+  static getUnlockedCount() {
+    return PLAYER_SKINS.filter(s => SkinManager.isUnlocked(s.id)).length;
+  }
+}
+
 class EquipmentManager {
   static STORAGE_KEY = 'whiteout_equipment';
 
@@ -1469,8 +1583,15 @@ class TitleScene extends Phaser.Scene {
       }).setOrigin(0.5);
     }
     
+    // ═══ 🎨 스킨 버튼 ═══
+    const skinBtnY = metaBtnY + btnH + (meta.bestTime > 0 ? 36 : 20);
+    const skinCount = SkinManager.getUnlockedCount();
+    this._createButton(W / 2, skinBtnY, btnW, btnH, `🎨 스킨 (${skinCount}/${PLAYER_SKINS.length})`, 0x445544, () => {
+      this._showSkinPopup();
+    });
+
     // ═══ 📊 통계 버튼 ═══
-    const statsBtnY = metaBtnY + btnH + (meta.bestTime > 0 ? 36 : 20);
+    const statsBtnY = skinBtnY + btnH + 20;
     this._createButton(W / 2, statsBtnY, btnW, btnH, '📊 통계', 0x334455, () => {
       this._showStatsPopup();
     });
@@ -1601,6 +1722,105 @@ class TitleScene extends Phaser.Scene {
     return { bg, txt, hitArea };
   }
   
+  _showSkinPopup() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const allElements = [];
+    const destroy = () => allElements.forEach(o => { try { o.destroy(); } catch(e) {} });
+
+    const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.85).setInteractive().setDepth(200);
+    allElements.push(overlay);
+    overlay.on('pointerdown', destroy);
+
+    const titleTxt = this.add.text(W/2, H*0.08, '🎨 플레이어 스킨', {
+      fontSize: Math.min(24, W*0.045)+'px', fontFamily:'monospace', color:'#e0e8ff', stroke:'#000', strokeThickness:3
+    }).setOrigin(0.5).setDepth(201);
+    allElements.push(titleTxt);
+
+    const cols = 4;
+    const cellW = Math.min(80, W * 0.2);
+    const cellH = 90;
+    const gap = 8;
+    const totalGridW = cols * cellW + (cols-1) * gap;
+    const startX = W/2 - totalGridW/2 + cellW/2;
+    const startY = H * 0.18;
+
+    const selectedId = SkinManager.getSelectedId();
+
+    PLAYER_SKINS.forEach((skin, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const cx = startX + col * (cellW + gap);
+      const cy = startY + row * (cellH + gap);
+      const unlocked = SkinManager.isUnlocked(skin.id);
+      const isSelected = skin.id === selectedId;
+
+      const g = this.add.graphics().setDepth(201);
+      g.fillStyle(isSelected ? 0x2a3a4e : 0x1a1a2e, 0.95);
+      g.fillRoundedRect(cx - cellW/2, cy - cellH/2, cellW, cellH, 6);
+      g.lineStyle(2, isSelected ? 0xFFD700 : (unlocked ? 0x556688 : 0x333344), 1);
+      g.strokeRoundedRect(cx - cellW/2, cy - cellH/2, cellW, cellH, 6);
+
+      // Skin preview circle
+      const previewG = this.add.graphics().setDepth(202);
+      if (unlocked) {
+        previewG.fillStyle(skin.color, 1);
+        previewG.fillCircle(cx, cy - 16, 14);
+        previewG.lineStyle(2, skin.outline, 1);
+        previewG.strokeCircle(cx, cy - 16, 14);
+      } else {
+        previewG.fillStyle(0x333333, 1);
+        previewG.fillCircle(cx, cy - 16, 14);
+        previewG.lineStyle(2, 0x555555, 1);
+        previewG.strokeCircle(cx, cy - 16, 14);
+      }
+      allElements.push(previewG);
+
+      // Lock icon or name
+      if (unlocked) {
+        const nameTxt = this.add.text(cx, cy + 10, skin.name, {
+          fontSize: '10px', fontFamily: 'monospace', color: isSelected ? '#FFD700' : '#CCDDEE'
+        }).setOrigin(0.5).setDepth(202);
+        allElements.push(nameTxt);
+        if (isSelected) {
+          const selTxt = this.add.text(cx, cy + 24, '✓ 선택됨', {
+            fontSize: '9px', fontFamily: 'monospace', color: '#88FF88'
+          }).setOrigin(0.5).setDepth(202);
+          allElements.push(selTxt);
+        }
+      } else {
+        const lockTxt = this.add.text(cx, cy - 16, '🔒', {
+          fontSize: '16px'
+        }).setOrigin(0.5).setDepth(203);
+        allElements.push(lockTxt);
+        const condTxt = this.add.text(cx, cy + 10, SkinManager.getUnlockDescription(skin.unlockCondition), {
+          fontSize: '8px', fontFamily: 'monospace', color: '#666677', wordWrap: { width: cellW - 8 }, align: 'center'
+        }).setOrigin(0.5).setDepth(202);
+        allElements.push(condTxt);
+      }
+
+      allElements.push(g);
+
+      // Click to select
+      if (unlocked && !isSelected) {
+        const hit = this.add.rectangle(cx, cy, cellW, cellH, 0, 0).setInteractive({ useHandCursor: true }).setDepth(204);
+        allElements.push(hit);
+        hit.on('pointerdown', () => {
+          SkinManager.select(skin.id);
+          destroy();
+          this._showSkinPopup();
+        });
+      }
+    });
+
+    // Close button
+    const closeTxt = this.add.text(W/2, H*0.85, '닫기', {
+      fontSize: '18px', fontFamily: 'monospace', color: '#AABBCC', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(201).setInteractive({ useHandCursor: true });
+    closeTxt.on('pointerdown', destroy);
+    allElements.push(closeTxt);
+  }
+
   _showConfirmDialog() {
     const W = this.scale.width;
     const H = this.scale.height;
@@ -1769,6 +1989,15 @@ class TitleScene extends Phaser.Scene {
         const st = this.add.text(cx, statY + li * 16, lbl, statStyle).setOrigin(0.5).setDepth(202);
         allElements.push(st);
       });
+
+      // 🎨 Skin preview circle
+      const skinData = SkinManager.getCurrentSkin();
+      const skinPreviewG = this.add.graphics().setDepth(202);
+      skinPreviewG.fillStyle(skinData.color, 1);
+      skinPreviewG.fillCircle(cx + cardW/2 - 14, cardY - cardH/2 + 14, 6);
+      skinPreviewG.lineStyle(1, skinData.outline, 1);
+      skinPreviewG.strokeCircle(cx + cardW/2 - 14, cardY - cardH/2 + 14, 6);
+      allElements.push(skinPreviewG);
 
       // Clickable area
       const hitArea = this.add.rectangle(cx, cardY, cardW, cardH, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
@@ -3161,6 +3390,12 @@ class GameScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(WORLD_W/2, WORLD_H/2, 'player');
     this.player.setCollideWorldBounds(true).setDepth(10).setDamping(true).setDrag(0.9);
     this.player.body.setSize(18, 22).setOffset(11, 14);
+
+    // 🎨 Apply skin tint
+    this._currentSkin = SkinManager.getCurrentSkin();
+    if (this._currentSkin.id !== 'default') {
+      this.player.setTint(this._currentSkin.color);
+    }
 
     this.animals = this.physics.add.group();
     this.drops = this.physics.add.group();
@@ -7363,6 +7598,11 @@ class GameScene extends Phaser.Scene {
     if (this.gameOver) return;
     this.gameOver = true;
     
+    // Record class win for skin unlock
+    if (this._playerClass) {
+      SkinManager.recordClassWin(this._playerClass);
+    }
+
     const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
     const diffBonus = this._diffMode ? this._diffMode.clearBonus : 10;
     const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0) + diffBonus;
@@ -8253,10 +8493,24 @@ class GameScene extends Phaser.Scene {
   }
 
   _showAchievementBanner(ach) {
+    // 🎁 Achievement rewards
+    const reward = ACHIEVEMENT_REWARDS[ach.id];
+    let rewardText = '';
+    if (reward) {
+      if (reward.type === 'meta_points') {
+        const meta = MetaManager.load();
+        meta.totalPoints += reward.amount;
+        MetaManager.save(meta);
+        rewardText = `+${reward.amount} 포인트`;
+      } else if (reward.type === 'skin_unlock') {
+        rewardText = '🎨 스킨 잠금해제!';
+      }
+    }
+
     const cam = this.cameras.main;
     const W = cam.width;
     const cardW = Math.min(280, W * 0.6);
-    const cardH = 80;
+    const cardH = rewardText ? 95 : 80;
     const startX = W + cardW / 2;
     const endX = W - cardW / 2 - 10;
     const yPos = 60;
@@ -8276,15 +8530,22 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     container.add(title);
 
-    const body = this.add.text(0, 6, `${ach.icon} ${ach.name}`, {
+    const body = this.add.text(0, rewardText ? 0 : 6, `${ach.icon} ${ach.name}`, {
       fontSize: '16px', fontFamily: 'monospace', color: '#FFFFFF', fontStyle: 'bold'
     }).setOrigin(0.5);
     container.add(body);
 
-    const desc = this.add.text(0, cardH/2 - 14, ach.desc, {
+    const desc = this.add.text(0, rewardText ? 16 : cardH/2 - 14, ach.desc, {
       fontSize: '11px', fontFamily: 'monospace', color: '#AAAAAA'
     }).setOrigin(0.5);
     container.add(desc);
+
+    if (rewardText) {
+      const rwdTxt = this.add.text(0, cardH/2 - 12, `🎁 ${rewardText}`, {
+        fontSize: '12px', fontFamily: 'monospace', color: '#44FF88', fontStyle: 'bold'
+      }).setOrigin(0.5);
+      container.add(rwdTxt);
+    }
 
     // Slide in
     this.tweens.add({ targets: container, x: endX, duration: 500, ease: 'Back.Out' });
