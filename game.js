@@ -444,7 +444,7 @@ class UpgradeManager {
     return Object.keys(UPGRADES).filter(k => !this.isMaxed(k));
   }
 
-  pickThreeCards() {
+  pickThreeCards(extra = 0) {
     const available = this.getAvailableUpgrades();
     if (available.length === 0) return [];
 
@@ -457,7 +457,7 @@ class UpgradeManager {
 
     const picked = [];
     const used = new Set();
-    const count = Math.min(3, available.length);
+    const count = Math.min(3 + extra, available.length);
     while (picked.length < count) {
       const k = weighted[Math.floor(Math.random() * weighted.length)];
       if (!used.has(k)) { used.add(k); picked.push(k); }
@@ -2670,7 +2670,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Show upgrade card selection
-    const cards = this.upgradeManager.pickThreeCards();
+    const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0);
     if (cards.length > 0) {
       this.showUpgradeUI(cards);
     }
@@ -3843,7 +3843,7 @@ class GameScene extends Phaser.Scene {
 
   openCrate(crate) {
     if (!crate.active || this.upgradeUIActive) return;
-    const cards = this.upgradeManager.pickThreeCards();
+    const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0);
     if (cards.length === 0) {
       this.showFloatingText(crate.x, crate.y - 20, '✅ 모든 업그레이드 최대!', '#88FF88');
       if (crate._label) crate._label.destroy();
@@ -3906,11 +3906,12 @@ class GameScene extends Phaser.Scene {
     uiElements.push(subtitle);
     this.tweens.add({ targets: subtitle, alpha: 1, duration: 500, delay: 200 });
 
-    // Card dimensions
-    const cardW = Math.min(160, (W - 60) / 3);
+    // Card dimensions (supports variable card count)
+    const numCards = cards.length || 3;
+    const cardW = Math.min(160, (W - 60) / numCards);
     const cardH = Math.min(240, H * 0.55);
     const gap = Math.min(16, W * 0.02);
-    const totalW = cardW * 3 + gap * 2;
+    const totalW = cardW * numCards + gap * (numCards - 1);
     const startX = (W - totalW) / 2;
     const cardY = H * 0.25;
 
