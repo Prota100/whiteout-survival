@@ -451,14 +451,56 @@ function playHellSelect() { _playSFXPitched('death', 0.35, 0.5); }
 
 // ═══ Game Tips ═══
 const GAME_TIPS = [
-  "💡 같은 등급 장비 3개를 모으면 합성할 수 있어요!",
-  "💡 한파가 심할 때는 캠프파이어 근처에 있으면 HP가 회복돼요",
-  "💡 콤보 20킬 이상이면 광전사 모드 발동!",
-  "💡 스킬 시너지를 노려보세요. 조합에 따라 숨겨진 효과가 있어요!",
-  "💡 지옥 난이도 클리어 시 50포인트 보너스!",
-  "💡 나무와 돌을 모아 건물을 지으면 생존에 유리해요",
-  "💡 레벨업 시 카드를 신중하게 골라보세요!",
+  // ⚔️ 전투
+  "⚔️ 같은 등급 장비 3개를 모으면 합성할 수 있어요!",
+  "⚔️ 콤보 20킬 이상이면 광전사 모드 발동!",
+  "⚔️ 스킬 시너지를 노려보세요. 조합에 따라 숨겨진 효과가 있어요!",
+  "⚔️ 보스는 패턴이 있어요. 관찰한 뒤 공격하세요!",
+  "⚔️ 곰은 강하지만 느립니다. 옆으로 피하면서 공격하세요!",
+  // ❄️ 생존
+  "❄️ 한파가 심할 때는 캠프파이어 근처에 있으면 HP가 회복돼요",
+  "❄️ 나무와 돌을 모아 건물을 지으면 생존에 유리해요",
+  "❄️ 온도가 0 이하로 떨어지면 HP가 감소합니다!",
+  "❄️ 한파를 견디면 보상이 있어요. 포기하지 마세요!",
+  // 🎯 전략
+  "🎯 레벨업 시 카드를 신중하게 골라보세요!",
+  "🎯 지옥 난이도 클리어 시 50포인트 보너스!",
+  "🎯 클래스마다 패시브가 다릅니다. 전략에 맞는 클래스를 선택하세요!",
+  "🎯 무한 모드에서는 60분 이후에도 계속 플레이할 수 있어요!",
+  "🎯 장비 슬롯을 모두 에픽으로 채우면 특별한 성취를 달성합니다!",
+  // 🏆 비밀
+  "🏆 콘아미 코드를 알고 있나요? 버전 텍스트를 5번 클릭해보세요...",
+  "🏆 백색 군주는 20분 이후 극한 구역에서 나타난다는 소문이...",
+  "🏆 보스 러시 모드에서 모든 보스를 쓰러뜨리면 숨겨진 엔딩이!",
+  "🏆 스피드런 30분 이내 클리어 시 특별 칭호를 얻을 수 있어요!",
 ];
+
+// ═══ FTUE (First Time User Experience) Manager ═══
+const FTUEManager = {
+  KEY: 'whiteout_firstplay',
+  isFirstPlay() { return localStorage.getItem(this.KEY) !== 'done'; },
+  markDone() { try { localStorage.setItem(this.KEY, 'done'); } catch(e) {} },
+  _shown: {},
+  showOnce(scene, id, text, duration) {
+    if (!this.isFirstPlay()) return false;
+    if (this._shown[id]) return false;
+    this._shown[id] = true;
+    duration = duration || 3000;
+    const cam = scene.cameras.main;
+    const bg = scene.add.graphics().setScrollFactor(0).setDepth(500);
+    const txt = scene.add.text(cam.width / 2, cam.height * 0.15, text, {
+      fontSize: '16px', fontFamily: 'monospace', color: '#FFD700',
+      backgroundColor: 'rgba(0,0,0,0.8)', padding: { x: 20, y: 12 },
+      stroke: '#000', strokeThickness: 2, wordWrap: { width: cam.width * 0.8 }, align: 'center'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(501).setAlpha(0);
+    scene.tweens.add({ targets: txt, alpha: 1, duration: 400 });
+    scene.time.delayedCall(duration, () => {
+      scene.tweens.add({ targets: txt, alpha: 0, duration: 400, onComplete: () => { txt.destroy(); bg.destroy(); } });
+    });
+    return true;
+  },
+  reset() { this._shown = {}; }
+};
 
 // ═══ Mobile helpers ═══
 function isMobileLayout() { return window.innerWidth < 768; }
@@ -2124,8 +2166,67 @@ class TitleScene extends Phaser.Scene {
     this.add.text(W - 10, H - 10, 'v2.1', {
       fontSize: '11px', fontFamily: 'monospace', color: '#334'
     }).setOrigin(1, 1);
+
+    // ═══ ? 도움말 버튼 ═══
+    const helpBtnSize = 36;
+    const helpBg = this.add.graphics().setDepth(20);
+    helpBg.fillStyle(0x334466, 0.8);
+    helpBg.fillCircle(30, H - 30, helpBtnSize / 2);
+    helpBg.lineStyle(2, 0x6688aa, 0.6);
+    helpBg.strokeCircle(30, H - 30, helpBtnSize / 2);
+    const helpTxt = this.add.text(30, H - 30, '?', {
+      fontSize: '20px', fontFamily: 'monospace', color: '#aaccee', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(21);
+    const helpHit = this.add.circle(30, H - 30, helpBtnSize / 2, 0, 0).setInteractive({ useHandCursor: true }).setDepth(22);
+    helpHit.on('pointerdown', () => this._showHelpModal());
     
     this.elapsed = 0;
+  }
+
+  _showHelpModal() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const allEl = [];
+    const destroy = () => allEl.forEach(o => { try { o.destroy(); } catch(e) {} });
+
+    const ov = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.85).setInteractive().setDepth(300);
+    allEl.push(ov);
+    const pw = Math.min(380, W * 0.85);
+    const ph = Math.min(340, H * 0.7);
+    const panel = this.add.graphics().setDepth(301);
+    panel.fillStyle(0x0A0E1A, 0.98);
+    panel.fillRoundedRect(W/2 - pw/2, H/2 - ph/2, pw, ph, 12);
+    panel.lineStyle(2, 0x4488ff, 0.6);
+    panel.strokeRoundedRect(W/2 - pw/2, H/2 - ph/2, pw, ph, 12);
+    allEl.push(panel);
+
+    const title = this.add.text(W/2, H/2 - ph/2 + 30, '📖 플레이 방법', {
+      fontSize: '22px', fontFamily: 'monospace', color: '#e0e8ff', stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5).setDepth(302);
+    allEl.push(title);
+
+    const helpLines = [
+      '🕹️ 이동: WASD 또는 화살표키 (모바일: 조이스틱)',
+      '⚔️ 공격: 적에게 다가가면 자동 공격',
+      '⬆️ 레벨업: 적 처치 → XP → 3개 카드 중 택 1',
+      '❄️ 생존: 한파 때 체온 관리! 캠프파이어 활용',
+      '🪵 건설: 자원을 모아 건물을 지으면 유리',
+      '🗡️ 장비: 적이 드롭하는 장비로 강해지세요',
+      '🔮 영구 강화: 게임 종료 시 포인트 획득 → 다음 판 적용',
+    ];
+    helpLines.forEach((line, i) => {
+      const t = this.add.text(W/2, H/2 - ph/2 + 70 + i * 30, line, {
+        fontSize: '12px', fontFamily: 'monospace', color: '#AABBDD', wordWrap: { width: pw - 40 }
+      }).setOrigin(0.5).setDepth(302);
+      allEl.push(t);
+    });
+
+    const closeBtn = this.add.text(W/2, H/2 + ph/2 - 30, '닫기', {
+      fontSize: '16px', fontFamily: 'monospace', color: '#FFD700', fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(302).setInteractive({ useHandCursor: true });
+    allEl.push(closeBtn);
+    closeBtn.on('pointerdown', destroy);
+    ov.on('pointerdown', destroy);
   }
   
   _createButton(x, y, w, h, text, color, callback) {
@@ -2405,11 +2506,44 @@ class TitleScene extends Phaser.Scene {
     const startX = W/2 - totalW/2 + cardW/2;
     const cardY = H * 0.38;
 
+    // Class recommendation map
+    const classRecommend = {
+      warrior: '🛡️ 근접 전투와 생존력을 원하는 분',
+      mage: '🔮 강력한 광역기를 원하는 분',
+      survivor: '🏃 속도와 유틸리티를 원하는 분',
+      hunter: '🏹 원거리 크리티컬에 특화된 분',
+      shaman: '🌿 팀 서포트와 힐링을 원하는 분',
+    };
+
     // Description text (updated on selection)
-    const descTxt = this.add.text(W/2, H*0.72, '', {
+    const descTxt = this.add.text(W/2, H*0.70, '', {
       fontSize:'13px', fontFamily:'monospace', color:'#ccddee', align:'center', wordWrap:{width:W*0.8}
     }).setOrigin(0.5).setDepth(201);
     allElements.push(descTxt);
+
+    // Recommendation text
+    const recommendTxt = this.add.text(W/2, H*0.74, '', {
+      fontSize:'11px', fontFamily:'monospace', color:'#88BBAA', align:'center'
+    }).setOrigin(0.5).setDepth(201);
+    allElements.push(recommendTxt);
+
+    // Stat bars container
+    const statBarGfx = this.add.graphics().setDepth(201);
+    allElements.push(statBarGfx);
+    const statBarLabels = [];
+    const statBarY = H * 0.78;
+    const barW = Math.min(180, W * 0.35);
+    const barH = 10;
+    const statNames = ['HP', '공격', '속도', '생존'];
+    const statKeys = ['hp', 'atk', 'spd', 'surv'];
+    const statColors = [0x44BB44, 0xFF4444, 0x44AAFF, 0xFFAA44];
+    statNames.forEach((name, i) => {
+      const lbl = this.add.text(W/2 - barW/2 - 40, statBarY + i * 18, name, {
+        fontSize: '10px', fontFamily: 'monospace', color: '#8899aa'
+      }).setOrigin(1, 0.5).setDepth(202);
+      allElements.push(lbl);
+      statBarLabels.push(lbl);
+    });
 
     // Star rating helper
     const stars = (val, max=5) => '★'.repeat(Math.round(val)) + '☆'.repeat(max - Math.round(val));
@@ -2420,6 +2554,19 @@ class TitleScene extends Phaser.Scene {
     const updateSelection = () => {
       const cls = PLAYER_CLASSES[selectedClass];
       descTxt.setText(`${cls.icon} ${cls.name}: ${cls.desc}\n패시브: ${cls.passives.join(' / ')}`);
+      recommendTxt.setText(classRecommend[selectedClass] || '');
+      // Draw stat bars
+      statBarGfx.clear();
+      statKeys.forEach((key, i) => {
+        const val = cls.ratings[key] || 0;
+        const y = statBarY + i * 18;
+        // Background
+        statBarGfx.fillStyle(0x222244, 0.8);
+        statBarGfx.fillRoundedRect(W/2 - barW/2, y - barH/2, barW, barH, 3);
+        // Fill
+        statBarGfx.fillStyle(statColors[i], 0.9);
+        statBarGfx.fillRoundedRect(W/2 - barW/2, y - barH/2, barW * (val / 5), barH, 3);
+      });
       // Update card highlights
       classKeys.forEach((k, i) => {
         const isSelected = k === selectedClass;
@@ -4379,6 +4526,10 @@ class GameScene extends Phaser.Scene {
     // ═══ Tutorial Hints ═══
     this.tutorialShown = false;
 
+    // ═══ FTUE Context Hints ═══
+    this._ftueHints = { bear: false, boss: false, lowHP: 0, equip: false, blizzard: false, movement: false, attack: false, levelup: false };
+    FTUEManager.reset();
+
     // Mobile-first: always use touch/joystick controls
     this.facingRight = true;
 
@@ -4948,6 +5099,9 @@ class GameScene extends Phaser.Scene {
     const a = this.physics.add.sprite(x, y, type).setCollideWorldBounds(true).setDepth(5);
     a.animalType = type; a.def = def;
     this._applyDifficultyToAnimal(a, def);
+    // FTUE context hints
+    if (type === 'bear') this._ftueOnEnemySpawn('bear');
+    else if (def.behavior === 'chase') this._ftueOnFirstEnemy();
     a.wanderTimer = 0; a.wanderDir = {x:0,y:0}; a.hitFlash = 0; a.atkCD = 0; a.fleeTimer = 0;
     if (a.maxHP > 2) a.hpBar = this.add.graphics().setDepth(6);
     const lc = def.behavior === 'chase' ? '#FF4444' : def.behavior === 'flee' ? '#88DDFF' : '#AADDFF';
@@ -5671,6 +5825,70 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  _updateFTUEHints() {
+    if (!FTUEManager.isFirstPlay()) return;
+    const t = this.gameElapsed;
+    // Movement hint at 3 seconds
+    if (t >= 3 && !this._ftueHints.movement) {
+      this._ftueHints.movement = true;
+      const isMob = this.sys.game.device.input.touch && window.innerWidth < 900;
+      FTUEManager.showOnce(this, 'movement', isMob ? '👆 화면을 드래그해서 이동하세요!' : '🕹️ WASD 또는 화살표키로 이동하세요!', 3000);
+    }
+    // Low HP hint (first 3 times)
+    if (this.playerHP < this.playerMaxHP * 0.3 && this._ftueHints.lowHP < 3) {
+      this._ftueHints.lowHP++;
+      FTUEManager.showOnce(this, 'lowHP_' + this._ftueHints.lowHP, '💊 아이템을 먹으면 체력이 회복됩니다!', 3000);
+    }
+  }
+
+  _ftueOnEnemySpawn(animalType) {
+    if (!FTUEManager.isFirstPlay()) return;
+    if (animalType === 'bear' && !this._ftueHints.bear) {
+      this._ftueHints.bear = true;
+      FTUEManager.showOnce(this, 'bear', '🐻 곰은 강하지만 느립니다. 옆으로 피하세요!', 3500);
+    }
+  }
+
+  _ftueOnBossSpawn() {
+    if (!FTUEManager.isFirstPlay()) return;
+    if (!this._ftueHints.boss) {
+      this._ftueHints.boss = true;
+      FTUEManager.showOnce(this, 'boss', '⚠️ 보스 등장! 장비 드롭 확률이 높습니다.', 3500);
+    }
+  }
+
+  _ftueOnBlizzard() {
+    if (!FTUEManager.isFirstPlay()) return;
+    if (!this._ftueHints.blizzard) {
+      this._ftueHints.blizzard = true;
+      FTUEManager.showOnce(this, 'blizzard', '❄️ 한파! 생존하면 보상이 있습니다!', 3500);
+    }
+  }
+
+  _ftueOnEquipPickup() {
+    if (!FTUEManager.isFirstPlay()) return;
+    if (!this._ftueHints.equip) {
+      this._ftueHints.equip = true;
+      FTUEManager.showOnce(this, 'equip', '🗡️ 장비 획득! 메타 화면에서 확인할 수 있습니다.', 3500);
+    }
+  }
+
+  _ftueOnLevelUp() {
+    if (!FTUEManager.isFirstPlay()) return;
+    if (!this._ftueHints.levelup) {
+      this._ftueHints.levelup = true;
+      FTUEManager.showOnce(this, 'levelup', '⬆️ 업그레이드를 선택하세요! 신중하게 골라보세요.', 3500);
+    }
+  }
+
+  _ftueOnFirstEnemy() {
+    if (!FTUEManager.isFirstPlay()) return;
+    if (!this._ftueHints.attack) {
+      this._ftueHints.attack = true;
+      FTUEManager.showOnce(this, 'attack', '⚔️ 적에게 다가가면 자동 공격합니다!', 3000);
+    }
+  }
+
   _showTutorialOverlay() {
     const cam = this.cameras.main;
     const ov = this.add.graphics().setScrollFactor(0).setDepth(300);
@@ -6271,6 +6489,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _pickupEquipment(ed, idx) {
+    this._ftueOnEquipPickup();
     // Track grade for achievements
     if (ed.grade === 'rare') this.gotRareEquip = true;
     if (ed.grade === 'epic' || ed.grade === 'legendary' || ed.grade === 'unique') this.gotEpicEquip = true;
@@ -7756,6 +7975,7 @@ class GameScene extends Phaser.Scene {
 
   // ═══ TRIPLE CHOICE UPGRADE UI ═══
   showUpgradeUI(cards) {
+    this._ftueOnLevelUp();
     this.upgradeUIActive = true;
     this.physics.pause();
     const cam = this.cameras.main;
@@ -8205,6 +8425,7 @@ class GameScene extends Phaser.Scene {
 
   startBlizzard(config) {
     playBlizzardStart();
+    this._ftueOnBlizzard();
     this.blizzardActive = true;
     this.blizzardMultiplier = config.tempMult;
     this.blizzardIndex++;
@@ -8516,6 +8737,7 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnBoss(type) {
+    this._ftueOnBossSpawn();
     const isFinal = type === 'final';
     const bossHP = isFinal ? 4000 : 1000;
     const bossScale = isFinal ? 2.8 : 2.0;
@@ -9560,6 +9782,8 @@ class GameScene extends Phaser.Scene {
   }
 
   endGame() {
+    // Mark FTUE as done after first game
+    FTUEManager.markDone();
     // GDD: HP 0 → 마을로 리스폰 3초 (통계 표시)
     if (this.gameOver || this.isRespawning) return;
     // Revival scroll check
@@ -9923,6 +10147,9 @@ class GameScene extends Phaser.Scene {
     if (!this.tutorialShown && this.gameElapsed > 0) {
       this._updateTutorial();
     }
+
+    // ═══ FTUE Context Hints ═══
+    this._updateFTUEHints();
 
     // Mobile auto-attack
     if (this.attackCooldown <= 0) {
