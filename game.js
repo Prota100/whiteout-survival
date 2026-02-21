@@ -740,6 +740,9 @@ const ACHIEVEMENTS = [
   { id: 'craft_1',        name: '연금술사',    desc: '장비 합성 1회',        icon: '⚗️' },
   { id: 'survivor_30',    name: '강인한 자',   desc: '30분 생존',            icon: '🛡️' },
   { id: 'kills_100',      name: '대학살',      desc: '100마리 처치',         icon: '☠️' },
+  { id: 'secret_hidden_boss', name: '비밀 사냥꾼', desc: '숨겨진 보스 처치', icon: '👁️', hidden: true },
+  { id: 'secret_konami',      name: '전설의 코드', desc: '???',              icon: '🎮', hidden: true },
+  { id: 'secret_survive_zone',name: '극한 탐험가', desc: '극한 구역 5분 생존', icon: '🏔️', hidden: true },
 ];
 
 const RANDOM_EVENTS = [
@@ -1523,10 +1526,41 @@ class TitleScene extends Phaser.Scene {
       color: '#8899bb',
     }).setOrigin(0.5);
 
-    // Version text
-    this.add.text(W - 10, H - 10, 'v1.0', {
+    // Version text (Easter egg: 5 rapid clicks)
+    const versionText = this.add.text(W - 10, H - 10, 'v1.0', {
       fontSize: '11px', fontFamily: 'monospace', color: '#445566', alpha: 0.6
-    }).setOrigin(1, 1).setDepth(20);
+    }).setOrigin(1, 1).setDepth(20).setInteractive();
+    let _vClickCount = 0, _vClickTimer = 0;
+    versionText.on('pointerdown', () => {
+      const now = Date.now();
+      if (now - _vClickTimer > 2000) _vClickCount = 0;
+      _vClickTimer = now;
+      _vClickCount++;
+      if (_vClickCount >= 5) {
+        _vClickCount = 0;
+        // Unlock all skins + 100 meta points
+        const meta = MetaManager.load();
+        meta.totalPoints += 100;
+        MetaManager.save(meta);
+        PLAYER_SKINS.forEach(s => {
+          try {
+            const data = JSON.parse(localStorage.getItem(SkinManager.KEY) || '{}');
+            data[s.id] = true;
+            localStorage.setItem(SkinManager.KEY, JSON.stringify(data));
+          } catch(e) {}
+        });
+        // Save konami-like achievement
+        try {
+          const ach = JSON.parse(localStorage.getItem('achievements_whiteout') || '{}');
+          ach['secret_konami'] = true;
+          localStorage.setItem('achievements_whiteout', JSON.stringify(ach));
+        } catch(e) {}
+        const popup = this.add.text(W / 2, H / 2, '🛠️ 개발자 모드', {
+          fontSize: '20px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(999);
+        this.time.delayedCall(2000, () => popup.destroy());
+      }
+    });
     
     // Menu buttons
     const btnY = H * 0.52;
@@ -3349,6 +3383,40 @@ class GameScene extends Phaser.Scene {
     this.act2MinibossSpawned = false;
     this.act4MinibossSpawned = false;
 
+    // ═══ HIDDEN BOSS: 백색 군주 ═══
+    this._hiddenBossSpawned = false;
+    this._hiddenBossDefeated = false;
+    this._extremeZoneTimer = 0; // seconds in extreme zone (top-right)
+    try { this._hiddenBossDefeated = JSON.parse(localStorage.getItem('whiteout_hidden_boss_defeated') || 'false'); } catch(e) {}
+
+    // ═══ SECRET EVENTS ═══
+    this._secretEventTimer = 0;
+    this._ghostMerchantUsed = false;
+    this._ghostMerchantActive = false;
+    this._ghostMerchantSprite = null;
+    this._secretKillCounter = 0; // for snow leopard pack
+
+    // ═══ KONAMI CODE ═══
+    this._konamiSequence = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+    this._konamiIndex = 0;
+    this._konamiActivated = false;
+    this.input.keyboard.on('keydown', (evt) => {
+      if (this._konamiActivated) return;
+      const expected = this._konamiSequence[this._konamiIndex];
+      if (evt.key === expected || evt.key === expected.toLowerCase()) {
+        this._konamiIndex++;
+        if (this._konamiIndex >= this._konamiSequence.length) {
+          this._konamiActivated = true;
+          this._activateKonamiCode();
+        }
+      } else {
+        this._konamiIndex = (evt.key === this._konamiSequence[0]) ? 1 : 0;
+      }
+    });
+
+    // ═══ EXTREME ZONE SURVIVAL (for achievement) ═══
+    this._extremeZoneTotalTime = 0;
+
     // Safe area bottom - compute from DOM
     this.safeBottom = 0;
     try {
@@ -4061,6 +4129,8 @@ class GameScene extends Phaser.Scene {
     // Boss death special effects
     if (a.isBoss && !a.isMiniboss) {
       this.bossKillCount = (this.bossKillCount || 0) + 1;
+      // Hidden boss kill check
+      if (a.isHiddenBoss) { this._onHiddenBossKilled(); }
       this.cameras.main.shake(800, 0.03);
       this.cameras.main.flash(500, 255, 50, 50, true);
       const bossText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 80,
@@ -4134,6 +4204,8 @@ class GameScene extends Phaser.Scene {
     this.killComboTimer = 3; // 3 seconds to maintain combo
     if (this.killCombo > (this.stats.maxCombo || 0)) this.stats.maxCombo = this.killCombo;
     this._updateComboDisplay();
+    // Secret event: snow leopard pack trigger
+    this.onEnemyKilled_secretCheck();
     this._applyStreakBuff(a.x, a.y);
 
     // XP gain on kill with combo bonus
@@ -8026,7 +8098,8 @@ class GameScene extends Phaser.Scene {
       if (mag > 1) { finalMX /= mag; finalMY /= mag; }
     }
     const eqSpdMul = 1 + (this._equipBonuses ? this._equipBonuses.spdMul : 0);
-    const effectiveSpeed = this.playerSpeed * (this.streakBuff?.spdMul || 1) * eqSpdMul;
+    const hiddenBossSlowMul = this._hiddenBossSlowActive ? 0.6 : 1;
+    const effectiveSpeed = this.playerSpeed * (this.streakBuff?.spdMul || 1) * eqSpdMul * hiddenBossSlowMul;
     this.player.body.setVelocity(finalMX*effectiveSpeed, finalMY*effectiveSpeed);
     // 4방향 스프라이트 전환 (상하좌우) + 뒷모습
     const absX = Math.abs(finalMX);
@@ -8413,6 +8486,12 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    // ═══ 👁️ HIDDEN BOSS CHECK ═══
+    this._updateHiddenBoss(dt);
+
+    // ═══ 🎭 SECRET EVENTS ═══
+    this._updateSecretEvents(dt);
+
     // ═══ 🏆 Achievement Check (1s throttle) ═══
     this.achievementCheckTimer = (this.achievementCheckTimer || 0) + dt;
     if (this.achievementCheckTimer >= 1) {
@@ -8478,6 +8557,9 @@ class GameScene extends Phaser.Scene {
       craft_1:        craftC >= 1,
       survivor_30:    elapsed >= 1800,
       kills_100:      kills >= 100,
+      secret_hidden_boss: this._hiddenBossDefeated === true,
+      secret_konami:      this._konamiActivated === true,
+      secret_survive_zone: (this._extremeZoneTotalTime || 0) >= 300,
     };
 
     for (const ach of ACHIEVEMENTS) {
@@ -8557,6 +8639,281 @@ class GameScene extends Phaser.Scene {
   }
 
   // ═══ 🎲 RANDOM EVENT METHODS ═══
+  // ═══════════════════════════════════════════════════════════════════
+  // 👁️ HIDDEN BOSS SYSTEM: 백색 군주
+  // ═══════════════════════════════════════════════════════════════════
+  _updateHiddenBoss(dt) {
+    if (this._hiddenBossSpawned || this._hiddenBossDefeated || !this.player || this.gameOver) return;
+
+    // Extreme zone = top-right corner (x > WORLD_W * 0.75, y < WORLD_H * 0.25)
+    const inExtremeZone = this.player.x > WORLD_W * 0.75 && this.player.y < WORLD_H * 0.25;
+
+    // Track total extreme zone time for achievement
+    if (inExtremeZone) this._extremeZoneTotalTime = (this._extremeZoneTotalTime || 0) + dt;
+
+    // Hidden boss requires 20min survival + 30s in extreme zone
+    if (this.gameElapsed < 1200) return; // 20 minutes
+
+    if (inExtremeZone) {
+      this._extremeZoneTimer += dt;
+      if (this._extremeZoneTimer >= 30) {
+        this._spawnHiddenBoss();
+      }
+    } else {
+      this._extremeZoneTimer = 0;
+    }
+  }
+
+  _spawnHiddenBoss() {
+    if (this._hiddenBossSpawned) return;
+    this._hiddenBossSpawned = true;
+
+    // Phase 1: Ominous text
+    const cam = this.cameras.main;
+    const warn1 = this.add.text(cam.width / 2, cam.height / 2, '❄️ 무언가 이상하다...', {
+      fontSize: '22px', fontFamily: 'monospace', color: '#AADDFF', stroke: '#000', strokeThickness: 4
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(500);
+    this.tweens.add({ targets: warn1, alpha: 0, duration: 2000, delay: 500, onComplete: () => warn1.destroy() });
+
+    // Phase 2: Boss announcement after 5s
+    this.time.delayedCall(5000, () => {
+      if (this.gameOver) return;
+      const warn2 = this.add.text(cam.width / 2, cam.height / 2, '👁️ 백색 군주가 깨어났다!', {
+        fontSize: '24px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 5, fontStyle: 'bold'
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(500);
+      this.tweens.add({ targets: warn2, alpha: 0, duration: 2000, delay: 500, onComplete: () => warn2.destroy() });
+
+      // Spawn the boss
+      this.time.delayedCall(1000, () => {
+        if (this.gameOver) return;
+        this._createHiddenBoss();
+      });
+    });
+  }
+
+  _createHiddenBoss() {
+    const bossHP = 8000; // 2x of final boss (4000)
+    const bossScale = 3.2;
+    const bossDmg = 40;
+    const bossSpeed = 60;
+    const bossName = '👁️ 백색 군주';
+
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 350;
+    const bx = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 80, WORLD_W - 80);
+    const by = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 80, WORLD_H - 80);
+
+    const boss = this.physics.add.sprite(bx, by, 'bear').setCollideWorldBounds(true).setDepth(5);
+    boss.setScale(bossScale);
+    boss.setTint(0xEEEEFF);
+    boss.animalType = 'boss';
+    boss.def = { hp: bossHP, speed: bossSpeed, damage: bossDmg, drops: { meat: 40, leather: 20 }, size: 26 * bossScale, behavior: 'chase', name: bossName, aggroRange: 600, fleeRange: 0, fleeDistance: 0, color: 0xEEEEFF };
+    boss.hp = bossHP;
+    boss.maxHP = bossHP;
+    boss.wanderTimer = 0;
+    boss.wanderDir = { x: 0, y: 0 };
+    boss.hitFlash = 0;
+    boss.atkCD = 0;
+    boss.fleeTimer = 0;
+    boss.isBoss = true;
+    boss.isFinalBoss = false;
+    boss.isHiddenBoss = true;
+    boss.bossPatternTimer = 0;
+    boss.bossEnraged = false;
+    boss.bossMinionSpawned = false;
+    boss.slowAuraRadius = 150;
+    boss.slowAuraFactor = 0.6; // -40% speed
+    boss.hpBar = this.add.graphics().setDepth(6);
+    boss.nameLabel = this.add.text(bx, by - boss.def.size - 10, bossName, {
+      fontSize: '18px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+    }).setDepth(6).setOrigin(0.5);
+    this.animals.add(boss);
+
+    // Camera shake
+    this.cameras.main.shake(800, 0.02);
+    try { playBossSpawn(); } catch(e) {}
+    this._triggerBossEntrance(bossName);
+  }
+
+  _onHiddenBossKilled() {
+    this._hiddenBossDefeated = true;
+    try { localStorage.setItem('whiteout_hidden_boss_defeated', 'true'); } catch(e) {}
+
+    // Drop 3 epic+ equipment
+    for (let i = 0; i < 3; i++) {
+      const slots = Object.keys(EQUIPMENT_TABLE);
+      const slot = slots[Math.floor(Math.random() * slots.length)];
+      const items = EQUIPMENT_TABLE[slot];
+      const item = items[Math.floor(Math.random() * items.length)];
+      const grade = Math.random() < 0.3 ? 'legendary' : 'epic';
+      this.equipmentManager.tryEquip(slot, item.id, grade);
+    }
+
+    // +500 XP
+    this.playerXP += 500;
+
+    // Banner
+    const cam = this.cameras.main;
+    const txt = this.add.text(cam.width / 2, cam.height / 2 - 40, '👁️ 백색 군주를 처치했다!\n에픽 장비 3개 + 500 XP', {
+      fontSize: '20px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 4, align: 'center'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(500);
+    this.tweens.add({ targets: txt, alpha: 0, duration: 3000, delay: 2000, onComplete: () => txt.destroy() });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🎭 SECRET EVENTS
+  // ═══════════════════════════════════════════════════════════════════
+  _updateSecretEvents(dt) {
+    if (this.gameOver || !this.player) return;
+
+    this._secretEventTimer += dt;
+
+    // Check every 30 seconds
+    if (this._secretEventTimer >= 30) {
+      this._secretEventTimer = 0;
+
+      // Ghost Merchant: 15% chance, after 10 min
+      if (this.gameElapsed >= 600 && !this._ghostMerchantUsed && !this._ghostMerchantActive && Math.random() < 0.15) {
+        this._triggerGhostMerchant();
+      }
+
+      // Shooting Star: 5% chance, anytime
+      if (Math.random() < 0.05) {
+        this._triggerShootingStar();
+      }
+    }
+
+    // Update ghost merchant proximity
+    if (this._ghostMerchantActive && this._ghostMerchantSprite && this._ghostMerchantSprite.active) {
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this._ghostMerchantSprite.x, this._ghostMerchantSprite.y);
+      if (dist < 60) {
+        this._ghostMerchantActive = false;
+        this._ghostMerchantUsed = true;
+        if (this._ghostMerchantSprite) { this._ghostMerchantSprite.destroy(); this._ghostMerchantSprite = null; }
+        if (this._ghostMerchantLabel) { this._ghostMerchantLabel.destroy(); this._ghostMerchantLabel = null; }
+        // Reward: 2 extra upgrade picks
+        this.pendingLevelUps += 2;
+        if (!this.upgradeUIActive) { this.pendingLevelUps--; this.triggerLevelUp(); }
+      }
+    }
+
+    // Hidden boss slow aura
+    if (this.player && this.animals) {
+      this.animals.getChildren().forEach(a => {
+        if (a.isHiddenBoss && a.active && a.hp > 0) {
+          const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
+          if (dist < a.slowAuraRadius) {
+            this._hiddenBossSlowActive = true;
+          } else {
+            this._hiddenBossSlowActive = false;
+          }
+        }
+      });
+    }
+  }
+
+  _triggerGhostMerchant() {
+    this._ghostMerchantActive = true;
+    const cam = this.cameras.main;
+
+    // Spawn near player
+    const angle = Math.random() * Math.PI * 2;
+    const mx = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * 200, 80, WORLD_W - 80);
+    const my = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * 200, 80, WORLD_H - 80);
+
+    this._ghostMerchantSprite = this.add.circle(mx, my, 12, 0xAAAAFF, 0.7).setDepth(10);
+    this._ghostMerchantLabel = this.add.text(mx, my - 20, '👻', { fontSize: '20px' }).setOrigin(0.5).setDepth(10);
+
+    // Banner
+    const banner = this.add.text(cam.width / 2, 80, '👻 유령 상인이 지나갑니다...', {
+      fontSize: '16px', fontFamily: 'monospace', color: '#CCCCFF', stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(500);
+    this.tweens.add({ targets: banner, alpha: 0, duration: 1000, delay: 3000, onComplete: () => banner.destroy() });
+
+    // Disappear after 5s
+    this.time.delayedCall(5000, () => {
+      this._ghostMerchantActive = false;
+      if (this._ghostMerchantSprite && this._ghostMerchantSprite.active) { this._ghostMerchantSprite.destroy(); this._ghostMerchantSprite = null; }
+      if (this._ghostMerchantLabel && this._ghostMerchantLabel.active) { this._ghostMerchantLabel.destroy(); this._ghostMerchantLabel = null; }
+    });
+  }
+
+  _triggerShootingStar() {
+    const cam = this.cameras.main;
+    const W = cam.width, H = cam.height;
+
+    // Diagonal star movement
+    const star = this.add.text(0, 0, '🌠', { fontSize: '24px' }).setScrollFactor(0).setDepth(500);
+    this.tweens.add({
+      targets: star, x: W, y: H, duration: 500,
+      onComplete: () => star.destroy()
+    });
+
+    // Apply random upgrade
+    const available = this.upgradeManager.getAvailableUpgrades(this._playerClass);
+    if (available.length > 0) {
+      const pick = available[Math.floor(Math.random() * available.length)];
+      const upg = UPGRADES[pick];
+      this.upgradeManager.apply(pick, this);
+
+      this.time.delayedCall(600, () => {
+        const txt = this.add.text(cam.width / 2, cam.height / 2, `🌠 소원을 빌면...\n✨ ${upg.icon} ${upg.name} 획득!`, {
+          fontSize: '18px', fontFamily: 'monospace', color: '#FFDD44', stroke: '#000', strokeThickness: 4, align: 'center'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(500);
+        this.tweens.add({ targets: txt, alpha: 0, duration: 2000, delay: 1500, onComplete: () => txt.destroy() });
+      });
+    }
+  }
+
+  onEnemyKilled_secretCheck() {
+    // Snow Leopard Pack: 2% per 10 kills
+    this._secretKillCounter = (this._secretKillCounter || 0) + 1;
+    if (this._secretKillCounter >= 10) {
+      this._secretKillCounter = 0;
+      if (Math.random() < 0.02) {
+        this._triggerSnowLeopardPack();
+      }
+    }
+  }
+
+  _triggerSnowLeopardPack() {
+    const cam = this.cameras.main;
+    // Banner
+    const banner = this.add.text(cam.width / 2, 80, '🐆🐆🐆 눈표범 무리!', {
+      fontSize: '18px', fontFamily: 'monospace', color: '#FF8C00', stroke: '#000', strokeThickness: 4
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(500);
+    this.tweens.add({ targets: banner, alpha: 0, duration: 1000, delay: 2500, onComplete: () => banner.destroy() });
+
+    // Spawn 3 snow leopards
+    for (let i = 0; i < 3; i++) {
+      this.spawnAnimal('snow_leopard');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🎮 KONAMI CODE EASTER EGG
+  // ═══════════════════════════════════════════════════════════════════
+  _activateKonamiCode() {
+    const cam = this.cameras.main;
+
+    // Equip epic items in all slots
+    const slots = Object.keys(EQUIPMENT_TABLE);
+    for (const slot of slots) {
+      const items = EQUIPMENT_TABLE[slot];
+      const bestItem = items[items.length - 1]; // last = best
+      this.equipmentManager.tryEquip(slot, bestItem.id, 'epic');
+    }
+
+    // Banner
+    const txt = this.add.text(cam.width / 2, cam.height / 2, '🎮 치트 발동!', {
+      fontSize: '28px', fontFamily: 'monospace', color: '#FF44FF', stroke: '#000', strokeThickness: 5, fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(600);
+    this.tweens.add({ targets: txt, alpha: 0, duration: 2000, delay: 1500, onComplete: () => txt.destroy() });
+
+    // Camera flash
+    this.cameras.main.flash(500, 255, 200, 255);
+  }
+
   _triggerRandomEvent() {
     const evt = RANDOM_EVENTS[Math.floor(Math.random() * RANDOM_EVENTS.length)];
     this._showEventBanner(evt);
