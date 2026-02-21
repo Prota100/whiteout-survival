@@ -329,7 +329,7 @@ class GameScene extends Phaser.Scene {
       this.safeBottom = 34;
     }
 
-    this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0, maxCombo: 0, meatCollected: 0, bossKills: 0 };
+    this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0, maxCombo: 0, meatCollected: 0, bossKills: 0, cratesCollected: 0, miniSlimeKills: 0, lightningStormKills: 0, magicCircleConsecutiveKills: 0, magicCircleMaxConsecutive: 0 };
     this._warmthNearFireTime = 0; // 화덕 근처 체온 유지 시간 (퀘스트용)
 
     // ═══ 🏆 Achievement & Random Event System ═══
@@ -913,6 +913,7 @@ class GameScene extends Phaser.Scene {
   getAttackCooldown() {
     let cd = this.baseAttackSpeed;
     if (this._nearCampfire) cd /= (this._campfireAttackBonus || 1);
+    if (this._magicCircleAttackBoost) cd *= 0.5; // 마법 서클: 공격속도 +50%
     cd *= this.upgradeManager.cooldownReduction;
 
     // SWIFT_STRIKE Lvl 2: instant cooldown every 3rd attack
@@ -1133,6 +1134,7 @@ class GameScene extends Phaser.Scene {
       }
       this.showFloatingText(a.x, a.y - 20, '💥 분열!', '#44CC44');
     } else if (a.animalType === 'splitting_slime' && a._isMiniSlime) {
+      this.stats.miniSlimeKills = (this.stats.miniSlimeKills || 0) + 1;
       // Small green puff
       for (let i = 0; i < 4; i++) {
         const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
@@ -1272,6 +1274,19 @@ class GameScene extends Phaser.Scene {
     });
     if (!this.stats.kills[a.animalType]) this.stats.kills[a.animalType] = 0;
     this.stats.kills[a.animalType]++;
+    // ═══ Lightning storm kill tracking ═══
+    if (this.activeRandomEvents && this.activeRandomEvents.lightning_storm) {
+      this.stats.lightningStormKills = (this.stats.lightningStormKills || 0) + 1;
+    }
+    // ═══ Magic circle consecutive kill tracking ═══
+    if (this.activeRandomEvents && this.activeRandomEvents.magic_circle && this._isPlayerInMagicCircle) {
+      this.stats.magicCircleConsecutiveKills = (this.stats.magicCircleConsecutiveKills || 0) + 1;
+      if (this.stats.magicCircleConsecutiveKills > (this.stats.magicCircleMaxConsecutive || 0)) {
+        this.stats.magicCircleMaxConsecutive = this.stats.magicCircleConsecutiveKills;
+      }
+    } else {
+      this.stats.magicCircleConsecutiveKills = 0;
+    }
     // ═══ Buff item drop chance ═══
     this._tryDropBuff(a.x, a.y);
 
@@ -3933,6 +3948,7 @@ class GameScene extends Phaser.Scene {
     if (crate._label) crate._label.destroy();
     this.supplyCrates = this.supplyCrates.filter(c => c !== crate);
     crate.destroy();
+    this.stats.cratesCollected = (this.stats.cratesCollected || 0) + 1;
 
     this.showUpgradeUI(cards);
   }
@@ -7143,6 +7159,15 @@ class GameScene extends Phaser.Scene {
       all_equipment:   this._checkAllEpicEquip ? this._checkAllEpicEquip() : false,
       all_zones:       (this._visitedZones && this._visitedZones.size >= 4),
       all_synergies:   (this.synergyManager && this.synergyManager.activeSynergies && this.synergyManager.activeSynergies.size >= 5),
+      // 신규 콘텐츠 업적
+      ice_hunter_slayer:  (this.stats.kills['ice_hunter'] || 0) >= 50,
+      mini_slime_master:  (this.stats.miniSlimeKills || 0) >= 100,
+      shaman_killer:      (this.stats.kills['blizzard_shaman'] || 0) >= 10,
+      bonfire_guardian:    (this._warmthNearFireTime || 0) >= 300,
+      crate_master:       (this.stats.cratesCollected || 0) >= 30,
+      // 시크릿 업적
+      secret_lightning_hunter: (this.stats.lightningStormKills || 0) >= 100,
+      secret_magic_circle:    (this.stats.magicCircleMaxConsecutive || 0) >= 10,
     };
 
     for (const ach of ACHIEVEMENTS) {
@@ -7503,7 +7528,12 @@ class GameScene extends Phaser.Scene {
   }
 
   _triggerRandomEvent() {
-    const evt = RANDOM_EVENTS[Math.floor(Math.random() * RANDOM_EVENTS.length)];
+    let evt = RANDOM_EVENTS[Math.floor(Math.random() * RANDOM_EVENTS.length)];
+    // minTime check: re-roll if not eligible
+    if (evt.minTime && this.gameElapsed < evt.minTime) {
+      evt = RANDOM_EVENTS.filter(e => !e.minTime || this.gameElapsed >= e.minTime);
+      evt = evt[Math.floor(Math.random() * evt.length)];
+    }
     this._showEventBanner(evt);
 
     switch (evt.action) {
@@ -7558,6 +7588,48 @@ class GameScene extends Phaser.Scene {
         break;
       case 'class_cd_zero':
         this.activeRandomEvents.class_cd_zero = { endTime: this.gameElapsed + (evt.duration || 30) };
+        break;
+
+      // ═══ 신규 이벤트 5종 ═══
+      case 'wolf_pack':
+        if (this.gameElapsed >= (evt.minTime || 600)) {
+          for (let i = 0; i < 10; i++) {
+            this.spawnAnimal('wolf');
+          }
+        }
+        break;
+      case 'ice_treasure':
+        for (let i = 0; i < 3; i++) {
+          this.spawnSupplyCrate();
+        }
+        break;
+      case 'lightning_storm':
+        this.activeRandomEvents.lightning_storm = { endTime: this.gameElapsed + (evt.duration || 30), nextStrike: 0 };
+        this.stats.lightningStormKills = 0;
+        break;
+      case 'avalanche_v2':
+        this.activeRandomEvents.avalanche_v2 = { endTime: this.gameElapsed + (evt.duration || 20), nextSpawn: 0 };
+        this.cameras.main.shake(500, 0.015);
+        break;
+      case 'magic_circle':
+        {
+          const cam = this.cameras.main;
+          const cx = cam.scrollX + cam.width / 2 + Phaser.Math.Between(-150, 150);
+          const cy = cam.scrollY + cam.height / 2 + Phaser.Math.Between(-150, 150);
+          const radius = 80;
+          this.activeRandomEvents.magic_circle = { endTime: this.gameElapsed + (evt.duration || 60), x: cx, y: cy, radius };
+          this._isPlayerInMagicCircle = false;
+          this.stats.magicCircleConsecutiveKills = 0;
+          // Draw magic circle
+          const circleGfx = this.add.graphics().setDepth(3);
+          circleGfx.lineStyle(3, 0xAA44FF, 0.7);
+          circleGfx.strokeCircle(cx, cy, radius);
+          circleGfx.fillStyle(0x8800FF, 0.1);
+          circleGfx.fillCircle(cx, cy, radius);
+          this.activeRandomEvents.magic_circle._gfx = circleGfx;
+          // Pulsing effect
+          this.tweens.add({ targets: circleGfx, alpha: { from: 1, to: 0.5 }, yoyo: true, repeat: -1, duration: 1000 });
+        }
         break;
     }
   }
@@ -7639,6 +7711,118 @@ class GameScene extends Phaser.Scene {
       delete active.class_cd_zero;
     }
     // Combo XP (charge-based, no time cleanup needed)
+
+    // ═══ Lightning Storm ═══
+    if (active.lightning_storm) {
+      if (now >= active.lightning_storm.endTime) {
+        delete active.lightning_storm;
+      } else {
+        active.lightning_storm.nextStrike = (active.lightning_storm.nextStrike || 0);
+        if (now >= active.lightning_storm.nextStrike) {
+          active.lightning_storm.nextStrike = now + 2;
+          const cam = this.cameras.main;
+          const lx = cam.scrollX + Phaser.Math.Between(20, cam.width - 20);
+          const ly = cam.scrollY + Phaser.Math.Between(20, cam.height - 20);
+          // Lightning visual
+          const bolt = this.add.graphics().setDepth(50);
+          bolt.lineStyle(3, 0xFFFF00, 1);
+          bolt.beginPath(); bolt.moveTo(lx, ly - 200); bolt.lineTo(lx + Phaser.Math.Between(-15, 15), ly - 100); bolt.lineTo(lx, ly); bolt.strokePath();
+          const flash = this.add.circle(lx, ly, 40, 0xFFFF00, 0.4).setDepth(49);
+          this.time.delayedCall(200, () => { bolt.destroy(); });
+          this.tweens.add({ targets: flash, alpha: 0, scale: 2, duration: 400, onComplete: () => flash.destroy() });
+          // Damage nearby enemies +50
+          if (this.animals) {
+            this.animals.getChildren().forEach(a => {
+              if (!a.active) return;
+              const d = Phaser.Math.Distance.Between(lx, ly, a.x, a.y);
+              if (d < 60) {
+                a.hp -= 50;
+                this.showFloatingText(a.x, a.y - 10, '-50 ⚡', '#FFFF00');
+                if (a.hp <= 0) this.killAnimal(a);
+              }
+            });
+          }
+          // Player damage if too close
+          if (this.player && this.player.active) {
+            const pd = Phaser.Math.Distance.Between(lx, ly, this.player.x, this.player.y);
+            if (pd < 40) {
+              this.playerHP -= 25;
+              this.showFloatingText(this.player.x, this.player.y - 10, '-25 ⚡', '#FFFF00');
+              if (this._triggerHitVignette) this._triggerHitVignette();
+              if (this.playerHP <= 0) this.endGame();
+            }
+          }
+        }
+      }
+    }
+
+    // ═══ Avalanche V2 (top → bottom) ═══
+    if (active.avalanche_v2) {
+      if (now >= active.avalanche_v2.endTime) {
+        delete active.avalanche_v2;
+      } else {
+        active.avalanche_v2.nextSpawn = (active.avalanche_v2.nextSpawn || 0);
+        if (now >= active.avalanche_v2.nextSpawn) {
+          active.avalanche_v2.nextSpawn = now + 1.5;
+          const cam = this.cameras.main;
+          if (!this._avalancheV2Balls) this._avalancheV2Balls = [];
+          const count = Phaser.Math.Between(2, 4);
+          for (let i = 0; i < count; i++) {
+            const size = Phaser.Math.Between(20, 50);
+            const sx = cam.scrollX + Phaser.Math.Between(0, cam.width);
+            const sy = cam.scrollY - 40;
+            const g = this.add.graphics().setDepth(45);
+            this._avalancheV2Balls.push({ x: sx, y: sy, size, speed: Phaser.Math.Between(180, 280), driftX: Phaser.Math.Between(-30, 30), graphic: g, damage: Math.floor(20 + size * 0.3) });
+          }
+        }
+      }
+    }
+    // Update avalanche v2 balls
+    if (this._avalancheV2Balls) {
+      const dt = this.game.loop.delta / 1000;
+      for (let i = this._avalancheV2Balls.length - 1; i >= 0; i--) {
+        const sb = this._avalancheV2Balls[i];
+        sb.y += sb.speed * dt;
+        sb.x += sb.driftX * dt;
+        sb.graphic.clear();
+        sb.graphic.fillStyle(0xCCDDFF, 0.85);
+        sb.graphic.fillCircle(sb.x, sb.y, sb.size / 2);
+        // Player collision
+        if (this.player && this.player.active) {
+          const dist = Phaser.Math.Distance.Between(sb.x, sb.y, this.player.x, this.player.y);
+          if (dist < sb.size / 2 + 12) {
+            this.playerHP -= sb.damage;
+            if (this._triggerHitVignette) this._triggerHitVignette();
+            this.showFloatingText(this.player.x, this.player.y - 20, `-${sb.damage} 🌊`, '#AADDFF');
+            this.cameras.main.shake(150, 0.01);
+            sb.graphic.destroy();
+            this._avalancheV2Balls.splice(i, 1);
+            if (this.playerHP <= 0) this.endGame();
+            continue;
+          }
+        }
+        const cam = this.cameras.main;
+        if (sb.y > cam.scrollY + cam.height + 100) {
+          sb.graphic.destroy();
+          this._avalancheV2Balls.splice(i, 1);
+        }
+      }
+    }
+
+    // ═══ Magic Circle ═══
+    if (active.magic_circle) {
+      if (now >= active.magic_circle.endTime) {
+        if (active.magic_circle._gfx) active.magic_circle._gfx.destroy();
+        this._isPlayerInMagicCircle = false;
+        this._magicCircleAttackBoost = false;
+        delete active.magic_circle;
+      } else if (this.player && this.player.active) {
+        const mc = active.magic_circle;
+        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, mc.x, mc.y);
+        this._isPlayerInMagicCircle = dist <= mc.radius;
+        this._magicCircleAttackBoost = this._isPlayerInMagicCircle;
+      }
+    }
   }
 
   showZoneAlert(text) {

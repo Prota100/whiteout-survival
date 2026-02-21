@@ -31,6 +31,15 @@ const ACHIEVEMENTS = [
   { id: 'all_equipment',   name: '수집가',        desc: '모든 장비 슬롯에 에픽 이상 장착', icon: '💜', category: 'collect' },
   { id: 'all_zones',       name: '탐험가',        desc: '모든 지역 방문',            icon: '🗺️', category: 'collect' },
   { id: 'all_synergies',   name: '시너지 마스터', desc: '5가지 시너지 모두 발동',    icon: '⚡', category: 'collect' },
+  // ═══ 신규 콘텐츠 업적 5종 ═══
+  { id: 'ice_hunter_slayer',  name: '얼음 사냥꾼의 사냥꾼', desc: '얼음 사냥꾼 50마리 처치',              icon: '🏹', category: 'combat' },
+  { id: 'mini_slime_master',  name: '분열의 지배자',       desc: '미니슬라임 100마리 처치',               icon: '💧', category: 'combat' },
+  { id: 'shaman_killer',      name: '샤먼 킬러',          desc: '눈보라 샤먼 10마리 처치',               icon: '🧙', category: 'combat' },
+  { id: 'bonfire_guardian',    name: '모닥불 수호자',       desc: '모닥불 옆에서 5분 누적 생존',           icon: '🔥', category: 'collect' },
+  { id: 'crate_master',       name: '보급 전문가 마스터',   desc: '보급상자 30개 수집',                   icon: '📦', category: 'collect' },
+  // ═══ 시크릿 업적 2종 ═══
+  { id: 'secret_lightning_hunter', name: '번개 사냥꾼',    desc: '번개 폭풍 이벤트 중 적 100마리 처치',   icon: '⚡', hidden: true },
+  { id: 'secret_magic_circle',    name: '마법의 원',       desc: '마법 서클 안에서 10연속 킬',            icon: '🔮', hidden: true },
 ];
 
 const RANDOM_EVENTS = [
@@ -45,6 +54,12 @@ const RANDOM_EVENTS = [
   { id: 'shield_wall',     name: '🛡️ 신성한 방어', desc: '30초간 피해 50% 감소',  action: 'damage_reduce', duration: 30 },
   { id: 'mega_combo',      name: '🔥 킬 광란', desc: '다음 10킬은 XP 3배',        action: 'combo_xp', charges: 10 },
   { id: 'class_boost',     name: '✨ 클래스 각성', desc: '30초간 클래스 스킬 쿨다운 0', action: 'class_cd_zero', duration: 30 },
+  // ═══ 신규 이벤트 5종 ═══
+  { id: 'wolf_pack',       name: '🐺 야생의 부름',   desc: '늑대 무리 10마리가 동시에 출현!',               action: 'wolf_pack', minTime: 600 },
+  { id: 'ice_treasure',    name: '💎 얼음 보물',     desc: '15초간 보급상자 3개 동시 스폰!',                action: 'ice_treasure', duration: 15 },
+  { id: 'lightning_storm',  name: '⚡ 번개 폭풍',     desc: '30초간 랜덤 위치에 번개가 떨어짐!',             action: 'lightning_storm', duration: 30 },
+  { id: 'avalanche_v2',    name: '🌊 눈사태 2',      desc: '상→하 방향으로 눈덩이가 쏟아집니다!',           action: 'avalanche_v2', duration: 20 },
+  { id: 'magic_circle',    name: '🔮 마법 서클',     desc: '60초간 마법 서클 안에서 공격속도 +50%!',         action: 'magic_circle', duration: 60 },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
