@@ -384,7 +384,7 @@ const UPGRADES = {
 const XP_TABLE = [0, 12, 20, 30, 42, 55, 70, 90, 115, 145, 180, 220, 270, 330, 400, 490, 600, 730, 900, 1100, 1350];
 const XP_SOURCES = {
   rabbit: 5, deer: 8, penguin: 6, seal: 12,
-  wolf: 18, bear: 35, boss: 80, tree: 2, rock: 2, gold: 5,
+  wolf: 18, bear: 35, ice_golem: 60, snow_leopard: 25, boss: 80, tree: 2, rock: 2, gold: 5,
   default: 5,
 };
 
@@ -981,6 +981,8 @@ const ANIMALS = {
   seal:    { hp: 12,  speed: 30,  damage: 0, drops: { meat: 2, leather: 2 }, size: 20, behavior: 'wander', name: '🦭 물개', aggroRange: 0, fleeRange: 0, fleeDistance: 0, color: 0x7B8D9E },
   wolf:    { hp: 30,  speed: 110,  damage: 5, drops: { meat: 3, leather: 1 }, size: 18, behavior: 'chase', name: '🐺 늑대', aggroRange: 160, fleeRange: 0, fleeDistance: 0, color: 0x666677 },
   bear:    { hp: 80, speed: 70,  damage: 15, drops: { meat: 6, leather: 3 }, size: 26, behavior: 'chase', name: '🐻 곰', aggroRange: 140, fleeRange: 0, fleeDistance: 0, color: 0xF0EEE8 },
+  ice_golem: { hp: 240, speed: 60, damage: 50, drops: { meat: 10, leather: 5, gold: 15 }, size: 24, behavior: 'chase', name: '🧊 얼음골렘', aggroRange: 200, fleeRange: 0, fleeDistance: 0, color: 0x88CCEE },
+  snow_leopard: { hp: 45, speed: 220, damage: 20, drops: { meat: 4, leather: 2, gold: 5 }, size: 14, behavior: 'chase', name: '🐆 눈표범', aggroRange: 250, fleeRange: 0, fleeDistance: 0, color: 0xF8F8FF },
 };
 
 // ── Building Definitions (ENHANCED) ──
@@ -1502,6 +1504,8 @@ class BootScene extends Phaser.Scene {
     this.createWolfBackTexture();
     this.createBearTexture();
     this.createBearBackTexture();
+    this.createIceGolemTexture();
+    this.createSnowLeopardTexture();
     this.createNPCTextures();
     this.createNPCBackTextures();
     this.createTreeTexture();
@@ -1965,6 +1969,53 @@ class BootScene extends Phaser.Scene {
     g.destroy();
   }
 
+  createIceGolemTexture() {
+    const g = this.add.graphics();
+    const sz = 48;
+    // Body - large gray-blue circle
+    g.lineStyle(4, 0x6699BB, 1);
+    g.fillStyle(0x88CCEE, 1);
+    g.fillCircle(24, 24, 22);
+    g.strokeCircle(24, 24, 22);
+    // Inner ice cracks
+    g.lineStyle(1, 0xAADDFF, 0.6);
+    g.lineBetween(14, 16, 24, 24);
+    g.lineBetween(24, 24, 34, 18);
+    g.lineBetween(24, 24, 20, 34);
+    // Eyes
+    g.fillStyle(0x4477AA, 1);
+    g.fillCircle(18, 20, 3);
+    g.fillCircle(30, 20, 3);
+    g.fillStyle(0xCCEEFF, 1);
+    g.fillCircle(19, 19, 1);
+    g.fillCircle(31, 19, 1);
+    g.generateTexture('ice_golem', sz, sz);
+    g.destroy();
+  }
+
+  createSnowLeopardTexture() {
+    const g = this.add.graphics();
+    const sz = 28;
+    // Body - white circle
+    g.fillStyle(0xF8F8FF, 1);
+    g.fillCircle(14, 14, 12);
+    // Spots (gray dots)
+    g.fillStyle(0x999999, 1);
+    g.fillCircle(10, 11, 2);
+    g.fillCircle(18, 13, 2);
+    g.fillCircle(14, 18, 2);
+    // Eyes
+    g.fillStyle(0x44AA44, 1);
+    g.fillCircle(10, 10, 1.5);
+    g.fillCircle(18, 10, 1.5);
+    // Ears
+    g.fillStyle(0xEEEEEE, 1);
+    g.fillTriangle(7, 4, 10, 2, 12, 6);
+    g.fillTriangle(16, 6, 18, 2, 21, 4);
+    g.generateTexture('snow_leopard', sz, sz);
+    g.destroy();
+  }
+
   createNPCTextures() {
     let g = this.add.graphics();
     g.fillStyle(0x8B6914, 1); g.fillRect(10, 15, 12, 10);
@@ -2230,6 +2281,18 @@ class GameScene extends Phaser.Scene {
     this.gameElapsed = 0; // seconds since game start
     this.currentAct = 1;
     this.waveTimer = 0; // 30s wave spawn timer
+
+    // ═══ Act 3: Special Wave Events ═══
+    this._eliteWaveTriggered = {}; // { 15: true, 30: true, 45: true }
+    this._siegeWaveTriggered = {}; // { 25: true, 50: true }
+    this._siegeWaveActive = false;
+    this._siegeWaveEndTime = 0;
+    this._challengeActive = false;
+    this._challengeEndTime = 0;
+    this._lastChallengeMin = 0;
+    this._challengeHUD = null;
+    this._iceGolemSpawnTimer = 0;
+    this._snowLeopardSpawnTimer = 0;
     this.waveNumber = 0;
 
     // ═══ Blizzard (한파) System ═══
@@ -2799,7 +2862,64 @@ class GameScene extends Phaser.Scene {
   }
 
   killAnimal(a) { playKill();
-    // ═══ Death particle effect (circles spreading) ═══
+    // ═══ Type-specific death effects ═══
+    if (a.animalType === 'ice_golem') {
+      // Ice shard explosion + shockwave
+      const sw = this.add.circle(a.x, a.y, 10, 0x88CCFF, 0.6).setDepth(15);
+      this.tweens.add({ targets: sw, scale: 8, alpha: 0, duration: 500, onComplete: () => sw.destroy() });
+      for (let i = 0; i < 12; i++) {
+        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const sd = Phaser.Math.Between(20, 80);
+        const shard = this.add.rectangle(a.x, a.y, Phaser.Math.Between(3, 8), Phaser.Math.Between(6, 14), 0xAADDFF).setDepth(15).setAlpha(0.9).setAngle(Phaser.Math.Between(0, 360));
+        this.tweens.add({ targets: shard, x: a.x + Math.cos(sa)*sd, y: a.y + Math.sin(sa)*sd, alpha: 0, angle: shard.angle + 180, duration: 600, onComplete: () => shard.destroy() });
+      }
+      // Damage nearby player
+      const pdist = Phaser.Math.Distance.Between(a.x, a.y, this.player.x, this.player.y);
+      if (pdist < 80) {
+        this.playerHP -= 10;
+        this.showFloatingText(this.player.x, this.player.y - 25, '🧊-10 파편!', '#88CCFF');
+        // Apply slow
+        if (!this._iceGolemSlowed) {
+          this._iceGolemSlowed = true;
+          const origSpeed = this.playerSpeed;
+          this.playerSpeed *= 0.5;
+          this.time.delayedCall(1000, () => { this.playerSpeed = Math.max(this.playerSpeed, origSpeed); this._iceGolemSlowed = false; });
+        }
+        if (this.playerHP <= 0) this.endGame();
+      }
+    } else if (a.animalType === 'snow_leopard') {
+      // White flash + fast disappear
+      for (let i = 0; i < 8; i++) {
+        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const p = this.add.circle(a.x, a.y, Phaser.Math.Between(2, 4), 0xFFFFFF).setDepth(15);
+        this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*40, y: a.y + Math.sin(sa)*40, alpha: 0, duration: 250, onComplete: () => p.destroy() });
+      }
+    } else if (a.animalType === 'rabbit') {
+      // Small white fur particles
+      for (let i = 0; i < 5; i++) {
+        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const p = this.add.circle(a.x, a.y, 2, 0xFFEEDD).setDepth(15);
+        this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*25, y: a.y + Math.sin(sa)*25, alpha: 0, duration: 500, onComplete: () => p.destroy() });
+      }
+    } else if (a.animalType === 'wolf') {
+      // Gray particles + howl text
+      for (let i = 0; i < 6; i++) {
+        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const p = this.add.circle(a.x, a.y, 3, 0x666677).setDepth(15);
+        this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*35, y: a.y + Math.sin(sa)*35, alpha: 0, duration: 500, onComplete: () => p.destroy() });
+      }
+      const howl = this.add.text(a.x, a.y - 15, '🐺 Awooo~', { fontSize: '12px', fontFamily: 'monospace', color: '#AAAACC', stroke: '#000', strokeThickness: 2 }).setDepth(15).setOrigin(0.5);
+      this.tweens.add({ targets: howl, y: howl.y - 25, alpha: 0, duration: 500, onComplete: () => howl.destroy() });
+    } else if (a.animalType === 'bear') {
+      // Brown big particle explosion
+      for (let i = 0; i < 14; i++) {
+        const sa = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const sd = Phaser.Math.Between(30, 80);
+        const p = this.add.circle(a.x, a.y, Phaser.Math.Between(3, 7), 0x8B6914).setDepth(15);
+        this.tweens.add({ targets: p, x: a.x + Math.cos(sa)*sd, y: a.y + Math.sin(sa)*sd, alpha: 0, scale: { from: 1.3, to: 0 }, duration: 700, onComplete: () => p.destroy() });
+      }
+    } else {
+    // ═══ Default death particle effect (circles spreading) ═══
     for (let i = 0; i < 10; i++) {
       const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
       const dist = Phaser.Math.Between(30, 70);
@@ -2810,6 +2930,7 @@ class GameScene extends Phaser.Scene {
         x: a.x + Math.cos(ang) * dist, y: a.y + Math.sin(ang) * dist,
         alpha: 0, scale: { from: 1.2, to: 0 }, duration: Phaser.Math.Between(400, 800),
         ease: 'Quad.Out', onComplete: () => p.destroy() });
+    }
     }
     // Miniboss death: custom message + XP
     if (a.isMiniboss && a._minibossKillMsg) {
@@ -2904,6 +3025,7 @@ class GameScene extends Phaser.Scene {
 
     // XP gain on kill with combo bonus
     let _xpAmt = XP_SOURCES[a.animalType] || 3;
+    if (a._isElite) _xpAmt *= 2; // Elite wave: double XP
     let _comboGoldBonus = 0;
     if (this.killCombo >= 10) {
       _xpAmt = Math.floor(_xpAmt * 2); // +100% XP
@@ -3902,6 +4024,23 @@ class GameScene extends Phaser.Scene {
             a.body.velocity.normalize().scale(a.def.speed * (a.fleeTimer / 2));
           } else this.wander(a, dt, 0.3);
         } else if (a.def.behavior === 'chase') {
+          // Snow leopard dash ability
+          if (a.animalType === 'snow_leopard' && dist < 120 && dist > 30) {
+            a._dashCD = (a._dashCD || 0) - dt;
+            if (a._dashCD <= 0) {
+              a._dashCD = 3;
+              const dashAng = Phaser.Math.Angle.Between(a.x, a.y, px, py);
+              const dashDist = 150;
+              const nx = Phaser.Math.Clamp(a.x + Math.cos(dashAng) * dashDist, 40, WORLD_W - 40);
+              const ny = Phaser.Math.Clamp(a.y + Math.sin(dashAng) * dashDist, 40, WORLD_H - 40);
+              // Dash trail effect
+              for (let di = 0; di < 4; di++) {
+                const tp = this.add.circle(a.x + (nx-a.x)*di/4, a.y + (ny-a.y)*di/4, 4, 0xFFFFFF, 0.5).setDepth(14);
+                this.tweens.add({ targets: tp, alpha: 0, scale: 0, duration: 300, onComplete: () => tp.destroy() });
+              }
+              a.setPosition(nx, ny);
+            }
+          }
           if (dist < a.def.aggroRange) {
             const ang = Phaser.Math.Angle.Between(a.x, a.y, px, py);
             a.body.setVelocity(Math.cos(ang)*a.def.speed, Math.sin(ang)*a.def.speed);
@@ -5217,11 +5356,11 @@ class GameScene extends Phaser.Scene {
     } else if (min < 40) {
       weights = { rabbit: 1, deer: 1, wolf: 3, bear: 3, seal: 2 }; maxCount = 34; spawnInterval = 6000;
     } else if (min < 52) {
-      // 후반: 강적 위주
-      weights = { wolf: 3, bear: 4, seal: 3 }; maxCount = 40; spawnInterval = 5000;
+      // 후반: 강적 위주 + Act3 신규 적
+      weights = { wolf: 3, bear: 4, seal: 3, ice_golem: 1, snow_leopard: 2 }; maxCount = 40; spawnInterval = 5000;
     } else {
       // 최후반: 극한
-      weights = { wolf: 2, bear: 5, seal: 4 }; maxCount = 48; spawnInterval = 4000;
+      weights = { wolf: 2, bear: 5, seal: 4, ice_golem: 2, snow_leopard: 3 }; maxCount = 48; spawnInterval = 4000;
     }
     return { weights, maxCount, spawnInterval };
   }
@@ -6013,7 +6152,8 @@ class GameScene extends Phaser.Scene {
     this.waveTimer += dt;
     const spawnConfig = this.getSpawnConfig();
     const rushMul = (this.activeRandomEvents && this.activeRandomEvents.spawn_rush) ? 3 : 1;
-    const spawnIntervalSec = (spawnConfig.spawnInterval / 1000) / rushMul;
+    const challengeMul = this._challengeActive ? (this._challengeSpawnMul || 1) : 1;
+    const spawnIntervalSec = (spawnConfig.spawnInterval / 1000) / rushMul / challengeMul;
     if (this.waveTimer >= spawnIntervalSec) {
       this.waveTimer = 0;
       this.waveNumber++;
@@ -6050,6 +6190,116 @@ class GameScene extends Phaser.Scene {
     if (!this.boss2Spawned && this.gameElapsed >= 55 * 60) { // 55분
       this.boss2Spawned = true;
       this.spawnBoss('final');
+    }
+
+    // ═══ Act 3: Timed Ice Golem / Snow Leopard Spawns ═══
+    const minNow = this.gameElapsed / 60;
+    if (minNow >= 40) {
+      this._iceGolemSpawnTimer += dt;
+      if (this._iceGolemSpawnTimer >= 45) {
+        this._iceGolemSpawnTimer = 0;
+        this.spawnAnimal('ice_golem');
+      }
+    }
+    if (minNow >= 45) {
+      this._snowLeopardSpawnTimer += dt;
+      if (this._snowLeopardSpawnTimer >= 30) {
+        this._snowLeopardSpawnTimer = 0;
+        this.spawnAnimal('snow_leopard');
+        this.spawnAnimal('snow_leopard');
+      }
+    }
+
+    // ═══ Elite Wave (15min intervals) ═══
+    [15, 30, 45].forEach(m => {
+      if (!this._eliteWaveTriggered[m] && minNow >= m && minNow < m + 0.5) {
+        this._eliteWaveTriggered[m] = true;
+        this.showCenterAlert('⚠️ 엘리트 부대 출현!', '#FF8800');
+        this.cameras.main.shake(400, 0.01);
+        for (let i = 0; i < 5; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = 200 + Math.random() * 150;
+          const ex = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * dist, 80, WORLD_W - 80);
+          const ey = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * dist, 80, WORLD_H - 80);
+          const types = Object.keys(this.getSpawnConfig().weights);
+          const etype = types[Math.floor(Math.random() * types.length)];
+          const edef = ANIMALS[etype];
+          if (!edef) return;
+          const ea = this.physics.add.sprite(ex, ey, etype).setCollideWorldBounds(true).setDepth(5);
+          ea.animalType = etype;
+          ea.def = { ...edef, hp: Math.round(edef.hp * 1.5), speed: Math.round(edef.speed * 1.5) };
+          ea.hp = ea.def.hp; ea.maxHP = ea.def.hp;
+          ea.wanderTimer = 0; ea.wanderDir = {x:0,y:0}; ea.hitFlash = 0; ea.atkCD = 0; ea.fleeTimer = 0;
+          ea.setTint(0xFFAA44); // orange tint for elite
+          ea._isElite = true;
+          if (ea.def.hp > 2) ea.hpBar = this.add.graphics().setDepth(6);
+          ea.nameLabel = this.add.text(ex, ey - edef.size - 10, '⭐' + edef.name, {
+            fontSize: '11px', fontFamily: 'monospace', color: '#FFAA44', stroke: '#000', strokeThickness: 3
+          }).setDepth(6).setOrigin(0.5);
+          this.animals.add(ea);
+        }
+      }
+    });
+
+    // ═══ Siege Wave (25min, 50min) ═══
+    [25, 50].forEach(m => {
+      if (!this._siegeWaveTriggered[m] && minNow >= m && minNow < m + 0.5) {
+        this._siegeWaveTriggered[m] = true;
+        this._siegeWaveActive = true;
+        this._siegeWaveEndTime = this.gameElapsed + 60;
+        this.showCenterAlert('🔴 포위 공격!', '#FF2222');
+        this.cameras.main.shake(500, 0.015);
+        // Spawn 2 from each direction (8 total)
+        const dirs = [{x:-1,y:0},{x:1,y:0},{x:0,y:-1},{x:0,y:1}];
+        dirs.forEach(d => {
+          for (let i = 0; i < 2; i++) {
+            const sx = d.x === 0 ? this.player.x + Phaser.Math.Between(-100,100) : (d.x < 0 ? 80 : WORLD_W - 80);
+            const sy = d.y === 0 ? this.player.y + Phaser.Math.Between(-100,100) : (d.y < 0 ? 80 : WORLD_H - 80);
+            const types = ['wolf', 'bear'];
+            const st = types[Math.floor(Math.random() * types.length)];
+            this.spawnAnimal(st);
+          }
+        });
+      }
+    });
+    if (this._siegeWaveActive && this.gameElapsed >= this._siegeWaveEndTime) {
+      this._siegeWaveActive = false;
+    }
+
+    // ═══ Survival Challenge (every 10min, 2min duration) ═══
+    const challengeMin = Math.floor(minNow / 10) * 10;
+    if (challengeMin >= 10 && challengeMin !== this._lastChallengeMin && minNow >= challengeMin && minNow < challengeMin + 2) {
+      if (!this._challengeActive) {
+        this._challengeActive = true;
+        this._lastChallengeMin = challengeMin;
+        this._challengeEndTime = challengeMin * 60 + 120; // 2 minutes
+        this._challengeSpawnMul = 2;
+        this._challengeHpMul = 1.3;
+        this.showCenterAlert('🏆 생존 챌린지 시작! 2분간 버텨라!', '#FFD700');
+      }
+    }
+    if (this._challengeActive) {
+      const remaining = this._challengeEndTime - this.gameElapsed;
+      if (remaining <= 0) {
+        this._challengeActive = false;
+        this._challengeSpawnMul = 1;
+        this._challengeHpMul = 1;
+        this.showCenterAlert('✅ 챌린지 클리어! 업그레이드 보너스', '#44FF44');
+        this.levelUpQueue = (this.levelUpQueue || 0) + 1;
+        this.pendingLevelUps = (this.pendingLevelUps || 0) + 1;
+        if (this._challengeHUD) { this._challengeHUD.destroy(); this._challengeHUD = null; }
+      } else {
+        const rMin = Math.floor(remaining / 60);
+        const rSec = Math.floor(remaining % 60);
+        const txt = `생존 챌린지: ${rMin}:${String(rSec).padStart(2, '0')} 남음`;
+        if (!this._challengeHUD) {
+          this._challengeHUD = this.add.text(this.cameras.main.centerX, 60, txt, {
+            fontSize: '16px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+          }).setDepth(100).setOrigin(0.5).setScrollFactor(0);
+        } else {
+          this._challengeHUD.setText(txt);
+        }
+      }
     }
 
     // ═══ Victory Condition: 60분 생존 ═══
