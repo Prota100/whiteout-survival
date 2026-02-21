@@ -468,6 +468,29 @@ const EQUIPMENT_TABLE = {
   ]
 };
 
+// ═══ 🏆 ACHIEVEMENT SYSTEM ═══
+const ACHIEVEMENTS = [
+  { id: 'first_blood',    name: '첫 사냥',     desc: '첫 적 처치',           icon: '🎯' },
+  { id: 'survivor_5',     name: '5분 생존',    desc: '5분 이상 생존',        icon: '⏱️' },
+  { id: 'combo_10',       name: '연속 학살',   desc: '10킬 콤보 달성',       icon: '🔥' },
+  { id: 'level_10',       name: '숙련자',      desc: '레벨 10 달성',         icon: '⭐' },
+  { id: 'equipment_rare', name: '희귀 발견',   desc: '희귀 장비 첫 획득',    icon: '💙' },
+  { id: 'equipment_epic', name: '에픽 발견',   desc: '에픽 장비 첫 획득',    icon: '💜' },
+  { id: 'boss_kill',      name: '보스 사냥꾼', desc: '보스 처치',            icon: '💀' },
+  { id: 'craft_1',        name: '연금술사',    desc: '장비 합성 1회',        icon: '⚗️' },
+  { id: 'survivor_30',    name: '강인한 자',   desc: '30분 생존',            icon: '🛡️' },
+  { id: 'kills_100',      name: '대학살',      desc: '100마리 처치',         icon: '☠️' },
+];
+
+const RANDOM_EVENTS = [
+  { id: 'airdrop',       name: '📦 공중 보급',       desc: '보급품이 투하됩니다!',                       action: 'spawn_chest' },
+  { id: 'blizzard_rush', name: '🌨️ 맹렬한 눈보라',  desc: '극한의 한파! 30초간 한파 데미지 2배.',       action: 'blizzard_double', duration: 30 },
+  { id: 'enemy_rush',    name: '🐺 떼지어 오다',     desc: '적들이 몰려옵니다! 30초간 스폰 3배.',       action: 'spawn_rush',      duration: 30 },
+  { id: 'golden_fever',  name: '✨ 황금 시간',       desc: '30초간 장비 드롭률 3배!',                   action: 'drop_fever',      duration: 30 },
+  { id: 'healing_spring',name: '🔥 따뜻한 봄',       desc: '30초간 HP 회복 속도 5배!',                  action: 'heal_boost',      duration: 30 },
+  { id: 'merchant',      name: '🧑‍🤝‍🧑 행상인 방문',    desc: '행상인이 나타났다! 보급 상자가 출현합니다.',action: 'spawn_chest' },
+];
+
 class EquipmentManager {
   static STORAGE_KEY = 'whiteout_equipment';
 
@@ -2096,6 +2119,21 @@ class GameScene extends Phaser.Scene {
     }
 
     this.stats = { kills: {}, woodGathered: 0, built: {}, crafted: 0, npcsHired: 0, maxCombo: 0, meatCollected: 0 };
+
+    // ═══ 🏆 Achievement & Random Event System ═══
+    this.achievementUnlocked = {}; // { id: true } for this session
+    this.achievementCheckTimer = 0;
+    this.bossKillCount = 0;
+    this.gotRareEquip = false;
+    this.gotEpicEquip = false;
+    this.randomEventTimer = 0;
+    this.activeRandomEvents = {}; // { action: { endTime } }
+    // Load previously unlocked achievements from localStorage
+    try {
+      const saved = JSON.parse(localStorage.getItem('achievements_whiteout') || '{}');
+      this._savedAchievements = saved;
+    } catch(e) { this._savedAchievements = {}; }
+
     this.gameWon = false;
     this.questIndex = 0;
     this.questCompleted = [];
@@ -2631,6 +2669,7 @@ class GameScene extends Phaser.Scene {
     }
     // Boss death special effects
     if (a.isBoss && !a.isMiniboss) {
+      this.bossKillCount = (this.bossKillCount || 0) + 1;
       this.cameras.main.shake(800, 0.03);
       this.cameras.main.flash(500, 255, 50, 50, true);
       const bossText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 80,
@@ -3378,7 +3417,8 @@ class GameScene extends Phaser.Scene {
   // ═══ EQUIPMENT DROP & PICKUP ═══
   _tryDropEquipment(x, y) {
     const luck = (this._equipBonuses ? this._equipBonuses.luckFlat : 0);
-    const dropRate = 0.03 + luck / 1000; // 3% base + luck bonus
+    const feverMul = (this.activeRandomEvents && this.activeRandomEvents.drop_fever) ? 3 : 1;
+    const dropRate = (0.03 + luck / 1000) * feverMul; // 3% base + luck bonus, ×3 during golden fever
     if (Math.random() > dropRate) return;
     if (this.equipmentDrops.length >= 5) return;
 
@@ -3421,6 +3461,9 @@ class GameScene extends Phaser.Scene {
   }
 
   _pickupEquipment(ed, idx) {
+    // Track grade for achievements
+    if (ed.grade === 'rare') this.gotRareEquip = true;
+    if (ed.grade === 'epic' || ed.grade === 'legendary' || ed.grade === 'unique') this.gotEpicEquip = true;
     const equipped = this.equipmentManager.tryEquip(ed.slot, ed.itemId, ed.grade);
     // Grade-based SFX & visual feedback
     this._playEquipPickupFX(ed.grade);
@@ -5657,7 +5700,8 @@ class GameScene extends Phaser.Scene {
 
     // Upgrade: passive regen
     if (this.upgradeManager.regenPerSec > 0) {
-      this.playerHP = Math.min(this.playerMaxHP, this.playerHP + this.upgradeManager.regenPerSec * dt);
+      const healMul = (this.activeRandomEvents && this.activeRandomEvents.heal_boost) ? 5 : 1;
+      this.playerHP = Math.min(this.playerMaxHP, this.playerHP + this.upgradeManager.regenPerSec * healMul * dt);
     }
     // Upgrade: sparkle on supply crates
     this.supplyCrates.forEach(c => {
@@ -5696,7 +5740,8 @@ class GameScene extends Phaser.Scene {
     // ═══ Wave Spawn (dynamic interval) ═══
     this.waveTimer += dt;
     const spawnConfig = this.getSpawnConfig();
-    const spawnIntervalSec = spawnConfig.spawnInterval / 1000;
+    const rushMul = (this.activeRandomEvents && this.activeRandomEvents.spawn_rush) ? 3 : 1;
+    const spawnIntervalSec = (spawnConfig.spawnInterval / 1000) / rushMul;
     if (this.waveTimer >= spawnIntervalSec) {
       this.waveTimer = 0;
       this.waveNumber++;
@@ -5794,8 +5839,194 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    // ═══ 🏆 Achievement Check (1s throttle) ═══
+    this.achievementCheckTimer = (this.achievementCheckTimer || 0) + dt;
+    if (this.achievementCheckTimer >= 1) {
+      this.achievementCheckTimer = 0;
+      this._checkAchievements();
+    }
+
+    // ═══ 🎲 Random Event System (5min interval) ═══
+    this.randomEventTimer = (this.randomEventTimer || 0) + dt;
+    if (this.randomEventTimer >= 300) {
+      this.randomEventTimer = 0;
+      this._triggerRandomEvent();
+    }
+    // Clean up expired random events
+    this._updateRandomEvents();
+
     this.checkQuests();
     this.updateUI();
+  }
+
+  // ═══ 🏆 ACHIEVEMENT METHODS ═══
+  _checkAchievements() {
+    const kills = this.upgradeManager ? this.upgradeManager.totalKills : 0;
+    const elapsed = this.gameElapsed || 0;
+    const combo = this.killCombo || 0;
+    const maxCombo = Math.max(combo, this.stats.maxCombo || 0);
+    const lv = this.playerLevel || 1;
+    const eq = { rare: this.gotRareEquip, epic: this.gotEpicEquip };
+    const bossK = this.bossKillCount || 0;
+    const craftC = this.stats.crafted || 0;
+
+    const checks = {
+      first_blood:    kills >= 1,
+      survivor_5:     elapsed >= 300,
+      combo_10:       maxCombo >= 10,
+      level_10:       lv >= 10,
+      equipment_rare: eq.rare,
+      equipment_epic: eq.epic,
+      boss_kill:      bossK >= 1,
+      craft_1:        craftC >= 1,
+      survivor_30:    elapsed >= 1800,
+      kills_100:      kills >= 100,
+    };
+
+    for (const ach of ACHIEVEMENTS) {
+      if (this.achievementUnlocked[ach.id]) continue;
+      if (this._savedAchievements[ach.id]) { this.achievementUnlocked[ach.id] = true; continue; }
+      if (checks[ach.id]) {
+        this.achievementUnlocked[ach.id] = true;
+        this._savedAchievements[ach.id] = true;
+        try { localStorage.setItem('achievements_whiteout', JSON.stringify(this._savedAchievements)); } catch(e) {}
+        this._showAchievementBanner(ach);
+      }
+    }
+  }
+
+  _showAchievementBanner(ach) {
+    const cam = this.cameras.main;
+    const W = cam.width;
+    const cardW = Math.min(280, W * 0.6);
+    const cardH = 80;
+    const startX = W + cardW / 2;
+    const endX = W - cardW / 2 - 10;
+    const yPos = 60;
+
+    const container = this.add.container(startX, yPos).setScrollFactor(0).setDepth(500);
+
+    // Card background
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1a1a2e, 0.95);
+    bg.fillRoundedRect(-cardW/2, -cardH/2, cardW, cardH, 10);
+    bg.lineStyle(2, 0xDAA520, 1);
+    bg.strokeRoundedRect(-cardW/2, -cardH/2, cardW, cardH, 10);
+    container.add(bg);
+
+    const title = this.add.text(0, -cardH/2 + 14, '🏆 성취 달성!', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#DAA520', fontStyle: 'bold'
+    }).setOrigin(0.5);
+    container.add(title);
+
+    const body = this.add.text(0, 6, `${ach.icon} ${ach.name}`, {
+      fontSize: '16px', fontFamily: 'monospace', color: '#FFFFFF', fontStyle: 'bold'
+    }).setOrigin(0.5);
+    container.add(body);
+
+    const desc = this.add.text(0, cardH/2 - 14, ach.desc, {
+      fontSize: '11px', fontFamily: 'monospace', color: '#AAAAAA'
+    }).setOrigin(0.5);
+    container.add(desc);
+
+    // Slide in
+    this.tweens.add({ targets: container, x: endX, duration: 500, ease: 'Back.Out' });
+    // Slide out after 3s
+    this.tweens.add({
+      targets: container, x: startX + 50, duration: 400, ease: 'Quad.In', delay: 3000,
+      onComplete: () => container.destroy()
+    });
+  }
+
+  // ═══ 🎲 RANDOM EVENT METHODS ═══
+  _triggerRandomEvent() {
+    const evt = RANDOM_EVENTS[Math.floor(Math.random() * RANDOM_EVENTS.length)];
+    this._showEventBanner(evt);
+
+    switch (evt.action) {
+      case 'spawn_chest':
+        this.spawnSupplyCrate();
+        break;
+      case 'blizzard_double':
+        this.activeRandomEvents.blizzard_double = { endTime: this.gameElapsed + (evt.duration || 30), origMul: this.blizzardMultiplier };
+        this.blizzardMultiplier = Math.max(this.blizzardMultiplier, 1) * 2;
+        break;
+      case 'spawn_rush':
+        this.activeRandomEvents.spawn_rush = { endTime: this.gameElapsed + (evt.duration || 30) };
+        // Immediately spawn a wave of enemies
+        for (let i = 0; i < 10; i++) {
+          const spawnConfig = this.getSpawnConfig();
+          this.spawnAnimal(this.pickAnimalType(spawnConfig.weights));
+        }
+        break;
+      case 'drop_fever':
+        this.activeRandomEvents.drop_fever = { endTime: this.gameElapsed + (evt.duration || 30) };
+        break;
+      case 'heal_boost':
+        this.activeRandomEvents.heal_boost = { endTime: this.gameElapsed + (evt.duration || 30) };
+        break;
+    }
+  }
+
+  _showEventBanner(evt) {
+    const cam = this.cameras.main;
+    const W = cam.width;
+    const bannerW = Math.min(400, W * 0.85);
+    const bannerH = 70;
+
+    const container = this.add.container(W / 2, -bannerH).setScrollFactor(0).setDepth(500);
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1a0a00, 0.92);
+    bg.fillRoundedRect(-bannerW/2, -bannerH/2, bannerW, bannerH, 12);
+    bg.lineStyle(2, 0xFF8C00, 1);
+    bg.strokeRoundedRect(-bannerW/2, -bannerH/2, bannerW, bannerH, 12);
+    container.add(bg);
+
+    const title = this.add.text(0, -12, evt.name, {
+      fontSize: '16px', fontFamily: 'monospace', color: '#FF8C00', fontStyle: 'bold'
+    }).setOrigin(0.5);
+    container.add(title);
+
+    const desc = this.add.text(0, 14, evt.desc, {
+      fontSize: '11px', fontFamily: 'monospace', color: '#FFDDAA'
+    }).setOrigin(0.5);
+    container.add(desc);
+
+    // Slide down
+    this.tweens.add({ targets: container, y: 50, duration: 400, ease: 'Back.Out' });
+    // Slide up after 3s
+    this.tweens.add({
+      targets: container, y: -bannerH - 10, duration: 400, ease: 'Quad.In', delay: 3000,
+      onComplete: () => container.destroy()
+    });
+  }
+
+  _updateRandomEvents() {
+    const now = this.gameElapsed || 0;
+    const active = this.activeRandomEvents;
+    if (!active) return;
+
+    // Blizzard double
+    if (active.blizzard_double && now >= active.blizzard_double.endTime) {
+      this.blizzardMultiplier = active.blizzard_double.origMul || 1;
+      delete active.blizzard_double;
+    }
+
+    // Spawn rush ended (no cleanup needed, was instant burst)
+    if (active.spawn_rush && now >= active.spawn_rush.endTime) {
+      delete active.spawn_rush;
+    }
+
+    // Drop fever - applied in _tryDropEquipment
+    if (active.drop_fever && now >= active.drop_fever.endTime) {
+      delete active.drop_fever;
+    }
+
+    // Heal boost - applied in regen section
+    if (active.heal_boost && now >= active.heal_boost.endTime) {
+      delete active.heal_boost;
+    }
   }
 
   showZoneAlert(text) {
