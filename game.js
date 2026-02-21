@@ -2013,7 +2013,16 @@ class TitleScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     const allElements = [];
-    const destroy = () => allElements.forEach(o => { try { o.destroy(); } catch(e) {} });
+    // Hide DOM HUD behind class selection
+    const _csHud = document.getElementById('dom-hud');
+    const _csBtns = document.getElementById('bottom-buttons');
+    if (_csHud) _csHud.style.visibility = 'hidden';
+    if (_csBtns) _csBtns.style.display = 'none';
+    const destroy = () => {
+      allElements.forEach(o => { try { o.destroy(); } catch(e) {} });
+      if (_csHud) _csHud.style.visibility = 'visible';
+      if (_csBtns) _csBtns.style.display = '';
+    };
 
     // Overlay
     const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.85).setInteractive().setDepth(200);
@@ -4457,6 +4466,7 @@ class GameScene extends Phaser.Scene {
       a._hitCount = (a._hitCount || 0) + 1;
       if (a._hitCount % 5 === 1) this._hitStop(80);
     }
+    if (a.hp == null) a.hp = 0;
     a.hp -= dmg; a.hitFlash = 0.2; a.setTint(0xFF4444); playHit();
     if (a.isBoss && this._questProgress) this._questProgress.boss_damage_dealt += dmg;
     const fs = isCrit ? '28px' : dmg >= 3 ? '20px' : '16px';
@@ -4509,7 +4519,7 @@ class GameScene extends Phaser.Scene {
     if (a.hp <= 0) this.killAnimal(a);
   }
 
-  killAnimal(a) { playKill(); this._hitStop(40); // kill hitstop
+  killAnimal(a) { if (!a || !a.active) return; playKill(); this._hitStop(40); // kill hitstop
     // ═══ Type-specific death effects ═══
     if (a.animalType === 'ice_golem') {
       // Ice shard explosion + shockwave
@@ -4859,15 +4869,18 @@ class GameScene extends Phaser.Scene {
       // Area explosion at tier 4+
       if (newTier >= 4 && killX && killY) {
         const radius = 150;
+        const toKill = [];
         this.animals.getChildren().forEach(en => {
+          if (!en || !en.active) return;
           const dx = en.x - killX, dy = en.y - killY;
           if (Math.sqrt(dx*dx + dy*dy) < radius) {
             const dmg = 50;
             en.hp = (en.hp || 0) - dmg;
             this.showFloatingText(en.x, en.y - 20, `-${dmg}`, '#FF4400');
-            if (en.hp <= 0) this.killAnimal(en);
+            if (en.hp <= 0) toKill.push(en);
           }
         });
+        toKill.forEach(en => { if (en.active) this.killAnimal(en); });
         // Explosion ring
         for (let i = 0; i < 16; i++) {
           const ang = (Math.PI * 2 / 16) * i;
@@ -5398,6 +5411,7 @@ class GameScene extends Phaser.Scene {
           duration: 1500, ease: 'Linear',
           onUpdate: () => {
             // Check hits on animals
+            const _shotgunKills = [];
             this.animals.getChildren().forEach(a => {
               if (!a.active || a._shotgunHit) return;
               const d = Phaser.Math.Distance.Between(bullet.x, bullet.y, a.x, a.y);
@@ -5406,9 +5420,10 @@ class GameScene extends Phaser.Scene {
                 a.setTint(0xFFFF00);
                 this.time.delayedCall(150, () => { if (a.active) a.clearTint(); });
                 this.showFloatingText(a.x, a.y - 20, '-150', '#FFDD00');
-                if (a.hp <= 0) this.killAnimal(a);
+                if (a.hp <= 0) _shotgunKills.push(a);
               }
             });
+            _shotgunKills.forEach(a => { if (a.active) this.killAnimal(a); });
           },
           onComplete: () => bullet.destroy()
         });
@@ -5461,6 +5476,7 @@ class GameScene extends Phaser.Scene {
       if (this._fireBreathTimer <= 0) {
         this._fireBreathTimer = 0.3;
         const dir2 = this.facingRight ? 0 : Math.PI;
+        const _fireKills = [];
         this.animals.getChildren().forEach(a => {
           if (!a.active) return;
           const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
@@ -5473,9 +5489,10 @@ class GameScene extends Phaser.Scene {
             a.hp -= 10;
             a.setTint(0xFF4400);
             this.time.delayedCall(100, () => { if (a.active) a.clearTint(); });
-            if (a.hp <= 0) this.killAnimal(a);
+            if (a.hp <= 0) _fireKills.push(a);
           }
         });
+        _fireKills.forEach(a => { if (a.active) this.killAnimal(a); });
       }
       if (this.activeBuffs.fire.remaining <= 0) delete this.activeBuffs.fire;
     }
@@ -6555,10 +6572,20 @@ class GameScene extends Phaser.Scene {
       document.removeEventListener('mouseup', onMouseUp);
       const baseEl = document.getElementById('vjoystick-base');
       if (baseEl) baseEl.remove();
+      // Hide DOM HUD on scene exit
+      const domHud = document.getElementById('dom-hud');
+      const bottomBtns = document.getElementById('bottom-buttons');
+      if (domHud) domHud.style.visibility = 'hidden';
+      if (bottomBtns) bottomBtns.style.display = 'none';
     });
   }
 
   createUI() {
+    // Restore DOM HUD visibility on game start
+    const domHud = document.getElementById('dom-hud');
+    const bottomBtns = document.getElementById('bottom-buttons');
+    if (domHud) domHud.style.visibility = 'visible';
+    if (bottomBtns) bottomBtns.style.display = '';
     // HUD is now fully DOM-based (see index.html #dom-hud)
     // Create inventory capacity element dynamically
     const resEl = document.getElementById('res-text');
@@ -6993,6 +7020,12 @@ class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const W = cam.width, H = cam.height;
 
+    // Hide DOM HUD during upgrade selection
+    const domHud = document.getElementById('dom-hud');
+    const bottomBtns = document.getElementById('bottom-buttons');
+    if (domHud) domHud.style.visibility = 'hidden';
+    if (bottomBtns) bottomBtns.style.display = 'none';
+
     // Clean up any previous upgrade UI elements to prevent text overlap
     if (this._upgradeUIElements) {
       this._upgradeUIElements.forEach(el => {
@@ -7274,6 +7307,11 @@ class GameScene extends Phaser.Scene {
       this.time.delayedCall(250, () => {
         this.upgradeUIActive = false;
         this.physics.resume();
+        // Restore DOM HUD
+        const _domHud = document.getElementById('dom-hud');
+        const _bottomBtns = document.getElementById('bottom-buttons');
+        if (_domHud) _domHud.style.visibility = 'visible';
+        if (_bottomBtns) _bottomBtns.style.display = '';
         // Auto-save after upgrade
         SaveManager.save(this);
         // Process queued level-ups (pendingLevelUps)
@@ -8686,14 +8724,16 @@ class GameScene extends Phaser.Scene {
         if (s.dmgTimer <= 0) {
           s.dmgTimer = 1; // every 1 second
           const spiritDmg = this._natureBlessing ? Math.round(15 * 1.15) : 15;
+          const _spiritKills = [];
           this.animals.getChildren().forEach(a => {
             if (!a.active || a.hp <= 0) return;
             if (Phaser.Math.Distance.Between(s.sprite.x, s.sprite.y, a.x, a.y) < 100) {
               a.hp -= spiritDmg;
               this.showFloatingText(a.x, a.y - 15, '-' + spiritDmg, '#4488FF');
-              if (a.hp <= 0) this.killAnimal(a);
+              if (a.hp <= 0) _spiritKills.push(a);
             }
           });
+          _spiritKills.forEach(a => { if (a.active) this.killAnimal(a); });
         }
         // Auto-collect XP drops nearby
         if (this.drops) {
@@ -8735,14 +8775,16 @@ class GameScene extends Phaser.Scene {
           stormDmgTimer -= 0.05;
           if (stormDmgTimer <= 0) {
             stormDmgTimer = 1;
+            const _stormKills = [];
             this.animals.getChildren().forEach(a => {
               if (!a.active || a.hp <= 0) return;
               if (Phaser.Math.Distance.Between(storm.x, storm.y, a.x, a.y) < 120) {
                 a.hp -= 50;
                 this.showFloatingText(a.x, a.y - 15, '-50🌀', '#9B59B6');
-                if (a.hp <= 0) this.killAnimal(a);
+                if (a.hp <= 0) _stormKills.push(a);
               }
             });
+            _stormKills.forEach(a => { if (a.active) this.killAnimal(a); });
           }
         }});
       }
@@ -9130,11 +9172,13 @@ class GameScene extends Phaser.Scene {
         if (this.upgradeManager._spiritBombTimer >= 10) {
           this.upgradeManager._spiritBombTimer = 0;
           this.cameras.main.flash(200, 200, 100, 255, true);
+          const _quakeKills = [];
           this.animals.getChildren().forEach(a => {
             if (!a.active || a.hp === undefined) return;
             a.hp -= 50;
-            if (a.hp <= 0) this.killAnimal(a);
+            if (a.hp <= 0) _quakeKills.push(a);
           });
+          _quakeKills.forEach(a => { if (a.active) this.killAnimal(a); });
         }
       }
     }
