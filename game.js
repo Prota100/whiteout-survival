@@ -378,6 +378,17 @@ const UPGRADES = {
   ARMOR:            { name: '방어구', desc: '받는 데미지 -20%', icon: '🛡️', category: 'survival', maxLevel: 3, rarity: 'common' },
   WINTER_HEART:     { name: '겨울 심장', desc: '한파 중 공격력 +20%', icon: '💙', category: 'special', maxLevel: 2, rarity: 'epic' },
   SCAVENGER:        { name: '약탈자', desc: '자원 채취 속도 +30%', icon: '🦅', category: 'economy', maxLevel: 3, rarity: 'common' },
+  // === 추가 10종 (Phase 2) ===
+  CHAIN_LIGHTNING:   { name: '연쇄 번개', desc: '공격이 2마리에게 연쇄 (30% 데미지)', icon: '⚡', category: 'combat', maxLevel: 2, rarity: 'epic' },
+  ICE_AURA:          { name: '얼음 오라', desc: '주변 100px 적 이동속도 -30%', icon: '❄️', category: 'special', maxLevel: 2, rarity: 'rare' },
+  LIFE_STEAL_PCT:    { name: '생명 흡수%', desc: '데미지의 10%를 HP로 회복', icon: '🩸', category: 'survival', maxLevel: 3, rarity: 'rare' },
+  SHIELD_BASH:       { name: '방패 강타', desc: '5초마다 다음 공격이 스턴(0.5초)', icon: '🛡️', category: 'combat', maxLevel: 2, rarity: 'rare' },
+  DOUBLE_SHOT:       { name: '더블샷', desc: '30% 확률로 공격 2회 발사', icon: '🎯', category: 'combat', maxLevel: 2, rarity: 'epic' },
+  THORNS:            { name: '가시 갑옷', desc: '피격 시 공격자에게 5 반사 데미지', icon: '🌵', category: 'survival', maxLevel: 3, rarity: 'common' },
+  TIME_WARP:         { name: '시간 왜곡', desc: '15초마다 주변 적 1초 동결', icon: '⏰', category: 'special', maxLevel: 2, rarity: 'epic' },
+  XP_SCAVENGER:      { name: '수집가', desc: 'XP 획득 범위 +50%', icon: '🧲', category: 'economy', maxLevel: 2, rarity: 'common' },
+  ADRENALINE:        { name: '아드레날린', desc: 'HP 30% 이하 시 공격속도 +50%', icon: '💉', category: 'combat', maxLevel: 2, rarity: 'rare' },
+  BLIZZARD_CLOAK:    { name: '설원 망토', desc: '한파 중 이동속도 패널티 없음', icon: '🧥', category: 'survival', maxLevel: 1, rarity: 'rare' },
 };
 
 // ═══ 경험치(XP) 시스템 ═══
@@ -852,8 +863,14 @@ class UpgradeManager {
     this.swiftStrikeActive = false;
     this.swiftStrikeUsed = false; // tracks if first attack bonus was used
     this.frostWalkerActive = false;
-    this.swiftStrikeApplied = false; // For SWIFT_STRIKE Lvl 1: true after first bonus used, reset on upgrade/load
-    this.attackCounter = 0; // For SWIFT_STRIKE Lvl 2: count attacks
+    this.swiftStrikeApplied = false;
+    this.attackCounter = 0;
+    // Phase 2
+    this.chainLightningLevel = 0; this.iceAuraLevel = 0; this.lifeStealPct = 0;
+    this.shieldBashActive = false; this.shieldBashCD = 0; this.shieldBashReady = false;
+    this.doubleShotChance = 0; this.thornsDamage = 0;
+    this.timeWarpLevel = 0; this.timeWarpCD = 0;
+    this.xpScavengerBonus = 0; this.adrenalineLevel = 0; this.blizzardCloakActive = false;
   }
 
   getLevel(key) { return this.levels[key] || 0; }
@@ -981,6 +998,17 @@ class UpgradeManager {
       case 'SCAVENGER': this.scavengerSpeed += 0.3; break;
       case 'SWIFT_STRIKE': this.swiftStrikeActive = true; break;
       case 'FROST_WALKER': this.frostWalkerActive = true; break;
+      // === Phase 2 신규 10종 ===
+      case 'CHAIN_LIGHTNING': this.chainLightningLevel = lv; break;
+      case 'ICE_AURA': this.iceAuraLevel = lv; break;
+      case 'LIFE_STEAL_PCT': this.lifeStealPct = lv * 0.10; break;
+      case 'SHIELD_BASH': this.shieldBashActive = true; this.shieldBashCD = 0; break;
+      case 'DOUBLE_SHOT': this.doubleShotChance = Math.min(0.6, lv * 0.30); break;
+      case 'THORNS': this.thornsDamage = lv * 5; break;
+      case 'TIME_WARP': this.timeWarpLevel = lv; this.timeWarpCD = 0; break;
+      case 'XP_SCAVENGER': this.xpScavengerBonus = lv * 0.50; this.magnetRange = Math.round((70 + this.getLevel('MAGNET') * 50) * (1 + this.xpScavengerBonus)); break;
+      case 'ADRENALINE': this.adrenalineLevel = lv; break;
+      case 'BLIZZARD_CLOAK': this.blizzardCloakActive = true; break;
     }
   }
 
@@ -1013,8 +1041,13 @@ class UpgradeManager {
       this.treasureHunterBonus = 0; this.armorReduction = 0; this.vampireHeal = 0;
       this.winterHeartBonus = 0; this.scavengerSpeed = 0;
       this.swiftStrikeActive = false; this.swiftStrikeUsed = false; this.frostWalkerActive = false;
-      this.swiftStrikeApplied = false; // Reset for new session
-      this.attackCounter = 0; // Reset for new session
+      this.swiftStrikeApplied = false; this.attackCounter = 0;
+      // Phase 2 resets
+      this.chainLightningLevel = 0; this.iceAuraLevel = 0; this.lifeStealPct = 0;
+      this.shieldBashActive = false; this.shieldBashCD = 0; this.shieldBashReady = false;
+      this.doubleShotChance = 0; this.thornsDamage = 0;
+      this.timeWarpLevel = 0; this.timeWarpCD = 0;
+      this.xpScavengerBonus = 0; this.adrenalineLevel = 0; this.blizzardCloakActive = false;
       Object.entries(savedLevels).forEach(([key, lv]) => {
         for (let i = 0; i < lv; i++) this.applyUpgrade(key, scene);
       });
@@ -1375,112 +1408,177 @@ class TitleScene extends Phaser.Scene {
     });
   }
   
-  _showMetaUpgradeUI() {
+  _showMetaUpgradeUI(activeTab) {
     const W = this.scale.width;
     const H = this.scale.height;
-    
+    const allElements = [];
+    const destroy = () => allElements.forEach(o => { try { o.destroy(); } catch(e) {} });
+
     // Overlay
-    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.8).setInteractive().setDepth(100);
-    
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.85).setInteractive().setDepth(100);
+    allElements.push(overlay);
+
     // Panel
     const panel = this.add.graphics().setDepth(101);
-    const pw = Math.min(400, W * 0.85);
-    const ph = Math.min(500, H * 0.8);
-    panel.fillStyle(0x1a1a2e, 0.98);
-    panel.fillRoundedRect(W / 2 - pw / 2, H / 2 - ph / 2, pw, ph, 12);
-    panel.lineStyle(2, 0xaa44aa, 0.8);
-    panel.strokeRoundedRect(W / 2 - pw / 2, H / 2 - ph / 2, pw, ph, 12);
-    
+    const pw = Math.min(420, W * 0.9);
+    const ph = Math.min(560, H * 0.88);
+    const px0 = W / 2 - pw / 2, py0 = H / 2 - ph / 2;
+    panel.fillStyle(0x0A0E1A, 0.98);
+    panel.fillRoundedRect(px0, py0, pw, ph, 14);
+    panel.lineStyle(2, 0xaa44aa, 0.6);
+    panel.strokeRoundedRect(px0, py0, pw, ph, 14);
+    allElements.push(panel);
+
     // Title
-    const title = this.add.text(W / 2, H / 2 - ph / 2 + 30, '🔮 영구 강화', {
-      fontSize: '24px', fontFamily: 'monospace', color: '#ddaaff'
-    }).setOrigin(0.5).setDepth(102);
-    
-    // Points display
+    allElements.push(this.add.text(W / 2, py0 + 24, '🔮 영구 강화', {
+      fontSize: '22px', fontFamily: 'monospace', color: '#ddaaff', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(102));
+
+    // Points display - big
     const available = MetaManager.getAvailablePoints();
-    const pointsTxt = this.add.text(W / 2, H / 2 - ph / 2 + 60, `💎 보유 포인트: ${available}`, {
-      fontSize: '16px', fontFamily: 'monospace', color: '#ffdd44'
-    }).setOrigin(0.5).setDepth(102);
-    
     const meta = MetaManager.load();
-    let yPos = H / 2 - ph / 2 + 100;
-    const items = [];
-    
-    // Upgrade definitions
-    const upgrades = [
-      { key: 'startHP', name: '❤️ 시작 체력', desc: '+20 HP', max: 5 },
-      { key: 'startTempResist', name: '🧥 체온 저항', desc: '+5% 저항', max: 5 },
-      { key: 'startWood', name: '🪵 시작 나무', desc: '+3 나무', max: 5 },
-      { key: 'extraCard', name: '🎴 카드 선택', desc: '+1 선택지', max: 3 }
+    allElements.push(this.add.text(W / 2, py0 + 52, `💎 ${available} 포인트`, {
+      fontSize: '20px', fontFamily: 'monospace', color: '#FFD700', stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(102));
+
+    // Tabs
+    const tabs = [
+      { id: 'attack', label: '⚔️ 공격', color: 0xFF4444 },
+      { id: 'defense', label: '🛡️ 방어', color: 0x4488FF },
+      { id: 'util', label: '🔧 유틸', color: 0x44FF88 },
+      { id: 'equip', label: '🎒 장비', color: 0xFFAA44 }
     ];
-    
+    const currentTab = activeTab || 'attack';
+    const tabW = (pw - 20) / tabs.length;
+    const tabY = py0 + 76;
+    tabs.forEach((tab, i) => {
+      const tx = px0 + 10 + i * tabW;
+      const isActive = tab.id === currentTab;
+      const tg = this.add.graphics().setDepth(102);
+      tg.fillStyle(isActive ? tab.color : 0x1a1a2e, isActive ? 0.9 : 0.5);
+      tg.fillRoundedRect(tx, tabY, tabW - 4, 28, { tl: 6, tr: 6, bl: 0, br: 0 });
+      if (isActive) { tg.lineStyle(1, tab.color, 0.8); tg.strokeRoundedRect(tx, tabY, tabW - 4, 28, { tl: 6, tr: 6, bl: 0, br: 0 }); }
+      allElements.push(tg);
+      allElements.push(this.add.text(tx + (tabW - 4) / 2, tabY + 14, tab.label, {
+        fontSize: '12px', fontFamily: 'monospace', color: isActive ? '#fff' : '#889'
+      }).setOrigin(0.5).setDepth(103));
+      const tabHit = this.add.rectangle(tx + (tabW - 4) / 2, tabY + 14, tabW - 4, 28, 0, 0).setInteractive({ useHandCursor: true }).setDepth(104);
+      tabHit.on('pointerdown', () => { destroy(); this._showMetaUpgradeUI(tab.id); });
+      allElements.push(tabHit);
+    });
+
+    // Upgrade definitions per tab
+    const allUpgrades = {
+      attack: [
+        { key: 'startHP', name: '❤️ 시작 체력', desc: 'Lv당 +20 HP', max: 5, icon: '❤️' },
+        { key: 'extraCard', name: '🎴 카드 선택지', desc: 'Lv당 +1 선택지', max: 3, icon: '🎴' },
+      ],
+      defense: [
+        { key: 'startTempResist', name: '🧥 체온 저항', desc: 'Lv당 +5% 저항', max: 5, icon: '🧥' },
+      ],
+      util: [
+        { key: 'startWood', name: '🪵 시작 나무', desc: 'Lv당 +3 나무', max: 5, icon: '🪵' },
+      ],
+      equip: []
+    };
+    const upgrades = allUpgrades[currentTab] || [];
+    const cardW = pw - 40;
+    const cardH = 72;
+    let yPos = tabY + 38;
+    const RARITY_COLORS = { common: 0x888888, rare: 0x4488FF, epic: 0xAA44FF, legendary: 0xFFAA00 };
+
+    if (upgrades.length === 0) {
+      allElements.push(this.add.text(W / 2, yPos + 60, '🚧 준비 중...', {
+        fontSize: '16px', fontFamily: 'monospace', color: '#667788'
+      }).setOrigin(0.5).setDepth(103));
+    }
+
     upgrades.forEach(upg => {
-      const level = meta.upgrades[upg.key];
+      const level = meta.upgrades[upg.key] || 0;
       const cost = MetaManager.getUpgradeCost(upg.key, level);
       const canBuy = available >= cost && level < upg.max;
       const maxed = level >= upg.max;
-      
-      // Item bg
-      const itemBg = this.add.graphics().setDepth(102);
-      itemBg.fillStyle(canBuy ? 0x332244 : 0x222233, 0.9);
-      itemBg.fillRoundedRect(W / 2 - pw / 2 + 20, yPos - 10, pw - 40, 70, 8);
-      
-      // Name & desc
-      this.add.text(W / 2 - pw / 2 + 35, yPos + 5, `${upg.name} (Lv.${level}/${upg.max})`, {
-        fontSize: '14px', fontFamily: 'monospace', color: maxed ? '#88ff88' : '#ccccdd'
-      }).setOrigin(0, 0).setDepth(103);
-      
-      this.add.text(W / 2 - pw / 2 + 35, yPos + 25, upg.desc, {
-        fontSize: '11px', fontFamily: 'monospace', color: '#8899aa'
-      }).setOrigin(0, 0).setDepth(103);
-      
-      // Cost or Maxed
-      const costTxt = maxed ? '최대' : `${cost} 포인트`;
-      this.add.text(W / 2 + pw / 2 - 35, yPos + 20, costTxt, {
-        fontSize: '12px', fontFamily: 'monospace', color: maxed ? '#88ff88' : (canBuy ? '#ffdd44' : '#ff6666')
-      }).setOrigin(1, 0).setDepth(103);
-      
-      // Upgrade button
+
+      // Card background
+      const cg = this.add.graphics().setDepth(102);
+      const borderColor = maxed ? 0xFFD700 : (canBuy ? 0xaa44aa : 0x333344);
+      cg.fillStyle(canBuy ? 0x151928 : 0x0D1018, 0.95);
+      cg.fillRoundedRect(px0 + 20, yPos, cardW, cardH, 8);
+      cg.lineStyle(maxed ? 2 : 1, borderColor, maxed ? 1 : 0.5);
+      cg.strokeRoundedRect(px0 + 20, yPos, cardW, cardH, 8);
+      allElements.push(cg);
+
+      // Icon
+      allElements.push(this.add.text(px0 + 38, yPos + cardH / 2, upg.icon, {
+        fontSize: '24px'
+      }).setOrigin(0.5).setDepth(103));
+
+      // Name + Level
+      const nameColor = maxed ? '#FFD700' : '#ccddee';
+      allElements.push(this.add.text(px0 + 58, yPos + 10, upg.name, {
+        fontSize: '13px', fontFamily: 'monospace', color: nameColor, fontStyle: 'bold'
+      }).setOrigin(0, 0).setDepth(103));
+
+      // Level progress bar
+      const barX = px0 + 58, barY = yPos + 28, barW = cardW - 120, barH = 8;
+      const pg = this.add.graphics().setDepth(103);
+      pg.fillStyle(0x222233, 0.8); pg.fillRoundedRect(barX, barY, barW, barH, 4);
+      const fillW = upg.max > 0 ? (barW * level / upg.max) : 0;
+      pg.fillStyle(maxed ? 0xFFD700 : 0xaa44aa, 0.9); pg.fillRoundedRect(barX, barY, fillW, barH, 4);
+      allElements.push(pg);
+      allElements.push(this.add.text(barX + barW + 4, barY - 1, maxed ? 'MAX' : `${level}/${upg.max}`, {
+        fontSize: '10px', fontFamily: 'monospace', color: maxed ? '#FFD700' : '#8899aa'
+      }).setOrigin(0, 0).setDepth(103));
+
+      // Description
+      allElements.push(this.add.text(px0 + 58, yPos + 42, upg.desc, {
+        fontSize: '10px', fontFamily: 'monospace', color: '#667788'
+      }).setOrigin(0, 0).setDepth(103));
+
+      // Cost + Buy button
       if (!maxed) {
-        const btnBg = this.add.graphics().setDepth(103);
-        btnBg.fillStyle(canBuy ? 0xaa44aa : 0x444455, 0.9);
-        btnBg.fillRoundedRect(W / 2 + pw / 2 - 90, yPos + 40, 70, 24, 4);
-        
-        const btnTxt = this.add.text(W / 2 + pw / 2 - 55, yPos + 52, '강화', {
-          fontSize: '12px', fontFamily: 'monospace', color: canBuy ? '#fff' : '#888'
-        }).setOrigin(0.5).setDepth(104);
-        
+        allElements.push(this.add.text(px0 + cardW - 10, yPos + 12, `${cost}💎`, {
+          fontSize: '11px', fontFamily: 'monospace', color: canBuy ? '#FFD700' : '#ff5555'
+        }).setOrigin(1, 0).setDepth(103));
+        const btnX = px0 + cardW - 10, btnY2 = yPos + 38;
+        const bg2 = this.add.graphics().setDepth(103);
+        bg2.fillStyle(canBuy ? 0xaa44aa : 0x333344, 0.9);
+        bg2.fillRoundedRect(btnX - 52, btnY2, 56, 22, 4);
+        allElements.push(bg2);
+        allElements.push(this.add.text(btnX - 24, btnY2 + 11, canBuy ? '강화' : '부족', {
+          fontSize: '11px', fontFamily: 'monospace', color: canBuy ? '#fff' : '#666'
+        }).setOrigin(0.5).setDepth(104));
         if (canBuy) {
-          const btnHit = this.add.rectangle(W / 2 + pw / 2 - 55, yPos + 52, 70, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(105);
-          btnHit.on('pointerdown', () => {
-            if (MetaManager.doUpgrade(upg.key)) {
-              // Refresh UI
-              [overlay, panel, title, pointsTxt, ...items].forEach(o => o.destroy());
-              this._showMetaUpgradeUI();
-            }
-          });
-          items.push(btnHit);
+          const hit = this.add.rectangle(btnX - 24, btnY2 + 11, 56, 22, 0, 0).setInteractive({ useHandCursor: true }).setDepth(105);
+          hit.on('pointerdown', () => { if (MetaManager.doUpgrade(upg.key)) { destroy(); this._showMetaUpgradeUI(currentTab); } });
+          allElements.push(hit);
         }
-        items.push(btnBg, btnTxt);
+      } else {
+        allElements.push(this.add.text(px0 + cardW - 10, yPos + cardH / 2, '✅ MAX', {
+          fontSize: '14px', fontFamily: 'monospace', color: '#FFD700', fontStyle: 'bold'
+        }).setOrigin(1, 0.5).setDepth(103));
       }
-      
-      items.push(itemBg);
-      yPos += 85;
+
+      yPos += cardH + 8;
     });
-    
+
+    // Stats
+    const statsY = H / 2 + ph / 2 - 70;
+    allElements.push(this.add.text(W / 2, statsY, `🏆 최고: ${Math.floor(meta.bestTime/60)}분${Math.floor(meta.bestTime%60)}초 | 🎮 ${meta.totalRuns}회`, {
+      fontSize: '11px', fontFamily: 'monospace', color: '#667788'
+    }).setOrigin(0.5).setDepth(103));
+
     // Close button
     const closeBg = this.add.graphics().setDepth(102);
-    closeBg.fillStyle(0x444466, 0.9);
-    closeBg.fillRoundedRect(W / 2 - 50, H / 2 + ph / 2 - 50, 100, 36, 6);
-    const closeTxt = this.add.text(W / 2, H / 2 + ph / 2 - 32, '닫기', {
+    closeBg.fillStyle(0x334455, 0.9);
+    closeBg.fillRoundedRect(W / 2 - 50, H / 2 + ph / 2 - 46, 100, 34, 6);
+    allElements.push(closeBg);
+    allElements.push(this.add.text(W / 2, H / 2 + ph / 2 - 29, '닫기', {
       fontSize: '14px', fontFamily: 'monospace', color: '#aabbcc'
-    }).setOrigin(0.5).setDepth(103);
-    const closeHit = this.add.rectangle(W / 2, H / 2 + ph / 2 - 32, 100, 36, 0, 0).setInteractive({ useHandCursor: true }).setDepth(104);
-    closeHit.on('pointerdown', () => {
-      [overlay, panel, title, pointsTxt, closeBg, closeTxt, closeHit, ...items].forEach(o => o.destroy());
-    });
-    
-    items.push(overlay, panel, title, pointsTxt, closeBg, closeTxt, closeHit);
+    }).setOrigin(0.5).setDepth(103));
+    const closeHit = this.add.rectangle(W / 2, H / 2 + ph / 2 - 29, 100, 34, 0, 0).setInteractive({ useHandCursor: true }).setDepth(104);
+    closeHit.on('pointerdown', destroy);
+    allElements.push(closeHit);
   }
   
   _showStatsPopup() {
@@ -2974,12 +3072,21 @@ class GameScene extends Phaser.Scene {
     // SWIFT_STRIKE Lvl 1 (or initial Lvl 2 bonus): 50% reduced cooldown for the next attack
     else if (this.upgradeManager.swiftStrikeActive && !this.upgradeManager.swiftStrikeApplied) {
       cd *= 0.5;
-      this.upgradeManager.swiftStrikeApplied = true; // Mark as applied
+      this.upgradeManager.swiftStrikeApplied = true;
     }
+    // Adrenaline: +50% attack speed when HP <= 30%
+    if (this._adrenalineActive) cd *= 0.5;
     return cd;
   }
 
   damageAnimal(a, dmg) {
+    // Shield Bash: stun on ready
+    if (this.upgradeManager.shieldBashReady) {
+      this.upgradeManager.shieldBashReady = false;
+      a.body.setVelocity(0, 0); a.body.moves = false;
+      this.showFloatingText(a.x, a.y - 30, '🛡️스턴!', '#FFD700');
+      this.time.delayedCall(500, () => { if (a.active) a.body.moves = true; });
+    }
     // Equipment attack bonus
     if (this._equipBonuses && this._equipBonuses.atkMul > 0) {
       dmg = Math.round(dmg * (1 + this._equipBonuses.atkMul));
@@ -3006,6 +3113,32 @@ class GameScene extends Phaser.Scene {
       const p = this.add.image(a.x, a.y, 'hit_particle').setDepth(15).setScale(Phaser.Math.FloatBetween(0.5, 1.2));
       this.tweens.add({ targets: p, x: a.x + Phaser.Math.Between(-30, 30), y: a.y + Phaser.Math.Between(-30, 30),
         alpha: 0, scale: 0, duration: 300, onComplete: () => p.destroy() });
+    }
+    // Life Steal %
+    if (this.upgradeManager.lifeStealPct > 0) {
+      const heal = Math.ceil(dmg * this.upgradeManager.lifeStealPct);
+      this.playerHP = Math.min(this.playerMaxHP, this.playerHP + heal);
+    }
+    // Chain Lightning
+    if (this.upgradeManager.chainLightningLevel > 0 && !a._chainSource) {
+      const chainDmg = Math.round(dmg * 0.3);
+      const chainCount = this.upgradeManager.chainLightningLevel;
+      let chained = 0;
+      this.animals.getChildren().forEach(b => {
+        if (!b.active || b === a || chained >= chainCount) return;
+        if (Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y) < 120) {
+          b._chainSource = true;
+          this.damageAnimal(b, chainDmg);
+          delete b._chainSource;
+          this.showFloatingText(b.x, b.y - 30, '⚡', '#FFFF00');
+          chained++;
+        }
+      });
+    }
+    // Double Shot
+    if (this.upgradeManager.doubleShotChance > 0 && !a._doubleShot && Math.random() < this.upgradeManager.doubleShotChance) {
+      a._doubleShot = true;
+      this.time.delayedCall(100, () => { if (a.active) { this.damageAnimal(a, dmg); delete a._doubleShot; } });
     }
     if (a.hp <= 0) this.killAnimal(a);
   }
@@ -4211,6 +4344,12 @@ class GameScene extends Phaser.Scene {
               }
               const actualDmg = a.def.damage * (1 - this.upgradeManager.armorReduction);
               this.playerHP -= actualDmg; a.atkCD = 1.2; playHurt();
+              // Thorns
+              if (this.upgradeManager.thornsDamage > 0 && a.active) {
+                a.hp -= this.upgradeManager.thornsDamage;
+                this.showFloatingText(a.x, a.y - 20, '🌵' + this.upgradeManager.thornsDamage, '#44FF44');
+                if (a.hp <= 0) this.killAnimal(a);
+              }
               this.cameras.main.shake(120, 0.012);
               this.player.setTint(0xFF4444);
               this.time.delayedCall(150, ()=>{if(this.player.active)this.player.clearTint();});
@@ -4302,6 +4441,10 @@ class GameScene extends Phaser.Scene {
         if (dist < 150) {
           a.body.velocity.scale(0.9);
         }
+      }
+      // ICE_AURA: slow enemies within 100px
+      if (this.upgradeManager.iceAuraLevel > 0 && dist < 100) {
+        a.body.velocity.scale(1 - 0.3 * this.upgradeManager.iceAuraLevel);
       }
 
       // 방향에 따른 스프라이트 전환 (뒷모습 포함)
@@ -4555,7 +4698,35 @@ class GameScene extends Phaser.Scene {
     });
 
     if (!this._nearCampfire) {
-      this.playerSpeed = this.blizzardActive ? this.playerBaseSpeed * 0.8 : this.playerBaseSpeed;
+      const blizzardSlow = (this.blizzardActive && !this.upgradeManager.blizzardCloakActive) ? 0.8 : 1;
+      this.playerSpeed = this.playerBaseSpeed * blizzardSlow;
+    }
+
+    // Shield Bash cooldown
+    if (this.upgradeManager.shieldBashActive) {
+      this.upgradeManager.shieldBashCD -= dt;
+      if (this.upgradeManager.shieldBashCD <= 0) { this.upgradeManager.shieldBashReady = true; this.upgradeManager.shieldBashCD = 5; }
+    }
+    // Time Warp
+    if (this.upgradeManager.timeWarpLevel > 0) {
+      this.upgradeManager.timeWarpCD -= dt;
+      if (this.upgradeManager.timeWarpCD <= 0) {
+        this.upgradeManager.timeWarpCD = 15;
+        this.animals.getChildren().forEach(a => {
+          if (!a.active) return;
+          const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
+          if (d < 100 * this.upgradeManager.timeWarpLevel) {
+            const sv = { x: a.body.velocity.x, y: a.body.velocity.y };
+            a.body.setVelocity(0, 0); a.body.moves = false;
+            this.showFloatingText(a.x, a.y - 20, '⏰', '#AADDFF');
+            this.time.delayedCall(1000, () => { if (a.active) { a.body.moves = true; a.body.setVelocity(sv.x, sv.y); } });
+          }
+        });
+      }
+    }
+    // Adrenaline
+    if (this.upgradeManager.adrenalineLevel > 0) {
+      this._adrenalineActive = (this.playerHP / this.playerMaxHP) <= 0.3;
     }
 
     // 🔊 Fire ambient
