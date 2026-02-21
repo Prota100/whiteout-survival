@@ -1,4 +1,4 @@
-// Whiteout Survival - ULTIMATE with Sound FX
+// Whiteout Survival v2.1 - ULTIMATE with Sound FX
 // All feedback applied: mobile, balance, visuals, campfire, buildings, SOUND
 
 // ═══ 🔊 SOUND ENGINE (ElevenLabs + Web Audio + Procedural BGM/Ambience) ═══
@@ -473,7 +473,7 @@ class SaveManager {
   static save(scene) {
     try {
       const saveData = {
-        version: '2.0',
+        version: '2.1',
         timestamp: Date.now(),
         player: {
           x: scene.player ? scene.player.x : WORLD_W / 2,
@@ -556,7 +556,7 @@ class MetaManager {
   
   static getDefault() {
     return {
-      version: '2.0',
+      version: '2.1',
       totalPoints: 0,
       spentPoints: 0,
       bestTime: 0,
@@ -1938,7 +1938,7 @@ class TitleScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Version text (Easter egg: 5 rapid clicks)
-    const versionText = this.add.text(W - 10, H - 10, 'v2.0', {
+    const versionText = this.add.text(W - 10, H - 10, 'v2.1', {
       fontSize: '11px', fontFamily: 'monospace', color: '#445566', alpha: 0.6
     }).setOrigin(1, 1).setDepth(20).setInteractive();
     let _vClickCount = 0, _vClickTimer = 0;
@@ -2121,7 +2121,7 @@ class TitleScene extends Phaser.Scene {
     }
 
     // Version
-    this.add.text(W - 10, H - 10, 'v2.0', {
+    this.add.text(W - 10, H - 10, 'v2.1', {
       fontSize: '11px', fontFamily: 'monospace', color: '#334'
     }).setOrigin(1, 1);
     
@@ -2587,7 +2587,7 @@ class TitleScene extends Phaser.Scene {
     };
     const endlessHit = this.add.rectangle(W/2 + 60, endlessY, 200, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
     advElements.push(endlessHit); allElements.push(endlessHit);
-    endlessHit.on('pointerdown', () => { endlessMode = !endlessMode; drawEndlessToggle(); });
+    endlessHit.on('pointerdown', () => { endlessMode = !endlessMode; if (endlessMode) { speedrunMode = false; drawSpeedrunToggle(); } drawEndlessToggle(); });
 
     const ngPlusY = endlessY + 28;
     const ngPlusGfx = this.add.graphics().setDepth(201);
@@ -2653,7 +2653,7 @@ class TitleScene extends Phaser.Scene {
     };
     const speedrunHit = this.add.rectangle(W/2 + 60, speedrunY, 200, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
     advElements.push(speedrunHit); allElements.push(speedrunHit);
-    speedrunHit.on('pointerdown', () => { speedrunMode = !speedrunMode; drawSpeedrunToggle(); });
+    speedrunHit.on('pointerdown', () => { speedrunMode = !speedrunMode; if (speedrunMode) { endlessMode = false; drawEndlessToggle(); } drawSpeedrunToggle(); });
 
     // ═══ Handicap Dropdown ═══
     const handicapOptions = ['none', 'glass_body', 'no_equipment', 'random_build', 'low_vision'];
@@ -7174,6 +7174,7 @@ class GameScene extends Phaser.Scene {
     let activeTouchId = null;
 
     const onStart = (e) => {
+      resumeAudio(); // Mobile Safari: unlock AudioContext on first touch
       if (self.gameOver) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
@@ -7255,6 +7256,14 @@ class GameScene extends Phaser.Scene {
       const bottomBtns = document.getElementById('bottom-buttons');
       if (domHud) domHud.style.visibility = 'hidden';
       if (bottomBtns) bottomBtns.style.display = 'none';
+      // Cleanup fog of war graphics
+      if (this._fogGraphics) { this._fogGraphics.destroy(); this._fogGraphics = null; }
+      if (this._fogMaskShape) { this._fogMaskShape.destroy(); this._fogMaskShape = null; }
+      this._fogMask = null;
+      // Cleanup speedrun HUD
+      if (this._speedrunTimerText) { this._speedrunTimerText.destroy(); this._speedrunTimerText = null; }
+      // Stop audio on scene exit
+      stopBGM(); stopWindAmbience();
     });
   }
 
@@ -8282,7 +8291,7 @@ class GameScene extends Phaser.Scene {
     const zoneParticleBonus = { safe: 0, normal: 5, danger: 15, extreme: 30 }[pZone] || 0;
     const zoneDriftMul = pZone === 'extreme' ? 3 : pZone === 'danger' ? 1.5 : 1;
     const zoneSizeMul = pZone === 'danger' ? 1.5 : pZone === 'extreme' ? 0.8 : 1;
-    const targetCount = (coldLevel >= 5 ? 100 : coldLevel >= 3 ? 50 : coldLevel >= 1 ? 20 : 0) + zoneParticleBonus;
+    const targetCount = Math.min(200, (coldLevel >= 5 ? 100 : coldLevel >= 3 ? 50 : coldLevel >= 1 ? 20 : 0) + zoneParticleBonus);
     const snowAlpha = coldLevel >= 5 ? 0.3 : coldLevel >= 3 ? 0.2 : 0.1;
     // Spawn missing particles
     while (this._snowParticles.length < targetCount) {
@@ -9305,6 +9314,14 @@ class GameScene extends Phaser.Scene {
     if (this._endlessMode) {
       statsLines.push(`♾️ 무한 모드`);
     }
+    if (this._speedrunMode) {
+      statsLines.push(`⚡ 스피드런 (+15 포인트)`);
+    }
+    if (this._handicap && this._handicap !== 'none') {
+      const hNames = { glass_body: '유리몸', no_equipment: '맨손', random_build: '랜덤 빌드', low_vision: '저시력' };
+      const hBonus = { glass_body: 15, no_equipment: 20, random_build: 10, low_vision: 25 };
+      statsLines.push(`🎯 핸디캡: ${hNames[this._handicap] || this._handicap} (+${hBonus[this._handicap] || 0} 포인트)`);
+    }
     if (this._dailyChallenge) {
       const dcCleared = isVictory;
       statsLines.push(dcCleared ? `📅 데일리 클리어! (${this._dailyChallenge.name})` : `📅 데일리: ${this._dailyChallenge.name}`);
@@ -9389,7 +9406,7 @@ class GameScene extends Phaser.Scene {
       .setScrollFactor(0).setDepth(304).setOrigin(0.5).setInteractive().setAlpha(0.001);
 
     // Button handlers
-    retryHit.on('pointerdown', () => { this.scene.start('Boot', { loadSave: false, difficulty: this._difficulty, dailyChallenge: this._dailyChallenge, endlessMode: this._endlessMode }); });
+    retryHit.on('pointerdown', () => { this.scene.start('Boot', { loadSave: false, difficulty: this._difficulty, dailyChallenge: this._dailyChallenge, endlessMode: this._endlessMode, speedrun: this._speedrunMode, handicap: this._handicap }); });
     titleHit.on('pointerdown', () => { this.scene.start('Title'); });
     shareHit.on('pointerdown', () => {
       // Build equipment string
@@ -10237,7 +10254,7 @@ class GameScene extends Phaser.Scene {
         this._fogGraphics.fillStyle(0x000000, 0.8);
         this._fogGraphics.fillRect(0, 0, cW, cH);
         // Clear circle around player (draw transparent circle by using blend)
-        const px = this.player.x - cam.scrollX, py = this.player.y - cam.scrollY;
+        const px = (this.player ? this.player.x : WORLD_W/2) - cam.scrollX, py = (this.player ? this.player.y : WORLD_H/2) - cam.scrollY;
         this._fogGraphics.fillStyle(0x000000, 0);
         // Use erase approach: fill circle with 0 alpha won't work in Phaser graphics
         // Instead use a geometry mask
