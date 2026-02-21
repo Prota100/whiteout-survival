@@ -3998,8 +3998,11 @@ class GameScene extends Phaser.Scene {
       this._hitStop(120); // strong hitstop for crits
     }
     const isCrit = a._lastHitCrit || false; a._lastHitCrit = false;
-    // Boss hitstop
-    if (a.isBoss && !isCrit) this._hitStop(80);
+    // Boss hitstop (every 5th hit to avoid annoyance)
+    if (a.isBoss && !isCrit) {
+      a._hitCount = (a._hitCount || 0) + 1;
+      if (a._hitCount % 5 === 1) this._hitStop(80);
+    }
     a.hp -= dmg; a.hitFlash = 0.2; a.setTint(0xFF4444); playHit();
     if (a.isBoss && this._questProgress) this._questProgress.boss_damage_dealt += dmg;
     const fs = isCrit ? '28px' : dmg >= 3 ? '20px' : '16px';
@@ -8272,8 +8275,10 @@ class GameScene extends Phaser.Scene {
 
     // ═══ Elite Wave (15min intervals) ═══
     [15, 30, 45].forEach(m => {
-      if (!this._eliteWaveTriggered[m] && minNow >= m && minNow < m + 0.5) {
+      if (!this._eliteWaveTriggered[m] && minNow >= m && minNow < m + 0.5 && !this._challengeActive) {
         this._eliteWaveTriggered[m] = true;
+        this._eventCooldown = true;
+        this.time.delayedCall(15000, () => { this._eventCooldown = false; });
         this.showCenterAlert('⚠️ 엘리트 부대 출현!', '#FF8800');
         this.cameras.main.shake(400, 0.01);
         for (let i = 0; i < 5; i++) {
@@ -8539,17 +8544,23 @@ class GameScene extends Phaser.Scene {
       this._checkAchievements();
     }
 
-    // ═══ 🎲 Random Event System (5min interval) ═══
+    // ═══ 🎲 Random Event System (3min interval, dedup with challenge/elite) ═══
     this.randomEventTimer = (this.randomEventTimer || 0) + dt;
     if (this.randomEventTimer >= 180) {
       this.randomEventTimer = 0;
-      this._triggerRandomEvent();
+      // Skip if challenge active or event cooldown
+      if (!this._challengeActive && !this._eventCooldown) {
+        this._triggerRandomEvent();
+        this._eventCooldown = true;
+        this.time.delayedCall(15000, () => { this._eventCooldown = false; });
+      }
     }
     // Clean up expired random events
     this._updateRandomEvents();
 
     // ═══ BOSS HP BAR + MINIMAP + VIGNETTE updates ═══
-    this._updateBossHPBar();
+    this._bossHPFrameCount = (this._bossHPFrameCount || 0) + 1;
+    if (this._bossHPFrameCount % 3 === 0) this._updateBossHPBar();
     this._minimapFrameCount = (this._minimapFrameCount || 0) + 1;
     if (this._minimapFrameCount % 10 === 0) this._updateMinimap();
     this._updateVignette(dt);
@@ -8780,7 +8791,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _createHiddenBoss() {
-    const bossHP = 8000; // 2x of final boss (4000)
+    const bossHP = 6000; // 1.5x of final boss (4000) – ~20s fight at max DPS
     const bossScale = 3.2;
     const bossDmg = 40;
     const bossSpeed = 60;
@@ -8860,9 +8871,13 @@ class GameScene extends Phaser.Scene {
     if (this._secretEventTimer >= 30) {
       this._secretEventTimer = 0;
 
+      // Skip secret events during challenge or event cooldown
+      if (this._challengeActive || this._eventCooldown) return;
+
       // Ghost Merchant: 15% chance, after 10 min
       if (this.gameElapsed >= 600 && !this._ghostMerchantUsed && !this._ghostMerchantActive && Math.random() < 0.15) {
         this._triggerGhostMerchant();
+        return; // one secret event per check
       }
 
       // Shooting Star: 5% chance, anytime
