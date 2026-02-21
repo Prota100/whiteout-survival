@@ -777,6 +777,9 @@ const ACHIEVEMENTS = [
   { id: 'ng_plus_clear',   name: '전설을 넘어',   desc: 'NG+ 모드 클리어',          icon: '⭐', category: 'challenge' },
   { id: 'endless_30',      name: '영원한 생존',   desc: '무한 모드 30분 추가 생존', icon: '♾️', category: 'challenge' },
   { id: 'hard_clear',      name: '강철 의지',     desc: '하드 이상 난이도 클리어',  icon: '🔥', category: 'challenge' },
+  { id: 'speedrun_clear',  name: '번개처럼',     desc: '스피드런 모드 클리어',     icon: '⚡', category: 'challenge' },
+  { id: 'speedrun_sub_20', name: '20분 벽',       desc: '스피드런 20분 내 클리어', icon: '⚡', category: 'challenge' },
+  { id: 'handicap_win',    name: '역경 극복',     desc: '핸디캡 모드로 클리어',    icon: '🎯', category: 'challenge' },
   // 수집/탐험 (3종)
   { id: 'all_equipment',   name: '수집가',        desc: '모든 장비 슬롯에 에픽 이상 장착', icon: '💜', category: 'collect' },
   { id: 'all_zones',       name: '탐험가',        desc: '모든 지역 방문',            icon: '🗺️', category: 'collect' },
@@ -808,7 +811,8 @@ class RecordManager {
       bestSurvivalTime: 0, bestKills: 0, bestLevel: 0, bestCombo: 0,
       totalPlays: 0, totalKills: 0, totalPlayTime: 0, wins: 0, achievementsUnlocked: 0,
       longestEndlessSurvival: 0, totalQuestsCompleted: 0, ngPlusClears: 0,
-      bossRushClears: 0, hardClears: 0
+      bossRushClears: 0, hardClears: 0,
+      speedrunClears: 0, bestSpeedrunTime: 0, handicapClears: 0
     };
   }
 
@@ -1778,6 +1782,13 @@ class TitleScene extends Phaser.Scene {
       this.add.text(W / 2, recordY + 38, `🏆 성취: ${achCount} / ${ACHIEVEMENTS.length}`, {
         fontSize: '11px', fontFamily: 'monospace', color: '#AABB88'
       }).setOrigin(0.5, 0).setDepth(11);
+      if (rec.bestSpeedrunTime > 0) {
+        const srMin = Math.floor(rec.bestSpeedrunTime / 60);
+        const srSec = Math.floor(rec.bestSpeedrunTime % 60);
+        this.add.text(W / 2, recordY + 54, `⚡ 스피드런 최고: ${srMin}분 ${srSec}초 남음`, {
+          fontSize: '11px', fontFamily: 'monospace', color: '#FFCC44'
+        }).setOrigin(0.5, 0).setDepth(11);
+      }
     } else {
       this.add.text(W / 2, recordY + 18, '🏅 아직 기록 없음', {
         fontSize: '13px', fontFamily: 'monospace', color: '#556677'
@@ -2336,12 +2347,56 @@ class TitleScene extends Phaser.Scene {
     advElements.push(bossRushHit); allElements.push(bossRushHit);
     bossRushHit.on('pointerdown', () => { bossRushMode = !bossRushMode; drawBossRushToggle(); });
 
+    // ═══ Speedrun Toggle ═══
+    let speedrunMode = false;
+    const speedrunY = bossRushY + 28;
+    const speedrunGfx = this.add.graphics().setDepth(201);
+    advElements.push(speedrunGfx); allElements.push(speedrunGfx);
+    const speedrunTxt = this.add.text(W/2 + 14, speedrunY, '⚡ 스피드런 (30분 클리어)', {
+      fontSize: '12px', fontFamily: 'monospace', color: '#888899'
+    }).setOrigin(0, 0.5).setDepth(202);
+    advElements.push(speedrunTxt); allElements.push(speedrunTxt);
+    const drawSpeedrunToggle = () => {
+      speedrunGfx.clear();
+      const cbx = W/2 - 8, cby = speedrunY - 8;
+      speedrunGfx.fillStyle(speedrunMode ? 0xFFAA00 : 0x333344, 0.9); speedrunGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
+      speedrunGfx.lineStyle(1, speedrunMode ? 0xFFCC44 : 0x555566, 1); speedrunGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
+      speedrunTxt.setColor(speedrunMode ? '#FFCC44' : '#888899');
+    };
+    const speedrunHit = this.add.rectangle(W/2 + 60, speedrunY, 200, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
+    advElements.push(speedrunHit); allElements.push(speedrunHit);
+    speedrunHit.on('pointerdown', () => { speedrunMode = !speedrunMode; drawSpeedrunToggle(); });
+
+    // ═══ Handicap Dropdown ═══
+    const handicapOptions = ['none', 'glass_body', 'no_equipment', 'random_build', 'low_vision'];
+    const handicapLabels = ['핸디캡 없음', '🩸 유리몸', '💪 맨손', '🎲 랜덤 빌드', '👁️ 저시력'];
+    let handicapIdx = 0;
+    const handicapY = speedrunY + 28;
+    const handicapTxt = this.add.text(W/2 + 14, handicapY, '🎯 ' + handicapLabels[0], {
+      fontSize: '12px', fontFamily: 'monospace', color: '#888899'
+    }).setOrigin(0, 0.5).setDepth(202);
+    advElements.push(handicapTxt); allElements.push(handicapTxt);
+    const handicapGfx = this.add.graphics().setDepth(201);
+    advElements.push(handicapGfx); allElements.push(handicapGfx);
+    const drawHandicapToggle = () => {
+      handicapGfx.clear();
+      const cbx = W/2 - 8, cby = handicapY - 8;
+      const active = handicapIdx > 0;
+      handicapGfx.fillStyle(active ? 0xCC44CC : 0x333344, 0.9); handicapGfx.fillRoundedRect(cbx, cby, 16, 16, 3);
+      handicapGfx.lineStyle(1, active ? 0xEE66EE : 0x555566, 1); handicapGfx.strokeRoundedRect(cbx, cby, 16, 16, 3);
+      handicapTxt.setText('🎯 ' + handicapLabels[handicapIdx]);
+      handicapTxt.setColor(active ? '#EE66EE' : '#888899');
+    };
+    const handicapHit = this.add.rectangle(W/2 + 60, handicapY, 200, 24, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
+    advElements.push(handicapHit); allElements.push(handicapHit);
+    handicapHit.on('pointerdown', () => { handicapIdx = (handicapIdx + 1) % handicapOptions.length; drawHandicapToggle(); });
+
     // Initially hide advanced elements
     const toggleAdvanced = () => {
       advancedOpen = !advancedOpen;
       advToggleTxt.setText(advancedOpen ? '⚙️ 고급 설정 ▲' : '⚙️ 고급 설정 ▼');
       advElements.forEach(el => el.setVisible(advancedOpen));
-      if (advancedOpen) { drawEndlessToggle(); drawNgPlusToggle(); drawBossRushToggle(); }
+      if (advancedOpen) { drawEndlessToggle(); drawNgPlusToggle(); drawBossRushToggle(); drawSpeedrunToggle(); drawHandicapToggle(); }
     };
     advElements.forEach(el => el.setVisible(false));
     advToggleHit.on('pointerdown', toggleAdvanced);
@@ -2365,7 +2420,7 @@ class TitleScene extends Phaser.Scene {
       try { localStorage.setItem('whiteout_difficulty', selectedDifficulty); } catch(e) {}
       try { localStorage.setItem('whiteout_endless', endlessMode ? 'true' : 'false'); } catch(e) {}
       destroy();
-      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty, endlessMode, ngPlus: ngPlusMode, bossRush: bossRushMode });
+      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty, endlessMode, ngPlus: ngPlusMode, bossRush: bossRushMode, speedrun: speedrunMode, handicap: handicapOptions[handicapIdx] });
     });
 
     // FTUE bottom hint
@@ -3135,8 +3190,10 @@ class BootScene extends Phaser.Scene {
         const endlessMode = this.scene.settings.data?.endlessMode || false;
         const ngPlus = this.scene.settings.data?.ngPlus || false;
         const bossRush = this.scene.settings.data?.bossRush || false;
+        const speedrun = this.scene.settings.data?.speedrun || false;
+        const handicap = this.scene.settings.data?.handicap || 'none';
         this.time.delayedCall(200, () => {
-          this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge, endlessMode, ngPlus, bossRush });
+          this.scene.start('Game', { loadSave, playerClass, difficulty, dailyChallenge, endlessMode, ngPlus, bossRush, speedrun, handicap });
         });
       }
     };
@@ -3940,6 +3997,15 @@ class GameScene extends Phaser.Scene {
     this._bossRushPrepPhase = false;
     this._bossRushPrepTimer = 0;
     this._bossRushCleared = false;
+    // ═══ Speedrun Mode ═══
+    this._speedrunMode = this.scene.settings.data?.speedrun || false;
+    this._speedrunTimer = 1800; // 30 minutes countdown
+    this._speedrunBossKills = 0;
+    this._speedrunCleared = false;
+    // ═══ Handicap Mode ═══
+    this._handicap = this.scene.settings.data?.handicap || 'none';
+    this._fogGraphics = null;
+    this._fogFrameCount = 0;
     this._endlessMultiplier = 1.0;
     this._endlessBossCount = 0;
     this._milestone30Shown = false;
@@ -3955,6 +4021,11 @@ class GameScene extends Phaser.Scene {
     }
     // alwaysBlizzard handled in update
     // noEquipDrop handled in _tryDropEquipment
+    // ═══ Handicap: Glass Body ═══
+    if (this._handicap === 'glass_body') {
+      this.playerMaxHP = Math.floor(this.playerMaxHP / 2);
+      this.playerHP = this.playerMaxHP;
+    }
 
     // ═══ Apply New Game+ Mode ═══
     if (this._ngPlus) {
@@ -4538,10 +4609,11 @@ class GameScene extends Phaser.Scene {
   }
 
   _applyDifficultyToAnimal(a, def) {
-    const hpMul = (this._diffMode ? this._diffMode.enemyHP : 1) * (this._endlessMultiplier || 1) * (this._ngPlusEnemyMul || 1);
+    const srMul = this._speedrunMode ? 1.2 : 1;
+    const hpMul = (this._diffMode ? this._diffMode.enemyHP : 1) * (this._endlessMultiplier || 1) * (this._ngPlusEnemyMul || 1) * srMul;
     a.hp = Math.round(def.hp * hpMul);
     a.maxHP = a.hp;
-    a._diffDmgMul = (this._diffMode ? this._diffMode.enemyDmg : 1) * (this._endlessMultiplier || 1) * (this._ngPlusEnemyMul || 1);
+    a._diffDmgMul = (this._diffMode ? this._diffMode.enemyDmg : 1) * (this._endlessMultiplier || 1) * (this._ngPlusEnemyMul || 1) * srMul;
   }
 
   spawnAnimal(type) {
@@ -4829,6 +4901,14 @@ class GameScene extends Phaser.Scene {
     // Boss death special effects
     if (a.isBoss && !a.isMiniboss) {
       this.bossKillCount = (this.bossKillCount || 0) + 1;
+      // Speedrun mode: track boss kills for win condition
+      if (this._speedrunMode && !this._speedrunCleared) {
+        this._speedrunBossKills = (this._speedrunBossKills || 0) + 1;
+        if (this._speedrunBossKills >= 2) {
+          this._speedrunCleared = true;
+          this._triggerSpeedrunVictory();
+        }
+      }
       // Boss Rush mode: handle wave completion
       if (this._bossRushMode && a._bossRushWaveIdx != null) {
         this._onBossRushBossKilled(a._bossRushWaveIdx);
@@ -5324,6 +5404,7 @@ class GameScene extends Phaser.Scene {
 
   gainXP(source) {
     let amount = (typeof source === 'number') ? source : (XP_SOURCES[source] ?? XP_SOURCES.default);
+    if (this._speedrunMode) amount = Math.round(amount * 2);
     if (this._diffMode) amount = Math.round(amount * this._diffMode.xpMul);
     if (this._equipBonuses && this._equipBonuses.xpMul > 0) amount = Math.round(amount * (1 + this._equipBonuses.xpMul));
     if (this._shamanXpMul) amount = Math.round(amount * this._shamanXpMul);
@@ -5438,7 +5519,18 @@ class GameScene extends Phaser.Scene {
     const isEndgame = this._endlessMode && this.gameElapsed >= 3600;
     const cards = this.upgradeManager.pickThreeCards(this.extraCardChoices || 0, this._playerClass, isEndgame);
     if (cards.length > 0) {
-      this.showUpgradeUI(cards);
+      // Handicap: Random Build - auto-select random card
+      if (this._handicap === 'random_build') {
+        const pick = cards[Math.floor(Math.random() * cards.length)];
+        this.upgradeManager.apply(pick.id, this);
+        this._showMilestoneBanner('🎲 ' + (pick.name || pick.id), '#FFAA00', 1500);
+        if (this.pendingLevelUps > 0 && !this.upgradeUIActive) {
+          this.pendingLevelUps--;
+          this.triggerLevelUp();
+        }
+      } else {
+        this.showUpgradeUI(cards);
+      }
     }
   }
 
@@ -5773,6 +5865,7 @@ class GameScene extends Phaser.Scene {
 
   // ═══ EQUIPMENT DROP & PICKUP ═══
   _tryDropEquipment(x, y) {
+    if (this._handicap === 'no_equipment') return;
     const luck = (this._equipBonuses ? this._equipBonuses.luckFlat : 0);
     const feverMul = (this.activeRandomEvents && this.activeRandomEvents.drop_fever) ? 3 : (this.activeRandomEvents && this.activeRandomEvents.equip_bonus_5x) ? 5 : 1;
     const synergyDrop = this._synergyExtraDropRate || 0;
@@ -8653,6 +8746,54 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  _updateSpeedrunHUD() {
+    const cam = this.cameras.main;
+    const remaining = Math.max(0, this._speedrunTimer);
+    const min = Math.floor(remaining / 60);
+    const sec = Math.floor(remaining % 60);
+    const timeStr = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    const isUrgent = remaining <= 300;
+    if (!this._speedrunTimerText) {
+      this._speedrunTimerText = this.add.text(cam.width / 2, 18, '', {
+        fontSize: '22px', fontFamily: 'monospace', color: '#FFCC44',
+        stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+      }).setOrigin(0.5).setDepth(250).setScrollFactor(0);
+    }
+    this._speedrunTimerText.setText('⚡ ' + timeStr);
+    this._speedrunTimerText.setColor(isUrgent ? '#FF4444' : '#FFCC44');
+  }
+
+  _triggerSpeedrunVictory() {
+    const remaining = Math.max(0, this._speedrunTimer);
+    // Record speedrun
+    const rec = RecordManager.load();
+    rec.speedrunClears = (rec.speedrunClears || 0) + 1;
+    if (remaining > (rec.bestSpeedrunTime || 0)) {
+      rec.bestSpeedrunTime = remaining;
+    }
+    RecordManager.save(rec);
+    // Check achievements
+    try {
+      const ach = JSON.parse(localStorage.getItem('achievements_whiteout') || '{}');
+      ach['speedrun_clear'] = true;
+      if (remaining >= 600) ach['speedrun_sub_20'] = true;
+      localStorage.setItem('achievements_whiteout', JSON.stringify(ach));
+    } catch(e) {}
+    // Also check handicap achievement
+    if (this._handicap && this._handicap !== 'none') {
+      try {
+        const ach = JSON.parse(localStorage.getItem('achievements_whiteout') || '{}');
+        ach['handicap_win'] = true;
+        localStorage.setItem('achievements_whiteout', JSON.stringify(ach));
+      } catch(e) {}
+      const hRec = RecordManager.load();
+      hRec.handicapClears = (hRec.handicapClears || 0) + 1;
+      RecordManager.save(hRec);
+    }
+    this._showMilestoneBanner('⚡ 스피드런 클리어! 남은 시간: ' + Math.floor(remaining/60) + '분 ' + Math.floor(remaining%60) + '초', '#FFCC44', 3000);
+    this.time.delayedCall(2000, () => this.showVictory());
+  }
+
   showVictory() {
     if (this.gameOver) return;
     this.gameOver = true;
@@ -8683,7 +8824,21 @@ class GameScene extends Phaser.Scene {
     const totalKills = Object.values(this.stats.kills || {}).reduce((a,b)=>a+b, 0);
     const diffBonus = this._diffMode ? this._diffMode.clearBonus : 10;
     const ngPlusBonus = this._ngPlus ? 30 : 0;
-    const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0) + diffBonus + ngPlusBonus;
+    const speedrunBonus = this._speedrunMode ? 15 : 0;
+    const handicapBonusMap = { none: 0, glass_body: 15, no_equipment: 20, random_build: 10, low_vision: 25 };
+    const handicapBonus = handicapBonusMap[this._handicap] || 0;
+    const earned = MetaManager.recordRun(this.gameElapsed, totalKills, this.stats.maxCombo || 0) + diffBonus + ngPlusBonus + speedrunBonus + handicapBonus;
+    // Record handicap clear
+    if (this._handicap && this._handicap !== 'none') {
+      const hRec = RecordManager.load();
+      hRec.handicapClears = (hRec.handicapClears || 0) + 1;
+      RecordManager.save(hRec);
+      try {
+        const ach = JSON.parse(localStorage.getItem('achievements_whiteout') || '{}');
+        ach['handicap_win'] = true;
+        localStorage.setItem('achievements_whiteout', JSON.stringify(ach));
+      } catch(e) {}
+    }
     playWinSound();
     // Save daily challenge clear
     if (this._dailyChallenge) {
@@ -9526,27 +9681,29 @@ class GameScene extends Phaser.Scene {
 
     // ═══ Act Miniboss Spawns ═══
     if (!this._bossRushMode) {
-    if (!this.act2MinibossSpawned && this.gameElapsed >= 12 * 60) {
+    const _srT = this._speedrunMode ? 0.5 : 1; // speedrun: half timings
+    if (!this.act2MinibossSpawned && this.gameElapsed >= 12 * 60 * _srT) {
       this.act2MinibossSpawned = true;
       this.spawnActMiniboss('alpha_wolf');
     }
-    if (!this.act4MinibossSpawned && this.gameElapsed >= 40 * 60) {
+    if (!this.act4MinibossSpawned && this.gameElapsed >= 40 * 60 * _srT) {
       this.act4MinibossSpawned = true;
       this.spawnActMiniboss('blizzard_bear');
     }
 
     // ═══ Phase 2: Boss Spawns ═══
-    // Boss approach warning at 24:50
-    if (!this.boss1Spawned && !this._boss1Warned && this.gameElapsed >= 24 * 60 + 50) {
+    const boss1Time = 25 * 60 * _srT;
+    const boss2Time = 55 * 60 * _srT;
+    if (!this.boss1Spawned && !this._boss1Warned && this.gameElapsed >= boss1Time - 10) {
       this._boss1Warned = true;
       playBossSpawn();
       this.showCenterAlert('⚠️ 10초 후 보스 등장!', '#FF2222');
     }
-    if (!this.boss1Spawned && this.gameElapsed >= 25 * 60) { // 25분
+    if (!this.boss1Spawned && this.gameElapsed >= boss1Time) {
       this.boss1Spawned = true;
       this.spawnBoss('first');
     }
-    if (!this.boss2Spawned && this.gameElapsed >= 55 * 60) { // 55분
+    if (!this.boss2Spawned && this.gameElapsed >= boss2Time) {
       this.boss2Spawned = true;
       this.spawnBoss('final');
     }
@@ -9676,6 +9833,52 @@ class GameScene extends Phaser.Scene {
     if (!this._milestone45Shown && this.gameElapsed >= 45 * 60) {
       this._milestone45Shown = true;
       this._showMilestoneBanner('⚡ 고지가 눈앞!', '#FFD700');
+    }
+
+    // ═══ Speedrun Mode: Timer + Level 21 Victory ═══
+    if (this._speedrunMode && !this._speedrunCleared) {
+      this._speedrunTimer -= dt;
+      if (this._speedrunTimer <= 0) {
+        this._speedrunTimer = 0;
+        this.endGame(); // time's up = death
+      }
+      // Level 21 win condition
+      if (this.playerLevel >= 21) {
+        this._speedrunCleared = true;
+        this._triggerSpeedrunVictory();
+      }
+      // Update HUD timer
+      this._updateSpeedrunHUD();
+    }
+
+    // ═══ Handicap: Low Vision Fog of War ═══
+    if (this._handicap === 'low_vision') {
+      this._fogFrameCount = (this._fogFrameCount || 0) + 1;
+      if (this._fogFrameCount % 10 === 0) {
+        if (!this._fogGraphics) {
+          this._fogGraphics = this.add.graphics().setDepth(200).setScrollFactor(0);
+        }
+        const cam = this.cameras.main;
+        const cW = cam.width, cH = cam.height;
+        this._fogGraphics.clear();
+        // Draw black rect with circle cutout using alpha mask approach
+        this._fogGraphics.fillStyle(0x000000, 0.8);
+        this._fogGraphics.fillRect(0, 0, cW, cH);
+        // Clear circle around player (draw transparent circle by using blend)
+        const px = this.player.x - cam.scrollX, py = this.player.y - cam.scrollY;
+        this._fogGraphics.fillStyle(0x000000, 0);
+        // Use erase approach: fill circle with 0 alpha won't work in Phaser graphics
+        // Instead use a geometry mask
+        if (!this._fogMask) {
+          this._fogMaskShape = this.make.graphics();
+          this._fogMask = this._fogMaskShape.createGeometryMask();
+          this._fogMask.invertAlpha = true;
+          this._fogGraphics.setMask(this._fogMask);
+        }
+        this._fogMaskShape.clear();
+        this._fogMaskShape.fillStyle(0xffffff);
+        this._fogMaskShape.fillCircle(px, py, 150);
+      }
     }
 
     // ═══ Victory Condition: 60분 생존 ═══
