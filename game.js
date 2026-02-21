@@ -680,38 +680,57 @@ class TitleScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     
-    // Dark background
+    // ═══ 설산 배경: 그라데이션 하늘 ═══
     this.cameras.main.setBackgroundColor('#0a0a1a');
-    
-    // Scrolling snow landscape (Factorio-style)
-    this.bgGraphics = this.add.graphics();
-    this.snowTiles = [];
-    for (let i = 0; i < 80; i++) {
-      this.snowTiles.push({
-        x: Math.random() * W * 2,
-        y: Math.random() * H * 2,
-        size: 1 + Math.random() * 3,
-        speed: 0.2 + Math.random() * 0.5,
-        alpha: 0.1 + Math.random() * 0.3
-      });
+    this.skyGfx = this.add.graphics().setDepth(0);
+    const skySteps = 40;
+    for (let i = 0; i < skySteps; i++) {
+      const t = i / skySteps;
+      const r = Math.floor(10 + t * 200);
+      const g = Math.floor(15 + t * 220);
+      const b = Math.floor(60 + t * 195);
+      const color = (r << 16) | (g << 8) | b;
+      this.skyGfx.fillStyle(color, 1);
+      this.skyGfx.fillRect(0, (H * 0.7) * (i / skySteps), W, (H * 0.7) / skySteps + 1);
     }
     
-    // Ground scroll tiles
-    this.groundTiles = [];
-    for (let i = 0; i < 30; i++) {
-      this.groundTiles.push({
-        x: Math.random() * W * 2 - W * 0.5,
-        y: Math.random() * H * 2 - H * 0.5,
-        w: 20 + Math.random() * 60,
-        h: 10 + Math.random() * 30,
-        color: Phaser.Math.Between(0x1a1a3e, 0x2a2a4e),
-        speed: 0.3 + Math.random() * 0.3
-      });
-    }
+    // ═══ 설산 봉우리 실루엣 ═══
+    this.mountainGfx = this.add.graphics().setDepth(1);
+    // 뒷산 (연한 색)
+    this.mountainGfx.fillStyle(0xc0d0e8, 0.5);
+    this.mountainGfx.beginPath();
+    this.mountainGfx.moveTo(0, H * 0.7);
+    const peaks1 = [0, 0.1, 0.2, 0.35, 0.45, 0.55, 0.7, 0.8, 0.9, 1.0];
+    const heights1 = [0.55, 0.35, 0.42, 0.25, 0.38, 0.3, 0.22, 0.4, 0.35, 0.5];
+    peaks1.forEach((px, i) => this.mountainGfx.lineTo(px * W, H * heights1[i]));
+    this.mountainGfx.lineTo(W, H * 0.7);
+    this.mountainGfx.closePath();
+    this.mountainGfx.fillPath();
+    // 앞산 (밝은 흰색)
+    this.mountainGfx.fillStyle(0xe8eef8, 0.7);
+    this.mountainGfx.beginPath();
+    this.mountainGfx.moveTo(0, H * 0.7);
+    const peaks2 = [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0];
+    const heights2 = [0.6, 0.4, 0.5, 0.32, 0.45, 0.38, 0.48, 0.6];
+    peaks2.forEach((px, i) => this.mountainGfx.lineTo(px * W, H * heights2[i]));
+    this.mountainGfx.lineTo(W, H * 0.7);
+    this.mountainGfx.closePath();
+    this.mountainGfx.fillPath();
+    // 눈 덮인 바닥
+    this.mountainGfx.fillStyle(0xd8e4f0, 0.8);
+    this.mountainGfx.fillRect(0, H * 0.7, W, H * 0.3);
     
-    // Snow particles
+    // ═══ 자연 동물 스크롤 ═══
+    this.scrollAnimals = [];
+    this._animalSpawnTimer = 0;
+    // Generate simple animal textures for title screen
+    this._createTitleAnimalTextures();
+    // Spawn initial animals
+    for (let i = 0; i < 3; i++) this._spawnTitleAnimal(true);
+    
+    // ═══ Snow particles ═══
     this.snowParticles = [];
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 150; i++) {
       this.snowParticles.push({
         x: Math.random() * W,
         y: Math.random() * H,
@@ -723,7 +742,7 @@ class TitleScene extends Phaser.Scene {
       });
     }
     
-    this.snowGfx = this.add.graphics();
+    this.snowGfx = this.add.graphics().setDepth(10);
     
     // Title text
     this.add.text(W / 2, H * 0.25, '❄️ 화이트아웃 서바이벌', {
@@ -976,22 +995,73 @@ class TitleScene extends Phaser.Scene {
     items.push(overlay, panel, title, pointsTxt, closeBg, closeTxt, closeHit);
   }
   
+  _createTitleAnimalTextures() {
+    // 토끼 (title용)
+    if (!this.textures.exists('title_rabbit')) {
+      const g = this.add.graphics();
+      g.fillStyle(0xFFEEDD); g.fillEllipse(12, 14, 16, 12); // body
+      g.fillStyle(0xFFEEDD); g.fillEllipse(12, 6, 6, 10); // head
+      g.fillStyle(0xFFDDCC); g.fillEllipse(10, 0, 3, 7); g.fillEllipse(14, 0, 3, 7); // ears
+      g.fillStyle(0x332222); g.fillCircle(10, 5, 1.5); g.fillCircle(14, 5, 1.5); // eyes
+      g.generateTexture('title_rabbit', 24, 24); g.destroy();
+    }
+    // 사슴 (title용)
+    if (!this.textures.exists('title_deer')) {
+      const g = this.add.graphics();
+      g.fillStyle(0xC4A46C); g.fillEllipse(14, 18, 20, 14); // body
+      g.fillStyle(0xC4A46C); g.fillEllipse(14, 8, 10, 10); // head
+      g.fillStyle(0x8B7355); g.fillEllipse(8, 2, 2, 8); g.fillEllipse(20, 2, 2, 8); // antlers
+      g.fillStyle(0x332222); g.fillCircle(11, 7, 1.5); g.fillCircle(17, 7, 1.5); // eyes
+      g.fillStyle(0xC4A46C);
+      // legs
+      g.fillRect(8, 24, 3, 8); g.fillRect(18, 24, 3, 8);
+      g.generateTexture('title_deer', 28, 32); g.destroy();
+    }
+  }
+  
+  _spawnTitleAnimal(initial) {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const isRabbit = Math.random() < 0.5;
+    const goRight = Math.random() < 0.5;
+    const speed = 40 + Math.random() * 40; // 40~80 px/s
+    const yPos = H * 0.65 + Math.random() * (H * 0.2); // on the snowy ground area
+    const startX = goRight ? -40 : W + 40;
+    
+    const sprite = this.add.image(
+      initial ? Math.random() * W : startX,
+      yPos,
+      isRabbit ? 'title_rabbit' : 'title_deer'
+    ).setDepth(5).setFlipX(!goRight).setScale(isRabbit ? 1.2 : 1.4);
+    
+    this.scrollAnimals.push({ sprite, speed: goRight ? speed : -speed, goRight });
+  }
+  
   update(time, delta) {
     this.elapsed += delta * 0.001;
+    const dt = delta * 0.001;
     const W = this.scale.width;
     const H = this.scale.height;
     
-    // Draw scrolling ground
-    this.bgGraphics.clear();
-    this.groundTiles.forEach(t => {
-      t.x -= t.speed;
-      t.y -= t.speed * 0.3;
-      if (t.x + t.w < -50) { t.x = W + 50; t.y = Math.random() * H; }
-      this.bgGraphics.fillStyle(t.color, 0.3);
-      this.bgGraphics.fillRect(t.x, t.y, t.w, t.h);
-    });
+    // ═══ 동물 스크롤 업데이트 ═══
+    this._animalSpawnTimer -= dt;
+    if (this._animalSpawnTimer <= 0) {
+      if (this.scrollAnimals.length < 6) this._spawnTitleAnimal(false);
+      this._animalSpawnTimer = 2 + Math.random() * 2; // 2~4초마다
+    }
+    for (let i = this.scrollAnimals.length - 1; i >= 0; i--) {
+      const a = this.scrollAnimals[i];
+      a.sprite.x += a.speed * dt;
+      // 살짝 위아래 흔들림
+      a.sprite.y += Math.sin(time * 0.002 + i * 1.5) * 0.3;
+      // 화면 밖으로 나가면 제거
+      if ((a.speed > 0 && a.sprite.x > W + 60) || (a.speed < 0 && a.sprite.x < -60)) {
+        a.sprite.destroy();
+        this.scrollAnimals.splice(i, 1);
+      }
+    }
     
-    // Snow particles
+    // ═══ Snow particles ═══
     this.snowGfx.clear();
     this.snowParticles.forEach(p => {
       p.x += p.speedX;
@@ -1839,9 +1909,12 @@ class GameScene extends Phaser.Scene {
     this.createVirtualJoystick();
     // ═══ WASD + Arrow Key Support ═══
     this.wasd = this.input.keyboard.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT');
+    // ═══ BUFF ITEM SYSTEM ═══
+    this._initBuffSystem();
     this.createUI();
     window._gameScene = this;
     this.physics.add.overlap(this.player, this.drops, (_, d) => this.collectDrop(d));
+    this.physics.add.overlap(this.player, this.buffDropGroup, (_, bd) => this._collectBuffDrop(bd));
     this.campfireParticleTimer = 0;
 
     // ── Load Save Data ──
@@ -2331,6 +2404,8 @@ class GameScene extends Phaser.Scene {
     });
     if (!this.stats.kills[a.animalType]) this.stats.kills[a.animalType] = 0;
     this.stats.kills[a.animalType]++;
+    // ═══ Buff item drop chance ═══
+    this._tryDropBuff(a.x, a.y);
 
     // ═══ Kill Combo ═══
     this.killCombo++;
@@ -2620,6 +2695,279 @@ class GameScene extends Phaser.Scene {
       onComplete: () => g.destroy() });
   }
 
+  // ═══════════════════════════════════════════════
+  // ═══ BUFF ITEM SYSTEM ═══
+  // ═══════════════════════════════════════════════
+  _initBuffSystem() {
+    this.buffSlots = [null, null]; // 2 slots
+    this.activeBuffs = {}; // { buffType: { remaining, ... } }
+    this.buffDropGroup = this.physics.add.group();
+    this.buffDropItems = []; // track for expiry
+    this._buffTextures();
+    // Q/E keys
+    this.buffKeys = {
+      q: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
+      e: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E)
+    };
+    // HUD slots
+    this._createBuffHUD();
+    // Fire breath damage timer
+    this._fireBreathTimer = 0;
+  }
+
+  _buffTextures() {
+    const buffs = [
+      { key: 'buff_fire', color: 0xFF4400, icon: '🔥' },
+      { key: 'buff_sprint', color: 0x44CCFF, icon: '💨' },
+      { key: 'buff_shotgun', color: 0xFFDD00, icon: '🔫' },
+      { key: 'buff_wool', color: 0xFFFFFF, icon: '🐑' }
+    ];
+    buffs.forEach(b => {
+      if (this.textures.exists(b.key)) return;
+      const g = this.add.graphics();
+      g.fillStyle(0x222244, 0.9); g.fillRoundedRect(0, 0, 24, 24, 4);
+      g.fillStyle(b.color, 0.8); g.fillCircle(12, 12, 8);
+      g.lineStyle(2, 0xFFFFFF, 0.6); g.strokeRoundedRect(0, 0, 24, 24, 4);
+      g.generateTexture(b.key, 24, 24); g.destroy();
+    });
+  }
+
+  _createBuffHUD() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    this.buffHudGfx = this.add.graphics().setScrollFactor(0).setDepth(105);
+    this.buffHudTexts = [
+      this.add.text(W / 2 - 35, H - 55, '', { fontSize: '11px', fontFamily: 'monospace', color: '#fff', stroke: '#000', strokeThickness: 2 }).setScrollFactor(0).setDepth(106).setOrigin(0.5),
+      this.add.text(W / 2 + 35, H - 55, '', { fontSize: '11px', fontFamily: 'monospace', color: '#fff', stroke: '#000', strokeThickness: 2 }).setScrollFactor(0).setDepth(106).setOrigin(0.5)
+    ];
+    this.buffHudKeys = [
+      this.add.text(W / 2 - 35, H - 30, '[Q]', { fontSize: '10px', fontFamily: 'monospace', color: '#888' }).setScrollFactor(0).setDepth(106).setOrigin(0.5),
+      this.add.text(W / 2 + 35, H - 30, '[E]', { fontSize: '10px', fontFamily: 'monospace', color: '#888' }).setScrollFactor(0).setDepth(106).setOrigin(0.5)
+    ];
+    // Touch/click handlers on slots
+    for (let i = 0; i < 2; i++) {
+      const sx = W / 2 + (i === 0 ? -35 : 35);
+      const hit = this.add.rectangle(sx, H - 45, 44, 44, 0, 0).setScrollFactor(0).setDepth(107).setInteractive();
+      hit.on('pointerdown', () => this._useBuffSlot(i));
+    }
+  }
+
+  _updateBuffHUD() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    this.buffHudGfx.clear();
+    const names = { fire: '🔥불뿜기', sprint: '💨달리기', shotgun: '🔫샷건', wool: '🐑양털' };
+    for (let i = 0; i < 2; i++) {
+      const sx = W / 2 + (i === 0 ? -35 : 35);
+      const slot = this.buffSlots[i];
+      if (slot) {
+        this.buffHudGfx.fillStyle(0x334466, 0.9);
+        this.buffHudGfx.fillRoundedRect(sx - 22, H - 67, 44, 44, 6);
+        this.buffHudGfx.lineStyle(2, 0x88CCFF, 0.8);
+        this.buffHudGfx.strokeRoundedRect(sx - 22, H - 67, 44, 44, 6);
+        this.buffHudTexts[i].setText(names[slot] || slot);
+      } else {
+        this.buffHudGfx.fillStyle(0x222233, 0.6);
+        this.buffHudGfx.fillRoundedRect(sx - 22, H - 67, 44, 44, 6);
+        this.buffHudGfx.lineStyle(1, 0x445566, 0.5);
+        this.buffHudGfx.strokeRoundedRect(sx - 22, H - 67, 44, 44, 6);
+        this.buffHudTexts[i].setText('');
+      }
+    }
+  }
+
+  _tryDropBuff(x, y) {
+    // 3~5% chance, max 3 on map
+    if (this.buffDropItems.length >= 3) return;
+    if (Math.random() > 0.05) return;
+    const types = ['fire', 'sprint', 'shotgun', 'wool'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    const texKey = 'buff_' + type;
+    const drop = this.physics.add.sprite(x, y, texKey).setDepth(8);
+    drop.body.setAllowGravity(false);
+    drop.buffType = type;
+    drop.lifetime = 60; // seconds
+    this.buffDropGroup.add(drop);
+    this.buffDropItems.push(drop);
+    // Bounce in
+    this.tweens.add({ targets: drop, scale: { from: 0, to: 1.3 }, duration: 300, ease: 'Back.Out',
+      onComplete: () => this.tweens.add({ targets: drop, scale: 1, duration: 200 }) });
+    // Floating label
+    const icons = { fire: '🔥', sprint: '💨', shotgun: '🔫', wool: '🐑' };
+    const label = this.add.text(x, y - 20, icons[type] || '?', {
+      fontSize: '16px', fontFamily: 'monospace'
+    }).setDepth(9).setOrigin(0.5);
+    drop._label = label;
+  }
+
+  _collectBuffDrop(bd) {
+    if (!bd.active) return;
+    // Find empty slot (oldest first = slot 0 first)
+    let slotIdx = -1;
+    if (this.buffSlots[0] === null) slotIdx = 0;
+    else if (this.buffSlots[1] === null) slotIdx = 1;
+    if (slotIdx === -1) return; // both full
+    this.buffSlots[slotIdx] = bd.buffType;
+    this.showFloatingText(bd.x, bd.y - 20, '버프 획득!', '#88FFAA');
+    if (bd._label) bd._label.destroy();
+    const idx = this.buffDropItems.indexOf(bd);
+    if (idx >= 0) this.buffDropItems.splice(idx, 1);
+    bd.destroy();
+    this._updateBuffHUD();
+  }
+
+  _useBuffSlot(idx) {
+    const type = this.buffSlots[idx];
+    if (!type) return;
+    this.buffSlots[idx] = null;
+    this._activateBuff(type);
+    this._updateBuffHUD();
+  }
+
+  _activateBuff(type) {
+    const px = this.player.x, py = this.player.y;
+    if (type === 'fire') {
+      this.activeBuffs.fire = { remaining: 5 };
+      this._fireBreathTimer = 0;
+      this.showFloatingText(px, py - 30, '🔥 불뿜기!', '#FF4400');
+    } else if (type === 'sprint') {
+      this.activeBuffs.sprint = { remaining: 8, origSpeed: this.playerSpeed };
+      this.playerSpeed *= 3;
+      this.showFloatingText(px, py - 30, '💨 달리기!', '#44CCFF');
+    } else if (type === 'shotgun') {
+      this.showFloatingText(px, py - 30, '🔫 샷건!', '#FFDD00');
+      // Flash effect
+      this.cameras.main.flash(200, 255, 255, 200);
+      // 8-directional projectiles
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2;
+        const bullet = this.add.circle(px, py, 5, 0xFFFF44).setDepth(15);
+        const speed = 400;
+        const bx = Math.cos(ang), by = Math.sin(ang);
+        this.tweens.add({
+          targets: bullet, x: px + bx * 600, y: py + by * 600,
+          duration: 1500, ease: 'Linear',
+          onUpdate: () => {
+            // Check hits on animals
+            this.animals.getChildren().forEach(a => {
+              if (!a.active || a._shotgunHit) return;
+              const d = Phaser.Math.Distance.Between(bullet.x, bullet.y, a.x, a.y);
+              if (d < 25) {
+                a.hp -= 150;
+                a.setTint(0xFFFF00);
+                this.time.delayedCall(150, () => { if (a.active) a.clearTint(); });
+                this.showFloatingText(a.x, a.y - 20, '-150', '#FFDD00');
+                if (a.hp <= 0) this.killAnimal(a);
+              }
+            });
+          },
+          onComplete: () => bullet.destroy()
+        });
+      }
+    } else if (type === 'wool') {
+      this.activeBuffs.wool = { remaining: 15 };
+      this.showFloatingText(px, py - 30, '🐑 양털슈트!', '#FFFFFF');
+    }
+  }
+
+  _updateBuffs(dt) {
+    // Q/E key check
+    if (Phaser.Input.Keyboard.JustDown(this.buffKeys.q)) this._useBuffSlot(0);
+    if (Phaser.Input.Keyboard.JustDown(this.buffKeys.e)) this._useBuffSlot(1);
+
+    // Update buff drop expiry
+    for (let i = this.buffDropItems.length - 1; i >= 0; i--) {
+      const bd = this.buffDropItems[i];
+      if (!bd.active) { this.buffDropItems.splice(i, 1); continue; }
+      bd.lifetime -= dt;
+      // Blink when < 10s
+      if (bd.lifetime < 10) {
+        bd.setAlpha(Math.sin(bd.lifetime * 8) * 0.3 + 0.5);
+        if (bd._label) bd._label.setAlpha(bd.alpha);
+      }
+      if (bd.lifetime <= 0) {
+        if (bd._label) bd._label.destroy();
+        bd.destroy();
+        this.buffDropItems.splice(i, 1);
+      }
+    }
+
+    // Fire Breath
+    if (this.activeBuffs.fire) {
+      this.activeBuffs.fire.remaining -= dt;
+      this._fireBreathTimer -= dt;
+      // Visual: orange/red particles in front arc
+      const dir = this.facingRight ? 0 : Math.PI;
+      for (let i = 0; i < 3; i++) {
+        const ang = dir + (Math.random() - 0.5) * (Math.PI * 2 / 3); // 120° arc
+        const dist = 30 + Math.random() * 120;
+        const px = this.player.x + Math.cos(ang) * dist;
+        const py = this.player.y + Math.sin(ang) * dist;
+        const colors = [0xFF4400, 0xFF6600, 0xFF8800, 0xFF2200];
+        const p = this.add.circle(px, py, 2 + Math.random() * 4, Phaser.Utils.Array.GetRandom(colors))
+          .setDepth(12).setAlpha(0.8);
+        this.tweens.add({ targets: p, alpha: 0, scale: 0, duration: 300 + Math.random() * 300, onComplete: () => p.destroy() });
+      }
+      // Damage every 0.3s
+      if (this._fireBreathTimer <= 0) {
+        this._fireBreathTimer = 0.3;
+        const dir2 = this.facingRight ? 0 : Math.PI;
+        this.animals.getChildren().forEach(a => {
+          if (!a.active) return;
+          const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
+          if (d > 150) return;
+          const angToA = Phaser.Math.Angle.Between(this.player.x, this.player.y, a.x, a.y);
+          let diff = angToA - dir2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          if (Math.abs(diff) < Math.PI / 3) { // 120° = 60° each side
+            a.hp -= 10;
+            a.setTint(0xFF4400);
+            this.time.delayedCall(100, () => { if (a.active) a.clearTint(); });
+            if (a.hp <= 0) this.killAnimal(a);
+          }
+        });
+      }
+      if (this.activeBuffs.fire.remaining <= 0) delete this.activeBuffs.fire;
+    }
+
+    // Sprint
+    if (this.activeBuffs.sprint) {
+      this.activeBuffs.sprint.remaining -= dt;
+      // Speed lines visual
+      if (Math.random() < 0.3) {
+        const ang = Math.random() * Math.PI * 2;
+        const p = this.add.rectangle(
+          this.player.x + Math.cos(ang) * 15, this.player.y + Math.sin(ang) * 15,
+          2, 10 + Math.random() * 15, 0xFFFFFF, 0.6
+        ).setDepth(9).setRotation(ang);
+        this.tweens.add({ targets: p, alpha: 0, scaleX: 0, duration: 200, onComplete: () => p.destroy() });
+      }
+      if (this.activeBuffs.sprint.remaining <= 0) {
+        this.playerSpeed = this.playerBaseSpeed;
+        delete this.activeBuffs.sprint;
+      }
+    }
+
+    // Wool Suit visual
+    if (this.activeBuffs.wool) {
+      this.activeBuffs.wool.remaining -= dt;
+      // White glow
+      if (!this._woolGlow) {
+        this._woolGlow = this.add.circle(this.player.x, this.player.y, 30, 0xFFFFFF, 0.15).setDepth(9);
+      }
+      this._woolGlow.setPosition(this.player.x, this.player.y);
+      if (this.activeBuffs.wool.remaining <= 0) {
+        delete this.activeBuffs.wool;
+        if (this._woolGlow) { this._woolGlow.destroy(); this._woolGlow = null; }
+      }
+    } else if (this._woolGlow) {
+      this._woolGlow.destroy(); this._woolGlow = null;
+    }
+
+    this._updateBuffHUD();
+  }
+
   updateAnimalAI(dt) {
     const px = this.player.x, py = this.player.y;
     this.animals.getChildren().forEach(a => {
@@ -2649,6 +2997,13 @@ class GameScene extends Phaser.Scene {
         }
       });
 
+      // ═══ Wool Suit: hostile animals flee from player ═══
+      if (!repelled && this.activeBuffs.wool && a.def.behavior === 'chase' && dist < 200) {
+        const ang = Phaser.Math.Angle.Between(px, py, a.x, a.y);
+        a.body.setVelocity(Math.cos(ang) * a.def.speed * 1.2, Math.sin(ang) * a.def.speed * 1.2);
+        repelled = true;
+      }
+
       if (!repelled) {
         if (a.def.behavior === 'flee') {
           if (dist < a.def.fleeRange) {
@@ -2664,6 +3019,8 @@ class GameScene extends Phaser.Scene {
             const ang = Phaser.Math.Angle.Between(a.x, a.y, px, py);
             a.body.setVelocity(Math.cos(ang)*a.def.speed, Math.sin(ang)*a.def.speed);
             if (dist < 28 && a.atkCD <= 0) {
+              // Sprint invincibility
+              if (this.activeBuffs.sprint) { a.atkCD = 0.5; return; }
               // Dodge check
               if (this.upgradeManager.dodgeChance > 0 && Math.random() < this.upgradeManager.dodgeChance) {
                 a.atkCD = 0.8;
@@ -2982,7 +3339,9 @@ class GameScene extends Phaser.Scene {
     const zoneDecay = ZONE_TEMP_DECAY[zone] || 0;
     const baseDecay = 0.5 * (1 - this.warmthResist); // warmthResist now directly reduces decay
     const frostRes = this.upgradeManager ? this.upgradeManager.frostResistance : 0;
-    this.temperature = Math.max(0, this.temperature - (baseDecay + Math.abs(zoneDecay)) * this.blizzardMultiplier * (1 - frostRes) * dt);
+    const woolMul = this.activeBuffs.wool ? 0.5 : 1; // 양털슈트: 체온 소모 50% 감소
+    const sprintFreeze = this.activeBuffs.sprint ? 0 : 1; // 달리기: 체온 소모 없음
+    this.temperature = Math.max(0, this.temperature - (baseDecay + Math.abs(zoneDecay)) * this.blizzardMultiplier * (1 - frostRes) * woolMul * sprintFreeze * dt);
     this.placedBuildings.forEach(b => {
       if (b.type === 'campfire') return;
       if (!b.def.warmth) return;
@@ -4417,6 +4776,7 @@ class GameScene extends Phaser.Scene {
       if (c._label && c._label.active) c._label.setPosition(c.x, c.y - 24);
     });
 
+    this._updateBuffs(dt);
     this.updateAnimalAI(dt);
     this.updateNPCs(dt);
     this.updateCampfireSystem(dt);
