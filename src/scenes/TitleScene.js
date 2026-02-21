@@ -112,7 +112,7 @@ class TitleScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Version text (Easter egg: 5 rapid clicks)
-    const versionText = this.add.text(W - 10, H - 10, 'v2.1', {
+    const versionText = this.add.text(W - 10, H - 10, 'v1.0 Final', {
       fontSize: '11px', fontFamily: 'monospace', color: '#445566', alpha: 0.6
     }).setOrigin(1, 1).setDepth(20).setInteractive();
     let _vClickCount = 0, _vClickTimer = 0;
@@ -317,17 +317,28 @@ class TitleScene extends Phaser.Scene {
       const dbg = this.add.graphics().setDepth(11);
       dbg.fillStyle(0xFF6B35, 0.9);
       dbg.fillRoundedRect(W/2 - dailyBtnW2/2, dailyY + 42, dailyBtnW2, dailyBtnH2, 6);
-      this.add.text(W / 2, dailyY + 42 + dailyBtnH2/2, '🎯 도전', {
+      const dailyTxt = this.add.text(W / 2, dailyY + 42 + dailyBtnH2/2, '🎯 도전', {
         fontSize: '12px', fontFamily: 'monospace', color: '#fff', fontStyle: 'bold'
       }).setOrigin(0.5).setDepth(12);
       const dailyHit = this.add.rectangle(W/2, dailyY + 42 + dailyBtnH2/2, dailyBtnW2, dailyBtnH2, 0, 0).setInteractive({ useHandCursor: true }).setDepth(13);
+      
+      dailyHit.on('pointerover', () => {
+        this.tweens.add({ targets: [dbg, dailyTxt], scale: 1.05, duration: 100, ease: 'Quad.Out' });
+        dbg.alpha = 1.0;
+      });
+      dailyHit.on('pointerout', () => {
+        this.tweens.add({ targets: [dbg, dailyTxt], scale: 1, duration: 100, ease: 'Quad.Out' });
+        dbg.alpha = 0.9;
+      });
       dailyHit.on('pointerdown', () => {
-        this.scene.start('Boot', { loadSave: false, playerClass: localStorage.getItem('whiteout_class') || 'warrior', dailyChallenge: dailyCh });
+        this.tweens.add({ targets: [dbg, dailyTxt], scale: 0.9, duration: 80, yoyo: true, ease: 'Quad.InOut', onComplete: () => {
+          this.scene.start('Boot', { loadSave: false, playerClass: localStorage.getItem('whiteout_class') || 'warrior', dailyChallenge: dailyCh });
+        }});
       });
     }
 
     // Version
-    this.add.text(W - 10, H - 10, 'v2.1', {
+    this.add.text(W - 10, H - 10, 'v1.0 Final', {
       fontSize: '11px', fontFamily: 'monospace', color: '#334'
     }).setOrigin(1, 1);
 
@@ -342,7 +353,20 @@ class TitleScene extends Phaser.Scene {
       fontSize: '20px', fontFamily: 'monospace', color: '#aaccee', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(21);
     const helpHit = this.add.circle(30, H - 30, helpBtnSize / 2, 0, 0).setInteractive({ useHandCursor: true }).setDepth(22);
-    helpHit.on('pointerdown', () => this._showHelpModal());
+
+    helpHit.on('pointerover', () => {
+      this.tweens.add({ targets: [helpBg, helpTxt], scale: 1.1, duration: 100, ease: 'Quad.Out' });
+      helpBg.alpha = 1.0;
+    });
+    helpHit.on('pointerout', () => {
+      this.tweens.add({ targets: [helpBg, helpTxt], scale: 1, duration: 100, ease: 'Quad.Out' });
+      helpBg.alpha = 0.8;
+    });
+    helpHit.on('pointerdown', () => {
+      this.tweens.add({ targets: [helpBg, helpTxt], scale: 0.9, duration: 80, yoyo: true, ease: 'Quad.InOut', onComplete: () => {
+        this._showHelpModal();
+      }});
+    });
     
     this.elapsed = 0;
   }
@@ -389,7 +413,12 @@ class TitleScene extends Phaser.Scene {
       fontSize: '16px', fontFamily: 'monospace', color: '#FFD700', fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(302).setInteractive({ useHandCursor: true });
     allEl.push(closeBtn);
-    closeBtn.on('pointerdown', destroy);
+
+    closeBtn.on('pointerover', () => closeBtn.setColor('#FFFF00').setScale(1.1));
+    closeBtn.on('pointerout', () => closeBtn.setColor('#FFD700').setScale(1.0));
+    closeBtn.on('pointerdown', () => {
+        this.tweens.add({ targets: closeBtn, scale: 0.9, duration: 80, yoyo: true, ease: 'Quad.InOut', onComplete: destroy });
+    });
     ov.on('pointerdown', destroy);
   }
   
@@ -614,15 +643,23 @@ class TitleScene extends Phaser.Scene {
     confirmBg.fillStyle(0xcc3322, 0.9); confirmBg.fillRoundedRect(W/2-70-50, H/2+40, 100, 36, 6);
     const confirmTxt = this.add.text(W/2-70, H/2+58, '삭제 후 시작', { fontSize:'13px', fontFamily:'monospace', color:'#fff' }).setOrigin(0.5).setDepth(102);
     const confirmHit = this.add.rectangle(W/2-70, H/2+58, 100, 36, 0, 0).setInteractive({ useHandCursor:true }).setDepth(103);
+
+    confirmHit.on('pointerover', () => confirmBg.setAlpha(1.0));
+    confirmHit.on('pointerout', () => confirmBg.setAlpha(0.9));
     confirmHit.on('pointerdown', () => {
-      SaveManager.delete();
-      [overlay, dlg, title, msg, confirmBg, confirmTxt, confirmHit, cancelBg, cancelTxt, cancelHit].forEach(o => o.destroy());
-      this._showClassSelection();
+      this.tweens.add({ targets: [confirmBg, confirmTxt], scale: 0.95, duration: 80, yoyo: true, ease: 'Quad.InOut', onComplete: () => {
+        SaveManager.delete();
+        [overlay, dlg, title, msg, confirmBg, confirmTxt, confirmHit, cancelBg, cancelTxt, cancelHit].forEach(o => o.destroy());
+        this._showClassSelection();
+      }});
     });
     const cancelBg = this.add.graphics().setDepth(102);
     cancelBg.fillStyle(0x334466, 0.9); cancelBg.fillRoundedRect(W/2+70-50, H/2+40, 100, 36, 6);
     const cancelTxt = this.add.text(W/2+70, H/2+58, '취소', { fontSize:'13px', fontFamily:'monospace', color:'#aabbcc' }).setOrigin(0.5).setDepth(102);
-    const cancelHit = this.add.rectangle(W/2+70-50, H/2+58, 100, 36, 0, 0).setInteractive({ useHandCursor:true }).setDepth(103);
+    const cancelHit = this.add.rectangle(W/2+70, H/2+58, 100, 36, 0, 0).setInteractive({ useHandCursor:true }).setDepth(103);
+
+    cancelHit.on('pointerover', () => cancelBg.setAlpha(1.0));
+    cancelHit.on('pointerout', () => cancelBg.setAlpha(0.9));
     cancelHit.on('pointerdown', () => {
       [overlay, dlg, title, msg, confirmBg, confirmTxt, confirmHit, cancelBg, cancelTxt, cancelHit].forEach(o => o.destroy());
     });
@@ -1014,12 +1051,17 @@ class TitleScene extends Phaser.Scene {
     allElements.push(btnTxt);
     const btnHit = this.add.rectangle(W/2, btnY2, btnW2, btnH2, 0, 0).setInteractive({ useHandCursor: true }).setDepth(203);
     allElements.push(btnHit);
+
+    btnHit.on('pointerover', () => btnBg.setAlpha(1.0));
+    btnHit.on('pointerout', () => btnBg.setAlpha(0.9));
     btnHit.on('pointerdown', () => {
-      try { localStorage.setItem('whiteout_class', selectedClass); } catch(e) {}
-      try { localStorage.setItem('whiteout_difficulty', selectedDifficulty); } catch(e) {}
-      try { localStorage.setItem('whiteout_endless', endlessMode ? 'true' : 'false'); } catch(e) {}
-      destroy();
-      this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty, endlessMode, ngPlus: ngPlusMode, bossRush: bossRushMode, speedrun: speedrunMode, handicap: handicapOptions[handicapIdx] });
+      this.tweens.add({ targets: [btnBg, btnTxt], scale: 0.95, duration: 80, yoyo: true, ease: 'Quad.InOut', onComplete: () => {
+        try { localStorage.setItem('whiteout_class', selectedClass); } catch(e) {}
+        try { localStorage.setItem('whiteout_difficulty', selectedDifficulty); } catch(e) {}
+        try { localStorage.setItem('whiteout_endless', endlessMode ? 'true' : 'false'); } catch(e) {}
+        destroy();
+        this.scene.start('Boot', { loadSave: false, playerClass: selectedClass, difficulty: selectedDifficulty, endlessMode, ngPlus: ngPlusMode, bossRush: bossRushMode, speedrun: speedrunMode, handicap: handicapOptions[handicapIdx] });
+      }});
     });
 
     // FTUE bottom hint
@@ -1179,7 +1221,13 @@ class TitleScene extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(104));
         if (canBuy) {
           const hit = this.add.rectangle(btnX - 24, btnY2 + 11, 56, 22, 0, 0).setInteractive({ useHandCursor: true }).setDepth(105);
-          hit.on('pointerdown', () => { if (MetaManager.doUpgrade(upg.key)) { destroy(); this._showMetaUpgradeUI(currentTab); } });
+          hit.on('pointerover', () => bg2.setAlpha(1.0));
+          hit.on('pointerout', () => bg2.setAlpha(0.9));
+          hit.on('pointerdown', () => { 
+            this.tweens.add({ targets: [bg2, allElements[allElements.length-1]], scale: 0.9, duration: 80, yoyo: true, ease: 'Quad.InOut', onComplete: () => {
+              if (MetaManager.doUpgrade(upg.key)) { destroy(); this._showMetaUpgradeUI(currentTab); }
+            }});
+          });
           allElements.push(hit);
         }
       } else {
@@ -1583,6 +1631,9 @@ class TitleScene extends Phaser.Scene {
     container.push(closeBtn);
 
     const cleanup = () => { clearContent(); tabBtns.forEach(t => t.destroy()); container.forEach(el => el.destroy()); };
+    
+    closeBtn.on('pointerover', () => closeBtn.setScale(1.05).setTint(0xaaaaff));
+    closeBtn.on('pointerout', () => closeBtn.setScale(1.0).clearTint());
     closeBtn.on('pointerdown', cleanup);
     ovHit.on('pointerdown', cleanup);
 
@@ -1651,6 +1702,8 @@ class TitleScene extends Phaser.Scene {
     container.push(closeBtn);
 
     const cleanup = () => { container.forEach(el => el.destroy()); };
+    closeBtn.on('pointerover', () => closeBtn.setScale(1.05).setTint(0xaaaaff));
+    closeBtn.on('pointerout', () => closeBtn.setScale(1.0).clearTint());
     closeBtn.on('pointerdown', cleanup);
     ovHit.on('pointerdown', cleanup);
   }

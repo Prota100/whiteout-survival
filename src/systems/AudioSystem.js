@@ -1,5 +1,5 @@
 // Sound Engine (WebAudio + Procedural BGM/Ambience)
-// Whiteout Survival v2.1 - ULTIMATE with Sound FX
+// Whiteout Survival v1.0 Final - ULTIMATE with Sound FX
 // All feedback applied: mobile, balance, visuals, campfire, buildings, SOUND
 
 // ═══ 🔊 SOUND ENGINE (ElevenLabs + Web Audio + Procedural BGM/Ambience) ═══

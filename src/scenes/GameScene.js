@@ -5727,10 +5727,10 @@ class GameScene extends Phaser.Scene {
 
     const titleColor = isVictory ? '#FFD700' : '#FF4444';
     const ngPlusTag = (isVictory && this._ngPlus) ? ' NG+' + (RecordManager.load().ngPlusClears || 1) : '';
-    const titleText = isVictory ? '생존 성공!' + ngPlusTag : '생존 실패';
+    const titleText = isVictory ? '생존 성공!' + ngPlusTag : 'YOU DIED';
     const title = this.add.text(px, py - panelH/2 + 185, titleText, {
-      fontSize: '22px', fontFamily: 'monospace', color: titleColor,
-      stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+      fontSize: isVictory ? '22px' : '48px', fontFamily: 'monospace', color: titleColor,
+      stroke: '#000', strokeThickness: isVictory ? 3 : 6, fontStyle: 'bold'
     }).setScrollFactor(0).setDepth(302).setOrigin(0.5).setAlpha(0);
 
     const survMin = Math.floor(survivalTime / 60);
@@ -5842,8 +5842,33 @@ class GameScene extends Phaser.Scene {
       return '❄️ 화이트아웃 서바이벌\n등급: [' + gradeInfo.grade + '] ' + gradeInfo.title + '\n점수: ' + ScoreSystem.formatScore(finalScore) + '점\n생존: ' + survMin + '분 ' + String(survSec).padStart(2,'0') + '초 | 킬: ' + totalKills + ' | 레벨: ' + level + '\n최고콤보: ' + maxCombo + ' | 클래스: ' + cn + '\n난이도: ' + diffName + '\nhttps://prota100.github.io/whiteout-survival/';
     };
 
-    retryHit.on('pointerdown', () => { this.scene.start('Boot', { loadSave: false, difficulty: this._difficulty, dailyChallenge: this._dailyChallenge, endlessMode: this._endlessMode, speedrun: this._speedrunMode, handicap: this._handicap }); });
-    titleHit.on('pointerdown', () => { this.scene.start('Title'); });
+    // Button hover effects
+    const addHoverEffect = (hit, bg, text) => {
+      hit.on('pointerover', () => {
+        this.tweens.add({ targets: [bg, text], scale: 1.05, duration: 100 });
+        bg.alpha = 1;
+      });
+      hit.on('pointerout', () => {
+        this.tweens.add({ targets: [bg, text], scale: 1, duration: 100 });
+        bg.alpha = 0.9;
+      });
+    };
+
+    addHoverEffect(retryHit, retryBg, retryText);
+    addHoverEffect(titleHit, titleBg, titleBtnText);
+    addHoverEffect(shareHit, shareBg, shareText);
+    addHoverEffect(twitterHit, twitterBg, twitterText);
+
+    retryHit.on('pointerdown', () => {
+      this.tweens.add({ targets: [retryBg, retryText], scale: 0.9, duration: 80, yoyo: true, onComplete: () => {
+        this.scene.start('Boot', { loadSave: false, difficulty: this._difficulty, dailyChallenge: this._dailyChallenge, endlessMode: this._endlessMode, speedrun: this._speedrunMode, handicap: this._handicap });
+      }});
+    });
+    titleHit.on('pointerdown', () => {
+        this.tweens.add({ targets: [titleBg, titleBtnText], scale: 0.9, duration: 80, yoyo: true, onComplete: () => {
+            this.scene.start('Title');
+        }});
+    });
     shareHit.on('pointerdown', () => {
       const msg = _buildShareMsg();
       try {
