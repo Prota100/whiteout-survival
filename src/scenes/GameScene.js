@@ -1014,20 +1014,22 @@ class GameScene extends Phaser.Scene {
       const heal = Math.ceil(dmg * this.upgradeManager.lifeStealPct);
       this.playerHP = Math.min(this.playerMaxHP, this.playerHP + heal);
     }
-    // Chain Lightning
+    // Chain Lightning (deferred damage to avoid array mutation)
     if (this.upgradeManager.chainLightningLevel > 0 && !a._chainSource) {
       const chainDmg = Math.round(dmg * 0.3);
       const chainCount = this.upgradeManager.chainLightningLevel;
-      let chained = 0;
+      const toChain = [];
       this.animals.getChildren().forEach(b => {
-        if (!b.active || b === a || chained >= chainCount) return;
+        if (!b.active || b === a || toChain.length >= chainCount) return;
         if (Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y) < 120) {
-          b._chainSource = true;
-          this.damageAnimal(b, chainDmg);
-          delete b._chainSource;
-          this.showFloatingText(b.x, b.y - 30, '⚡', '#FFFF00');
-          chained++;
+          toChain.push(b);
         }
+      });
+      toChain.forEach(b => {
+        b._chainSource = true;
+        this.damageAnimal(b, chainDmg);
+        delete b._chainSource;
+        this.showFloatingText(b.x, b.y - 30, '⚡', '#FFFF00');
       });
     }
     // Double Shot
@@ -6263,8 +6265,9 @@ class GameScene extends Phaser.Scene {
           old.gfx.destroy(); old.border.destroy();
         }
       }
-      // Check trap collisions with enemies
+      // Check trap collisions with enemies (deferred kill to avoid array mutation)
       for (const trap of this._hunterTraps) {
+        const _trapKills = [];
         this.animals.getChildren().forEach(a => {
           if (!a.active || a._trapFrozen) return;
           if (Phaser.Math.Distance.Between(trap.x, trap.y, a.x, a.y) < 60) {
@@ -6273,14 +6276,16 @@ class GameScene extends Phaser.Scene {
             this.showFloatingText(a.x, a.y - 20, '🪤 함정! -50', '#FF8800');
             if (a.body) { a.body.setVelocity(0, 0); a.body.moves = false; a.setTint(0x88CCFF); }
             this.time.delayedCall(3000, () => { if (a.active) { a.body.moves = true; a.clearTint(); a._trapFrozen = false; } });
-            if (a.hp <= 0) this.killAnimal(a);
+            if (a.hp <= 0) _trapKills.push(a);
           }
         });
+        _trapKills.forEach(a => { if (a.active) this.killAnimal(a); });
       }
     }
 
     // ═══ Hunter: Poison DoT tick ═══
     if (this._playerClass === 'hunter') {
+      const _poisonKills = [];
       this.animals.getChildren().forEach(a => {
         if (!a.active || !a._poisonStacks || a._poisonStacks.length === 0) return;
         for (let i = a._poisonStacks.length - 1; i >= 0; i--) {
@@ -6291,10 +6296,11 @@ class GameScene extends Phaser.Scene {
             a._poisonStacks[i]._tick -= 1;
             a.hp -= 10;
             this.showFloatingText(a.x, a.y - 15, '☠️-10', '#44FF00');
-            if (a.hp <= 0) { this.killAnimal(a); break; }
+            if (a.hp <= 0) { _poisonKills.push(a); break; }
           }
         }
       });
+      _poisonKills.forEach(a => { if (a.active) this.killAnimal(a); });
     }
 
     // ═══ Hunter: Focused Fire Volley (auto 25s cooldown) ═══
