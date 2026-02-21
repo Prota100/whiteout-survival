@@ -1038,7 +1038,17 @@ class GameScene extends Phaser.Scene {
       a._doubleShot = true;
       this.time.delayedCall(100, () => { if (a.active) { this.damageAnimal(a, dmg); delete a._doubleShot; } });
     }
-    if (a.hp <= 0) this.killAnimal(a);
+    // DEBUG: Skip killAnimal for rabbit
+    if (a.hp <= 0) {
+      if (a.animalType === 'rabbit') {
+        console.log('[DEBUG] RABBIT DEATH - bypassing killAnimal');
+        if (a.hpBar) a.hpBar.destroy();
+        if (a.nameLabel) a.nameLabel.destroy();
+        a.destroy();
+      } else {
+        this.killAnimal(a);
+      }
+    }
   }
 
   killAnimal(a) { 
