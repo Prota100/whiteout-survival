@@ -1797,6 +1797,9 @@ class GameScene extends Phaser.Scene {
     this.killCombo = 0;
     this.killComboTimer = 0; // seconds remaining
     this.killComboText = null;
+    
+    // ═══ Streak Buff System ═══
+    this.streakBuff = { dmgMul: 1, spdMul: 1, timer: 0, tier: 0 };
 
     // ═══ Tutorial Hints ═══
     this.tutorialShown = false;
@@ -2250,7 +2253,7 @@ class GameScene extends Phaser.Scene {
     let hit = false;
     this.animals.getChildren().forEach(a => {
       if (!a.active) return;
-      if (Phaser.Math.Distance.Between(wx, wy, a.x, a.y) < range) { this.damageAnimal(a, this.playerDamage); hit = true; }
+      if (Phaser.Math.Distance.Between(wx, wy, a.x, a.y) < range) { this.damageAnimal(a, Math.round(this.playerDamage * (this.streakBuff?.dmgMul || 1))); hit = true; }
     });
     this.resourceNodes.forEach(n => {
       if (n.depleted) return;
@@ -2286,7 +2289,7 @@ class GameScene extends Phaser.Scene {
       // Multi-hit
       const hitCount = Math.min(this.upgradeManager.multiHitCount, nearAnimals.length);
       for (let h = 0; h < hitCount; h++) {
-        this.damageAnimal(nearAnimals[h].a, this.playerDamage);
+        this.damageAnimal(nearAnimals[h].a, Math.round(this.playerDamage * (this.streakBuff?.dmgMul || 1)));
         this.showAttackFX(nearAnimals[h].a.x, nearAnimals[h].a.y, true);
       }
       this.upgradeManager.attackCounter++; // Increment attack counter for successful hit
@@ -2412,6 +2415,7 @@ class GameScene extends Phaser.Scene {
     this.killComboTimer = 3; // 3 seconds to maintain combo
     if (this.killCombo > (this.stats.maxCombo || 0)) this.stats.maxCombo = this.killCombo;
     this._updateComboDisplay();
+    this._applyStreakBuff(a.x, a.y);
 
     // XP gain on kill with combo bonus
     let _xpAmt = XP_SOURCES[a.animalType] || 3;
@@ -2494,6 +2498,79 @@ class GameScene extends Phaser.Scene {
     }
     // Pulse effect
     this.tweens.add({ targets: this.killComboText, scale: { from: 1.3, to: 1 }, duration: 200 });
+  }
+
+  // ═══ Streak Buff System ═══
+  _applyStreakBuff(killX, killY) {
+    const c = this.killCombo;
+    let newTier = 0;
+    let dmgMul = 1, spdMul = 1, timer = 0, label = '', color = '#FFFFFF';
+    
+    if (c >= 15) {
+      newTier = 4; dmgMul = 1.5; spdMul = 1.3; timer = 10;
+      label = '☠️ 전멸!'; color = '#FF0000';
+    } else if (c >= 10) {
+      newTier = 3; dmgMul = 1.5; spdMul = 1.3; timer = 10;
+      label = '💀 학살자!'; color = '#FF4400';
+    } else if (c >= 5) {
+      newTier = 2; dmgMul = 1.3; spdMul = 1; timer = 8;
+      label = '🔥 연쇄 처치!'; color = '#FF8800';
+    } else if (c >= 3) {
+      newTier = 1; dmgMul = 1; spdMul = 1.15; timer = 8;
+      label = '⚡ 쾌속!'; color = '#FFDD00';
+    }
+    
+    if (newTier > 0 && newTier > this.streakBuff.tier) {
+      this.streakBuff = { dmgMul, spdMul, timer, tier: newTier };
+      
+      // Show center alert
+      const cam = this.cameras.main;
+      const alert = this.add.text(cam.width / 2, cam.height * 0.35, label, {
+        fontSize: '32px', fontFamily: 'monospace', color, stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
+      }).setScrollFactor(0).setDepth(350).setOrigin(0.5).setAlpha(0);
+      this.tweens.add({
+        targets: alert, alpha: { from: 0, to: 1 }, y: { from: cam.height * 0.35, to: cam.height * 0.3 },
+        duration: 300, ease: 'Back.Out',
+        onComplete: () => this.tweens.add({ targets: alert, alpha: 0, duration: 400, delay: 600, onComplete: () => alert.destroy() })
+      });
+      
+      // Visual feedback
+      if (newTier >= 3) {
+        cam.flash(200, 255, 100, 0, true);
+        cam.shake(300, 0.01);
+      } else if (newTier >= 2) {
+        cam.flash(150, 255, 140, 0, true);
+      }
+      
+      // Area explosion at tier 4+
+      if (newTier >= 4 && killX && killY) {
+        const radius = 150;
+        this.animals.getChildren().forEach(en => {
+          const dx = en.x - killX, dy = en.y - killY;
+          if (Math.sqrt(dx*dx + dy*dy) < radius) {
+            const dmg = 50;
+            en.hp = (en.hp || 0) - dmg;
+            this.showFloatingText(en.x, en.y - 20, `-${dmg}`, '#FF4400');
+            if (en.hp <= 0) this.killAnimal(en);
+          }
+        });
+        // Explosion ring
+        for (let i = 0; i < 16; i++) {
+          const ang = (Math.PI * 2 / 16) * i;
+          const ep = this.add.circle(killX, killY, 5, 0xFF4400).setDepth(15).setAlpha(0.9);
+          this.tweens.add({ targets: ep, x: killX + Math.cos(ang)*radius, y: killY + Math.sin(ang)*radius,
+            alpha: 0, scale: { from: 2, to: 0 }, duration: 600, ease: 'Quad.Out', onComplete: () => ep.destroy() });
+        }
+      }
+    }
+  }
+  
+  _updateStreakBuff(dt) {
+    if (this.streakBuff.timer <= 0) return;
+    this.streakBuff.timer -= dt;
+    if (this.streakBuff.timer <= 0) {
+      this.streakBuff = { dmgMul: 1, spdMul: 1, timer: 0, tier: 0 };
+    }
   }
 
   // ═══ Tutorial Hints ═══
@@ -4660,9 +4737,13 @@ class GameScene extends Phaser.Scene {
       if (this.killComboTimer <= 0) {
         this.killCombo = 0;
         this.killComboTimer = 0;
+        this.streakBuff = { dmgMul: 1, spdMul: 1, timer: 0, tier: 0 }; // reset buff on combo break
         this._updateComboDisplay();
       }
     }
+    
+    // ═══ Streak Buff Timer ═══
+    this._updateStreakBuff(dt);
 
     // ═══ Tutorial Hints ═══
     if (!this.tutorialShown && this.gameElapsed > 0) {
@@ -4681,7 +4762,7 @@ class GameScene extends Phaser.Scene {
         this.attackCooldown = this.getAttackCooldown();
         this.player.setTexture('player_attack');
         this.time.delayedCall(150, () => { if(this.player.active) this.player.setTexture('player'); });
-        this.damageAnimal(nearest, this.playerDamage); playSlash();
+        this.damageAnimal(nearest, Math.round(this.playerDamage * (this.streakBuff?.dmgMul || 1))); playSlash();
         this.showAttackFX(nearest.x, nearest.y, true);
         this.cameras.main.shake(50, 0.003);
         this.upgradeManager.attackCounter++; // Increment attack counter for successful hit
@@ -4732,7 +4813,8 @@ class GameScene extends Phaser.Scene {
       const mag = Math.sqrt(finalMX*finalMX + finalMY*finalMY);
       if (mag > 1) { finalMX /= mag; finalMY /= mag; }
     }
-    this.player.body.setVelocity(finalMX*this.playerSpeed, finalMY*this.playerSpeed);
+    const effectiveSpeed = this.playerSpeed * (this.streakBuff?.spdMul || 1);
+    this.player.body.setVelocity(finalMX*effectiveSpeed, finalMY*effectiveSpeed);
     // 4방향 스프라이트 전환 (상하좌우) + 뒷모습
     const absX = Math.abs(finalMX);
     const absY = Math.abs(finalMY);
