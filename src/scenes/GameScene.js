@@ -530,6 +530,7 @@ class GameScene extends Phaser.Scene {
         a.animalType = type; a.def = def;
         this._applyDifficultyToAnimal(a, def);
         a.wanderTimer = 0; a.wanderDir = {x:0,y:0}; a.hitFlash = 0; a.atkCD = 0; a.fleeTimer = 0;
+        if (a.maxHP > 2) a.hpBar = this.add.graphics().setDepth(6);
         const lc = '#AADDFF';
         a.nameLabel = this.add.text(a.x, a.y - def.size - 10, def.name, {
           fontSize: '11px', fontFamily: 'monospace', color: lc, stroke: '#000', strokeThickness: 3
@@ -4257,6 +4258,9 @@ class GameScene extends Phaser.Scene {
 
   // ═══ EXPLOSION ON KILL (upgrade effect) ═══
   triggerExplosion(x, y) {
+    // ═══ Prevent recursive explosion chains (freezing bug fix) ═══
+    if (this._inExplosion) return;
+    this._inExplosion = true;
     const radius = 60 + this.upgradeManager.explosionLevel * 30;
     const dmg = this.upgradeManager.explosionLevel;
 
@@ -4269,13 +4273,19 @@ class GameScene extends Phaser.Scene {
       onComplete: () => g.destroy()
     });
 
-    // Damage nearby enemies
+    // Damage nearby enemies (collect kills to avoid recursive killAnimal→triggerExplosion)
+    const toKill = [];
     this.animals.getChildren().forEach(a => {
       if (!a.active) return;
       if (Phaser.Math.Distance.Between(x, y, a.x, a.y) < radius) {
-        this.damageAnimal(a, dmg);
+        if (a.hp == null) a.hp = 0;
+        a.hp -= dmg;
+        a.hitFlash = 0.2; a.setTint(0xFF4444);
+        if (a.hp <= 0) toKill.push(a);
       }
     });
+    toKill.forEach(a => { if (a.active) this.killAnimal(a); });
+    this._inExplosion = false;
 
     // Particles
     for (let i = 0; i < 8; i++) {
