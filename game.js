@@ -1436,9 +1436,9 @@ class TitleScene extends Phaser.Scene {
     const skySteps = 40;
     for (let i = 0; i < skySteps; i++) {
       const t = i / skySteps;
-      const r = Math.floor(10 + t * 200);
-      const g = Math.floor(15 + t * 220);
-      const b = Math.floor(60 + t * 195);
+      const r = Math.floor(8 + t * 140);
+      const g = Math.floor(12 + t * 160);
+      const b = Math.floor(50 + t * 170);
       const color = (r << 16) | (g << 8) | b;
       this.skyGfx.fillStyle(color, 1);
       this.skyGfx.fillRect(0, (H * 0.7) * (i / skySteps), W, (H * 0.7) / skySteps + 1);
@@ -1446,8 +1446,8 @@ class TitleScene extends Phaser.Scene {
     
     // ═══ 설산 봉우리 실루엣 ═══
     this.mountainGfx = this.add.graphics().setDepth(1);
-    // 뒷산 (연한 색)
-    this.mountainGfx.fillStyle(0xc0d0e8, 0.5);
+    // 뒷산 (더 어둡고 장엄하게)
+    this.mountainGfx.fillStyle(0x8090b0, 0.5);
     this.mountainGfx.beginPath();
     this.mountainGfx.moveTo(0, H * 0.7);
     const peaks1 = [0, 0.1, 0.2, 0.35, 0.45, 0.55, 0.7, 0.8, 0.9, 1.0];
@@ -1456,8 +1456,8 @@ class TitleScene extends Phaser.Scene {
     this.mountainGfx.lineTo(W, H * 0.7);
     this.mountainGfx.closePath();
     this.mountainGfx.fillPath();
-    // 앞산 (밝은 흰색)
-    this.mountainGfx.fillStyle(0xe8eef8, 0.7);
+    // 앞산 (약간 어둡게)
+    this.mountainGfx.fillStyle(0xc0cce0, 0.7);
     this.mountainGfx.beginPath();
     this.mountainGfx.moveTo(0, H * 0.7);
     const peaks2 = [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0];
@@ -1478,15 +1478,15 @@ class TitleScene extends Phaser.Scene {
     // Spawn initial animals
     for (let i = 0; i < 3; i++) this._spawnTitleAnimal(true);
     
-    // ═══ Snow particles ═══
+    // ═══ Snow particles (강화) ═══
     this.snowParticles = [];
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 200; i++) {
       this.snowParticles.push({
         x: Math.random() * W,
         y: Math.random() * H,
-        size: 1 + Math.random() * 3,
-        speedX: -0.3 - Math.random() * 0.5,
-        speedY: 0.5 + Math.random() * 1.5,
+        size: 1 + Math.random() * 3.5,
+        speedX: -0.4 - Math.random() * 0.7,
+        speedY: 0.6 + Math.random() * 2.0,
         alpha: 0.3 + Math.random() * 0.7,
         wobble: Math.random() * Math.PI * 2
       });
@@ -1513,8 +1513,8 @@ class TitleScene extends Phaser.Scene {
       }
     });
     
-    // Title text
-    this.add.text(W / 2, H * 0.25, '❄️ 화이트아웃 서바이벌', {
+    // Title text with glow pulse
+    const titleLogo = this.add.text(W / 2, H * 0.25, '❄️ 화이트아웃 서바이벌', {
       fontSize: Math.min(42, W * 0.06) + 'px',
       fontFamily: 'monospace',
       color: '#e0e8ff',
@@ -1522,6 +1522,10 @@ class TitleScene extends Phaser.Scene {
       strokeThickness: 4,
       shadow: { offsetX: 2, offsetY: 2, color: '#0a0a2a', blur: 8, fill: true }
     }).setOrigin(0.5);
+    // Glow pulse animation (shadowBlur 8→18→8)
+    this.tweens.add({ targets: { v: 8 }, v: 18, duration: 2000, yoyo: true, repeat: -1, ease: 'Sine.InOut',
+      onUpdate: (_, t) => { titleLogo.setShadow(2, 2, '#4466aa', t.v, true, true); }
+    });
     
     this.add.text(W / 2, H * 0.33, '극한의 추위에서 살아남아라', {
       fontSize: Math.min(18, W * 0.03) + 'px',
@@ -1735,6 +1739,8 @@ class TitleScene extends Phaser.Scene {
       }
       bg.lineStyle(2, isOrange ? 0xFFCC88 : 0xaaccff, 0.8);
       bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      // Scale up on hover
+      this.tweens.add({ targets: [bg, txt], scale: 1.05, duration: 120, ease: 'Quad.Out' });
     });
     hitArea.on('pointerout', () => {
       bg.clear();
@@ -1749,11 +1755,14 @@ class TitleScene extends Phaser.Scene {
       }
       bg.lineStyle(2, isOrange ? 0xFFAA66 : 0x88aadd, 0.5);
       bg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 12);
+      // Scale back to normal
+      this.tweens.add({ targets: [bg, txt], scale: 1, duration: 120, ease: 'Quad.Out' });
     });
     hitArea.on('pointerdown', () => {
       // Scale 0.95 press effect
-      txt.setScale(0.95);
-      this.time.delayedCall(100, () => { txt.setScale(1); callback(); });
+      this.tweens.add({ targets: [bg, txt], scale: 0.95, duration: 60, yoyo: true, ease: 'Quad.InOut',
+        onComplete: () => { bg.setScale(1); txt.setScale(1); callback(); }
+      });
     });
     
     return { bg, txt, hitArea };
@@ -5911,8 +5920,13 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  showFloatingText(x, y, text, color) {
-    const t = this.add.text(x, y, text, {fontSize:'14px',fontFamily:'monospace',color:color,stroke:'#000',strokeThickness:3}).setDepth(20).setOrigin(0.5);
+  showFloatingText(x, y, text, color, sizeOverride) {
+    // Consistent text hierarchy: detect type by content
+    let fontSize = sizeOverride || 14;
+    let fontStyle = '';
+    if (text.includes('CRITICAL') || text.includes('💥')) { fontSize = 20; fontStyle = 'bold'; }
+    else if (text.includes('레벨') || text.includes('🎊')) { fontSize = 24; fontStyle = 'bold'; }
+    const t = this.add.text(x, y, text, {fontSize:fontSize+'px',fontFamily:'monospace',color:color,stroke:'#000',strokeThickness:3,fontStyle:fontStyle}).setDepth(20).setOrigin(0.5);
     this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 
@@ -6265,6 +6279,18 @@ class GameScene extends Phaser.Scene {
     d.hpFill.style.width = (hpR*100)+'%';
     d.hpFill.className = hpR > 0.6 ? 'bar-f hp-safe' : hpR > 0.3 ? 'bar-f hp-warn' : 'bar-f hp-danger';
     d.hpText.textContent = Math.ceil(Math.max(0,this.playerHP))+'/'+this.playerMaxHP;
+    // HP flash effect on big change
+    if (this._prevHP !== undefined) {
+      const hpDelta = this.playerHP - this._prevHP;
+      if (hpDelta <= -20 && d.hpFill.parentElement) {
+        d.hpFill.parentElement.style.boxShadow = '0 0 12px 4px rgba(255,50,50,0.8)';
+        setTimeout(() => { if (d.hpFill.parentElement) d.hpFill.parentElement.style.boxShadow = ''; }, 400);
+      } else if (hpDelta >= 10 && d.hpFill.parentElement) {
+        d.hpFill.parentElement.style.boxShadow = '0 0 12px 4px rgba(50,255,100,0.7)';
+        setTimeout(() => { if (d.hpFill.parentElement) d.hpFill.parentElement.style.boxShadow = ''; }, 400);
+      }
+    }
+    this._prevHP = this.playerHP;
     
     const tempR = Math.max(0, Math.min(1, this.temperature/this.maxTemp));
     d.tempFill.style.width = (tempR*100)+'%';
@@ -6289,6 +6315,14 @@ class GameScene extends Phaser.Scene {
       d.xpFill.style.width = (xpR * 100) + '%';
       d.xpFill.className = xpR > 0.8 ? 'xp-near-levelup' : '';
       d.xpText.textContent = `Lv${this.playerLevel} · ${Math.floor(this.playerXP)}/${req} XP`;
+      // Level text bounce on level change
+      if (this._prevLevel !== undefined && this._prevLevel !== this.playerLevel && d.xpText) {
+        d.xpText.style.transition = 'transform 0.15s ease-out';
+        d.xpText.style.transform = 'scale(1.3)';
+        d.xpText.style.color = '#FFD700';
+        setTimeout(() => { d.xpText.style.transform = 'scale(1)'; d.xpText.style.color = '#6688AA'; }, 300);
+      }
+      this._prevLevel = this.playerLevel;
     }
 
     // Act & Timer display
@@ -7775,7 +7809,7 @@ class GameScene extends Phaser.Scene {
       `⚔️ 처치한 적: ${totalKills}${nr('kills')}`,
       `🔥 최대 콤보: ${maxCombo}킬${nr('combo')}`,
       `⭐ 달성 레벨: Lv.${level}${nr('level')}`,
-      `💎 획득 포인트: +${earned}`
+      `💎 획득 포인트: +0`
     ];
     if (this._diffMode && this._difficulty !== 'normal') {
       statsLines.push(`🎮 난이도: ${this._diffMode.name}`);
@@ -7883,6 +7917,18 @@ class GameScene extends Phaser.Scene {
         duration: 500, ease: 'Back.Out', delay: 200 + i * 80
       });
     });
+    // Point counting animation (0 → earned over 0.5s)
+    if (earned > 0) {
+      const pointIdx = statsLines.findIndex(l => l.includes('💎'));
+      if (pointIdx >= 0) {
+        this.tweens.add({ targets: { v: 0 }, v: earned, duration: 500, delay: 800, ease: 'Quad.Out',
+          onUpdate: (_, t) => {
+            statsLines[pointIdx] = `💎 획득 포인트: +${Math.round(t.v)}`;
+            if (stats.active) stats.setText(statsLines.join('\n'));
+          }
+        });
+      }
+    }
 
     // ═══ 신기록 황금 파티클 효과 ═══
     if (hasNewRecord) {
