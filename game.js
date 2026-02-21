@@ -2971,6 +2971,9 @@ class GameScene extends Phaser.Scene {
     this.res.wood += meta.bonusWood;
     this.extraCardChoices = meta.extraCardChoices || 0;
 
+    // ═══ Equipment Manager (init early, before bonuses) ═══
+    if (!this.equipmentManager) this.equipmentManager = new EquipmentManager();
+
     // ═══ Apply Equipment Bonuses ═══
     const eqBonus = this.equipmentManager.getTotalBonuses();
     this.playerMaxHP += eqBonus.hpFlat;
