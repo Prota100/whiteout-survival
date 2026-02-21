@@ -31,6 +31,12 @@ class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
 
   create() {
+    // ═══ Global Dependency Check ═══
+    const _deps = ['AudioSystem','SaveSystem','MetaSystem','UpgradeManager','SynergySystem','RecordSystem','ScoreSystem','SkinSystem','EquipmentSystem','RunHistorySystem'];
+    _deps.forEach(d => { if (!window[d]) console.warn(`[GameScene] ${d} not loaded!`); });
+    if (typeof UPGRADES === 'undefined') console.warn('[GameScene] UPGRADES data not loaded!');
+    if (typeof ANIMALS === 'undefined') console.warn('[GameScene] ANIMALS data not loaded!');
+    if (typeof DIFFICULTY_MODES === 'undefined') console.warn('[GameScene] DIFFICULTY_MODES data not loaded!');
     this.cameras.main.fadeIn(500);
     this.res = { meat: 0, wood: 0, stone: 0, leather: 0, gold: 0 };
     this.playerHP = 100; this.playerMaxHP = 100;
